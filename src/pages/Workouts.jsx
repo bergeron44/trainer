@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { format, parseISO, isToday, isPast, isFuture, addDays } from 'date-fns';
+import { format, parseISO, isToday, isFuture, addDays } from 'date-fns';
 import { Calendar, Dumbbell, Check, Clock, ChevronRight, List, CalendarDays } from 'lucide-react';
-import { Link } from 'react-router-dom';
-import { createPageUrl } from '@/utils';
 import api from '@/api/axios';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -350,6 +348,8 @@ export default function Workouts() {
               </div>
             </>
           )}
-        </div>
-      );
+        </>
+      )}
+    </div>
+  );
 }

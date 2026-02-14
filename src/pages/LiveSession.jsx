@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
+import api from '@/api/axios';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
 import { X, Trophy, Clock, Flame, ChevronLeft, ChevronRight } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import CoachTicker from '@/components/session/CoachTicker';
 import FeedbackButton from '@/components/session/FeedbackButton';
 import BonusChallenge from '@/components/session/BonusChallenge';
@@ -144,9 +144,7 @@ export default function LiveSession() {
         }
       } else if (feedback.energy === 'recovery') {
         setCoachMessage(getRandomMessage('heartrate'));
-        import api from '@/api/axios';
 
-        // ... inside the component ...
       } else if (feedback.energy === 'custom') {
         // Use custom backend API for mock LLM response
         try {
@@ -316,7 +314,7 @@ export default function LiveSession() {
       </div>
 
       {/* Feedback FAB */}
-      <FeedbackButton onFeedback={handleFeedback} />
+      <FeedbackButton onFeedback={handleFeedback} disabled={isCoachTyping} />
 
       {/* Bonus Challenge Popup */}
       <BonusChallenge

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from './utils';
-import { Home, Dumbbell, BarChart3, User, Utensils } from 'lucide-react';
+import { Home, Dumbbell, User, Utensils } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import GlobalCoachFAB from '@/components/coach/GlobalCoachFAB';
 import GlobalCoachChat from '@/components/coach/GlobalCoachChat';
