@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { motion } from 'framer-motion';
 import {
   User, Scale, Ruler, Target, Calendar, Clock,
-  Dumbbell, Utensils, Moon, LogOut, ChevronRight,
-  Edit2, Save, X, RefreshCw, Sparkles, Flame, Zap, Skull
+  Dumbbell, Utensils, Moon, LogOut,
+  Edit2, RefreshCw, Sparkles, Flame, Zap, Skull
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';

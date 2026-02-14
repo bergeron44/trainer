@@ -1,12 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
-import {
-  Utensils, Flame, Beef, Wheat, Droplet, Target,
+import { Flame, Beef, Wheat, Droplet, Target,
   Check, MessageCircle, ChevronRight
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import GlobalCoachFAB from '@/components/coach/GlobalCoachFAB';
 import GlobalCoachChat from '@/components/coach/GlobalCoachChat';
 import { useAuth } from '@/lib/AuthContext';
 

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { Flame, Zap, Skull, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 

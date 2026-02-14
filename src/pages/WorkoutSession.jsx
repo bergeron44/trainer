@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import api from '@/api/axios';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Play, Pause, Check, X, ChevronLeft, ChevronRight,
+  Play, Check, X,
   SkipForward, Sparkles, Timer, Dumbbell, AlertCircle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
