@@ -1,0 +1,403 @@
+{
+    "name": "ChatSummary",
+    "type": "object",
+    "properties": {
+        "user_request": {
+            "type": "string",
+            "description": "Summary of what the user asked"
+        },
+        "ai_response": {
+            "type": "string",
+            "description": "Summary of how the AI responded"
+        },
+        "context": {
+            "type": "string",
+            "description": "The page/context where the conversation happened"
+        }
+    },
+    "required": [
+        "user_request",
+        "ai_response"
+    ]
+}
+{
+    "name": "NutritionLog",
+    "type": "object",
+    "properties": {
+        "date": {
+            "type": "string",
+            "format": "date"
+        },
+        "meal_name": {
+            "type": "string",
+            "description": "Name of the meal"
+        },
+        "calories": {
+            "type": "number"
+        },
+        "protein": {
+            "type": "number"
+        },
+        "carbs": {
+            "type": "number"
+        },
+        "fat": {
+            "type": "number"
+        },
+        "foods": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string"
+                    },
+                    "portion": {
+                        "type": "string"
+                    },
+                    "calories": {
+                        "type": "number"
+                    }
+                }
+            }
+        }
+    },
+    "required": [
+        "date",
+        "meal_name",
+        "calories"
+    ]
+}
+{
+    "name": "UserProfile",
+    "type": "object",
+    "properties": {
+        "age": {
+            "type": "number",
+            "description": "User's age in years"
+        },
+        "gender": {
+            "type": "string",
+            "enum": [
+                "male",
+                "female",
+                "other"
+            ],
+            "description": "User's gender"
+        },
+        "height": {
+            "type": "number",
+            "description": "Height in cm"
+        },
+        "weight": {
+            "type": "number",
+            "description": "Weight in kg"
+        },
+        "goal": {
+            "type": "string",
+            "enum": [
+                "weight_loss",
+                "muscle_gain",
+                "recomp",
+                "athletic_performance"
+            ],
+            "description": "Primary fitness goal"
+        },
+        "body_fat_percentage": {
+            "type": "number",
+            "description": "Estimated body fat percentage"
+        },
+        "injuries": {
+            "type": "string",
+            "description": "Any injuries or physical limitations"
+        },
+        "experience_level": {
+            "type": "string",
+            "enum": [
+                "beginner",
+                "intermediate",
+                "advanced"
+            ],
+            "description": "Training experience level"
+        },
+        "workout_days_per_week": {
+            "type": "number",
+            "description": "Commitment: days per week (1-7)"
+        },
+        "session_duration": {
+            "type": "number",
+            "enum": [
+                30,
+                60,
+                90
+            ],
+            "description": "Time per session in minutes"
+        },
+        "environment": {
+            "type": "string",
+            "enum": [
+                "commercial_gym",
+                "home_gym",
+                "bodyweight_park"
+            ],
+            "description": "Training environment"
+        },
+        "diet_type": {
+            "type": "string",
+            "enum": [
+                "everything",
+                "vegan",
+                "vegetarian",
+                "keto",
+                "paleo"
+            ],
+            "description": "Dietary preference"
+        },
+        "allergies": {
+            "type": "string",
+            "description": "Food allergies or intolerances"
+        },
+        "meal_frequency": {
+            "type": "number",
+            "description": "Meals per day"
+        },
+        "activity_level": {
+            "type": "string",
+            "enum": [
+                "sedentary",
+                "lightly_active",
+                "moderately_active",
+                "very_active"
+            ],
+            "description": "Daily activity level outside workouts"
+        },
+        "sleep_hours": {
+            "type": "number",
+            "description": "Average sleep hours per night"
+        },
+        "past_obstacles": {
+            "type": "string",
+            "description": "Past fitness obstacles or challenges"
+        },
+        "motivation_source": {
+            "type": "string",
+            "description": "What motivates the user"
+        },
+        "tdee": {
+            "type": "number",
+            "description": "Calculated Total Daily Energy Expenditure"
+        },
+        "target_calories": {
+            "type": "number",
+            "description": "Daily calorie target"
+        },
+        "protein_goal": {
+            "type": "number",
+            "description": "Daily protein goal in grams"
+        },
+        "carbs_goal": {
+            "type": "number",
+            "description": "Daily carbs goal in grams"
+        },
+        "fat_goal": {
+            "type": "number",
+            "description": "Daily fat goal in grams"
+        },
+        "trainer_personality": {
+            "type": "string",
+            "enum": [
+                "drill_sergeant",
+                "scientist",
+                "zen_coach"
+            ],
+            "default": "drill_sergeant",
+            "description": "AI trainer personality type"
+        },
+        "onboarding_completed": {
+            "type": "boolean",
+            "default": false,
+            "description": "Whether onboarding is complete"
+        },
+        "has_existing_plan": {
+            "type": "boolean",
+            "default": false,
+            "description": "Whether user imported existing plan"
+        }
+    },
+    "required": [
+        "age",
+        "gender",
+        "height",
+        "weight",
+        "goal"
+    ]
+}
+{
+    "name": "Workout",
+    "type": "object",
+    "properties": {
+        "date": {
+            "type": "string",
+            "format": "date",
+            "description": "Workout date"
+        },
+        "muscle_group": {
+            "type": "string",
+            "description": "Primary muscle group focus"
+        },
+        "exercises": {
+            "type": "array",
+            "description": "List of exercises",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "sets": {
+                        "type": "number"
+                    },
+                    "reps": {
+                        "type": "string"
+                    },
+                    "weight": {
+                        "type": "number"
+                    },
+                    "rest_seconds": {
+                        "type": "number"
+                    },
+                    "notes": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "status": {
+            "type": "string",
+            "enum": [
+                "planned",
+                "in_progress",
+                "completed"
+            ],
+            "default": "planned"
+        },
+        "duration_minutes": {
+            "type": "number",
+            "description": "Actual workout duration"
+        },
+        "total_volume": {
+            "type": "number",
+            "description": "Total weight lifted (kg)"
+        },
+        "notes": {
+            "type": "string",
+            "description": "Workout notes"
+        }
+    },
+    "required": [
+        "date",
+        "muscle_group",
+        "exercises"
+    ]
+}
+{
+    "name": "WorkoutLog",
+    "type": "object",
+    "properties": {
+        "workout_id": {
+            "type": "string",
+            "description": "Reference to the workout"
+        },
+        "exercise_name": {
+            "type": "string",
+            "description": "Name of the exercise"
+        },
+        "set_number": {
+            "type": "number",
+            "description": "Set number"
+        },
+        "reps_completed": {
+            "type": "number",
+            "description": "Reps completed"
+        },
+        "weight_used": {
+            "type": "number",
+            "description": "Weight used in kg"
+        },
+        "date": {
+            "type": "string",
+            "format": "date"
+        },
+        "rpe": {
+            "type": "number",
+            "description": "Rate of Perceived Exertion (1-10)"
+        }
+    },
+    "required": [
+        "workout_id",
+        "exercise_name",
+        "set_number",
+        "reps_completed",
+        "weight_used",
+        "date"
+    ]
+}
+{
+    "name": "WorkoutSession",
+    "type": "object",
+    "properties": {
+        "workout_id": {
+            "type": "string",
+            "description": "Reference to the workout"
+        },
+        "start_time": {
+            "type": "string",
+            "format": "date-time"
+        },
+        "end_time": {
+            "type": "string",
+            "format": "date-time"
+        },
+        "completed_exercises": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "exercise_id": {
+                        "type": "string"
+                    },
+                    "sets_completed": {
+                        "type": "number"
+                    },
+                    "time_spent": {
+                        "type": "number"
+                    }
+                }
+            }
+        },
+        "total_volume": {
+            "type": "number",
+            "description": "Total kg lifted in session"
+        },
+        "xp_earned": {
+            "type": "number",
+            "description": "Experience points earned"
+        },
+        "status": {
+            "type": "string",
+            "enum": [
+                "active",
+                "completed",
+                "abandoned"
+            ],
+            "default": "active"
+        }
+    },
+    "required": [
+        "workout_id",
+        "start_time"
+    ]
+}
