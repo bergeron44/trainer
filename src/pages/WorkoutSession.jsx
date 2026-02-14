@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
-import { base44 } from '@/api/base44Client';
+import api from '@/api/axios';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Play, Pause, Check, X, ChevronLeft, ChevronRight, 
+import {
+  Play, Pause, Check, X, ChevronLeft, ChevronRight,
   SkipForward, Sparkles, Timer, Dumbbell, AlertCircle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -33,8 +33,9 @@ export default function WorkoutSession() {
   const { data: workout, isLoading } = useQuery({
     queryKey: ['workout', workoutId],
     queryFn: async () => {
-      const workouts = await base44.entities.Workout.filter({ id: workoutId });
-      return workouts[0];
+      // Use custom API endpoint to get workout by ID
+      const { data } = await api.get(`/workouts/${workoutId}`);
+      return data;
     },
     enabled: !!workoutId
   });
@@ -42,14 +43,15 @@ export default function WorkoutSession() {
   const { data: profile } = useQuery({
     queryKey: ['userProfile'],
     queryFn: async () => {
-      const profiles = await base44.entities.UserProfile.list();
-      return profiles[0];
+      const { data } = await api.get('/users/me');
+      return data;
     }
   });
 
   const updateWorkoutMutation = useMutation({
     mutationFn: async ({ exercises }) => {
-      return base44.entities.Workout.update(workoutId, { exercises });
+      // Use custom API to update workout
+      return api.put(`/workouts/${workoutId}`, { exercises });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['workout', workoutId] });
@@ -88,10 +90,10 @@ export default function WorkoutSession() {
 
   const handleSetComplete = () => {
     if (!currentExercise) return;
-    
+
     setTimerRunning(false);
     setTimeElapsed(0);
-    
+
     const exerciseId = currentExercise.id;
     const newCompletedSets = {
       ...completedSets,
@@ -143,25 +145,29 @@ export default function WorkoutSession() {
     setSessionStats(stats);
     setShowSummary(true);
 
-    // Update workout status
-    await base44.entities.Workout.update(workoutId, {
-      status: 'completed',
-      duration_minutes: sessionDuration
-    });
+    try {
+      // Update workout status
+      await api.put(`/workouts/${workoutId}`, {
+        status: 'completed',
+        duration_minutes: sessionDuration
+      });
 
-    // Create session record
-    await base44.entities.WorkoutSession.create({
-      workout_id: workoutId,
-      start_time: new Date(sessionStartTime).toISOString(),
-      end_time: new Date().toISOString(),
-      completed_exercises: workout.exercises.map(ex => ({
-        exercise_id: ex.id,
-        sets_completed: completedSets[ex.id] || 0,
-        time_spent: 0
-      })),
-      xp_earned: xpEarned,
-      status: 'completed'
-    });
+      // Create session record
+      await api.post('/workouts/session', {
+        workout_id: workoutId,
+        start_time: new Date(sessionStartTime).toISOString(),
+        end_time: new Date().toISOString(),
+        completed_exercises: workout.exercises.map(ex => ({
+          exercise_id: ex.id,
+          sets_completed: completedSets[ex.id] || 0,
+          time_spent: 0
+        })),
+        xp_earned: xpEarned,
+        status: 'completed'
+      });
+    } catch (error) {
+      console.error('Failed to save session:', error);
+    }
   };
 
   const handleQuit = () => {
@@ -231,7 +237,7 @@ export default function WorkoutSession() {
           >
             Workout Complete! 💪
           </motion.h1>
-          
+
           <motion.p
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -361,13 +367,12 @@ export default function WorkoutSession() {
 
             {/* Timer Display */}
             <motion.div
-              className={`mb-8 ${
-                restMode 
-                  ? 'animate-pulse' 
-                  : timerRunning 
-                  ? 'animate-pulse-glow' 
-                  : ''
-              }`}
+              className={`mb-8 ${restMode
+                  ? 'animate-pulse'
+                  : timerRunning
+                    ? 'animate-pulse-glow'
+                    : ''
+                }`}
             >
               {restMode ? (
                 <div>
@@ -415,11 +420,10 @@ export default function WorkoutSession() {
         {!restMode && (
           <Button
             onClick={timerRunning ? handleSetComplete : () => setTimerRunning(true)}
-            className={`w-full h-16 text-lg font-semibold transition-all ${
-              timerRunning
+            className={`w-full h-16 text-lg font-semibold transition-all ${timerRunning
                 ? 'gradient-green text-black'
                 : 'gradient-cyan text-black'
-            }`}
+              }`}
           >
             {timerRunning ? (
               <>
@@ -434,7 +438,7 @@ export default function WorkoutSession() {
             )}
           </Button>
         )}
-        
+
         {restMode && (
           <Button
             onClick={() => {

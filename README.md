@@ -1,39 +1,65 @@
-**Welcome to your Base44 project** 
+# Trainer AI
 
-**About**
+## About
+A comprehensive fitness and nutrition tracking application powered by AI coaching.
 
-View and Edit  your app on [Base44.com](http://Base44.com) 
+## Features
+- **Smart Workouts**: Track your training sessions with an interactive interface.
+- **AI Coach**: Get real-time advice and motivation from your personalized AI trainer.
+- **Nutrition Tracking**: Log meals and monitor your daily nutrition goals.
+- **Progress Monitoring**: Visualize your fitness journey with detailed statistics.
 
-This project contains everything you need to run your app locally.
+## Getting Started
 
-**Edit the code in your local development environment**
+### Prerequisites
+- Node.js (v16 or higher)
+- MongoDB (running locally or a cloud instance)
 
-Any change pushed to the repo will also be reflected in the Base44 Builder.
+### Installation
 
-**Prerequisites:** 
+1.  **Clone the repository:**
+    ```bash
+    git clone <repository-url>
+    cd trainer
+    ```
 
-1. Clone the repository using the project's Git URL 
-2. Navigate to the project directory
-3. Install dependencies: `npm install`
-4. Create an `.env.local` file and set the right environment variables
+2.  **Install dependencies:**
+    
+    Front-end:
+    ```bash
+    npm install
+    ```
+    
+    Back-end:
+    ```bash
+    cd server
+    npm install
+    cd ..
+    ```
 
+3.  **Environment Setup:**
+    
+    Create a `.env` file in the `server` directory:
+    ```env
+    PORT=5000
+    MONGO_URI=mongodb://localhost:27017/trainer
+    JWT_SECRET=your_super_secret_key
+    ```
+    *(Note: A default `.env` is provided, but you should change the secret for production)*
+
+### Running the App
+
+You can run both the frontend and backend concurrently:
+
+```bash
+npm run dev:full
 ```
-VITE_BASE44_APP_ID=your_app_id
-VITE_BASE44_APP_BASE_URL=your_backend_url
 
-e.g.
-VITE_BASE44_APP_ID=cbef744a8545c389ef439ea6
-VITE_BASE44_APP_BASE_URL=https://my-to-do-list-81bfaad7.base44.app
-```
+Or run them separately:
+- **Backend**: `npm run server`
+- **Frontend**: `npm run dev`
 
-Run the app: `npm run dev`
-
-**Publish your changes**
-
-Open [Base44.com](http://Base44.com) and click on Publish.
-
-**Docs & Support**
-
-Documentation: [https://docs.base44.com/Integrations/Using-GitHub](https://docs.base44.com/Integrations/Using-GitHub)
-
-Support: [https://app.base44.com/support](https://app.base44.com/support)
+## Technologies
+- **Frontend**: React, Vite, TailwindCSS, Framer Motion
+- **Backend**: Node.js, Express, MongoDB, Mongoose
+- **AI**: Custom integration (Placeholder for OpenAI/Anthropic)

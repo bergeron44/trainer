@@ -4,7 +4,7 @@ import { X, Send, Sparkles, Brain } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import ReactMarkdown from 'react-markdown';
-import { base44 } from '@/api/base44Client';
+import api from '@/api/axios';
 
 const getCoachPersona = (style) => {
   const personas = {
@@ -24,90 +24,14 @@ const getCoachPersona = (style) => {
   return personas[style] || personas.motivational;
 };
 
-const getMockResponse = (userMessage, coachStyle, context) => {
-  const message = userMessage.toLowerCase();
-  const persona = getCoachPersona(coachStyle);
-  
-  // Context-aware responses
-  if (context.includes('Nutrition')) {
-    if (message.includes('protein') || message.includes('eat')) {
-      const responses = {
-        motivational: "Great question! 🌟 For your goals, aim for about 1.6-2g of protein per kg of body weight. You're already thinking smart - that's the winning mindset!",
-        spicy: "Protein is your best friend right now. 💥 Aim for 2g per kg bodyweight minimum. No excuses about 'not being hungry' - your muscles need fuel!",
-        hardcore: "LISTEN UP! 💀 Protein isn't optional - it's MANDATORY. 2g per kg, EVERY. SINGLE. DAY. Your muscles don't care about your feelings!"
-      };
-      return responses[coachStyle] || responses.motivational;
-    }
-    if (message.includes('calorie') || message.includes('cut') || message.includes('bulk')) {
-      const responses = {
-        motivational: "Love the focus on nutrition! 🎉 For cutting, aim for a 300-500 calorie deficit. For bulking, add 200-300 calories. Small, sustainable changes win the race!",
-        spicy: "Calories are just math. 💥 Want to lose fat? Eat less than you burn. Want to gain muscle? Eat more. Stop overcomplicating it and start executing!",
-        hardcore: "NUMBERS DON'T LIE! 💀 Track everything. Every bite. No 'cheat days' - only WEAK days. You want results or excuses?!"
-      };
-      return responses[coachStyle] || responses.motivational;
-    }
-  }
-  
-  if (context.includes('Workout') || context.includes('Dashboard')) {
-    if (message.includes('tired') || message.includes('skip') || message.includes('rest')) {
-      const responses = {
-        motivational: "I hear you! 💪 Rest is actually part of the process. If you're genuinely exhausted, take a light day. But if it's just motivation - remember why you started! You've got this!",
-        spicy: "Tired? 💥 Join the club. Everyone's tired. The question is - are you going to let that stop you? At least do a lighter version. Show up!",
-        hardcore: "TIRED IS A STATE OF MIND! 💀 Your muscles don't know what day it is. Get in there and MOVE. You can rest when you're DEAD!"
-      };
-      return responses[coachStyle] || responses.motivational;
-    }
-    if (message.includes('hurt') || message.includes('pain') || message.includes('injury')) {
-      const responses = {
-        motivational: "Oh no, let's be careful! 🌟 If it's sharp pain, STOP immediately and maybe see a professional. Muscle soreness is normal, but real pain is a signal. Your health comes first!",
-        spicy: "Pain is information. 💥 Sharp pain = stop. Muscle soreness = push through. Know the difference. Don't be stupid, but don't be soft either.",
-        hardcore: "INJURY IS NOT AN EXCUSE - it's a DETOUR! 💀 Work around it. Bad shoulder? Train legs. Bad knee? Upper body. NO EXCUSES, only ADAPTATIONS!"
-      };
-      return responses[coachStyle] || responses.motivational;
-    }
-  }
-  
-  // Generic responses
-  if (message.includes('help') || message.includes('advice')) {
-    const responses = {
-      motivational: "I'm here for you! 🌟 Tell me more about what's on your mind. Together, we'll figure out the best path forward!",
-      spicy: "Alright, spill it. 💥 What's the real issue? Be specific and I'll give you real solutions.",
-      hardcore: "TALK! 💀 What's holding you back? Spit it out and let's CRUSH whatever's in your way!"
-    };
-    return responses[coachStyle] || responses.motivational;
-  }
-  
-  // Default responses
-  const defaults = {
-    motivational: "That's a great point! 🌟 Keep that energy up! Is there anything specific about your training or nutrition I can help with?",
-    spicy: "Got it. 💥 Now let's turn that into ACTION. What's your next move?",
-    hardcore: "NOTED! 💀 Now stop talking and start DOING. What's the plan?!"
-  };
-  return defaults[coachStyle] || defaults.motivational;
-};
-
-// Summarize text into a short sentence
-const summarizeText = async (text, type) => {
-  const result = await base44.integrations.Core.InvokeLLM({
-    prompt: `Summarize this ${type} into ONE short sentence (max 15 words). Be concise and capture the key point:\n\n"${text}"`,
-    response_json_schema: {
-      type: "object",
-      properties: {
-        summary: { type: "string" }
-      }
-    }
-  });
-  return result.summary;
-};
-
-export default function GlobalCoachChat({ 
-  isOpen, 
+export default function GlobalCoachChat({
+  isOpen,
   onClose,
   context = 'General',
   coachStyle = 'motivational'
 }) {
   const persona = getCoachPersona(coachStyle);
-  
+
   const [messages, setMessages] = useState([
     { role: 'assistant', content: persona.greeting }
   ]);
@@ -120,9 +44,14 @@ export default function GlobalCoachChat({
   // Load past memories on mount
   useEffect(() => {
     const loadMemories = async () => {
-      const summaries = await base44.entities.ChatSummary.list('-created_date', 5);
-      setPastMemories(summaries);
-      setMemoriesLoaded(true);
+      try {
+        const { data } = await api.get('/chat/summaries');
+        setPastMemories(data);
+      } catch (error) {
+        console.error('Failed to load memories:', error);
+      } finally {
+        setMemoriesLoaded(true);
+      }
     };
     if (isOpen && !memoriesLoaded) {
       loadMemories();
@@ -153,45 +82,53 @@ export default function GlobalCoachChat({
     // Build memory context from past summaries
     let memoryContext = '';
     if (pastMemories.length > 0) {
-      memoryContext = '\n\nPAST USER INTERACTIONS (for context):\n' + 
+      memoryContext = '\n\nPAST USER INTERACTIONS (for context):\n' +
         pastMemories.map(m => `- User: ${m.user_request} → Coach: ${m.ai_response}`).join('\n');
     }
 
     // Build the full prompt with persona and memory
     const systemPrompt = `${persona.style}\n\nYou are helping with: ${context}.${memoryContext}\n\nKeep responses concise and actionable (2-3 sentences max).`;
 
-    // Call real LLM
-    const result = await base44.integrations.Core.InvokeLLM({
-      prompt: `${systemPrompt}\n\nUser: ${userMessage}`
-    });
-
-    const aiResponse = result;
-    setMessages(prev => [...prev, { role: 'assistant', content: aiResponse }]);
-    setIsTyping(false);
-
-    // Summarize and save to memory (in background)
-    (async () => {
-      const [userSummary, aiSummary] = await Promise.all([
-        summarizeText(userMessage, 'user request'),
-        summarizeText(aiResponse, 'coach response')
-      ]);
-      
-      await base44.entities.ChatSummary.create({
-        user_request: userSummary,
-        ai_response: aiSummary,
-        context: context
+    try {
+      // Call custom backend API
+      const { data } = await api.post('/chat/response', {
+        prompt: `${systemPrompt}\n\nUser: ${userMessage}`,
+        context,
+        coachStyle
       });
-      
-      // Update local memories
-      setPastMemories(prev => [{
-        user_request: userSummary,
-        ai_response: aiSummary,
-        context: context
-      }, ...prev].slice(0, 5));
-    })();
+
+      const aiResponse = data.response;
+      setMessages(prev => [...prev, { role: 'assistant', content: aiResponse }]);
+      setIsTyping(false);
+
+      // Summarize and save to memory (in background)
+      (async () => {
+        try {
+          // The backend createSummary endpoint expects user_request, ai_response.
+          await api.post('/chat/summaries', {
+            user_request: userMessage,
+            ai_response: aiResponse,
+            context: context
+          });
+
+          // Update local memories
+          setPastMemories(prev => [{
+            user_request: userMessage,
+            ai_response: aiResponse,
+            context: context
+          }, ...prev].slice(0, 5));
+        } catch (err) {
+          console.error("Failed to save chat summary", err);
+        }
+      })();
+    } catch (error) {
+      console.error("Chat error:", error);
+      setMessages(prev => [...prev, { role: 'assistant', content: "I'm having trouble connecting right now. Let's try again in a moment!" }]);
+      setIsTyping(false);
+    }
   };
 
-  const quickReplies = context.includes('Nutrition') 
+  const quickReplies = context.includes('Nutrition')
     ? ["What should I eat?", "Am I eating enough protein?", "Best post-workout meal?"]
     : ["I'm short on time", "Feeling tired today", "Make it harder"];
 
@@ -252,11 +189,10 @@ export default function GlobalCoachChat({
                   className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
                   <div
-                    className={`max-w-[85%] rounded-2xl px-4 py-3 ${
-                      message.role === 'user'
-                        ? 'bg-[#00F2FF] text-black'
-                        : 'bg-[#1A1A1A] text-white'
-                    }`}
+                    className={`max-w-[85%] rounded-2xl px-4 py-3 ${message.role === 'user'
+                      ? 'bg-[#00F2FF] text-black'
+                      : 'bg-[#1A1A1A] text-white'
+                      }`}
                   >
                     {message.role === 'assistant' ? (
                       <ReactMarkdown className="prose prose-sm prose-invert max-w-none [&>p]:mb-2 [&>p:last-child]:mb-0">
@@ -268,7 +204,7 @@ export default function GlobalCoachChat({
                   </div>
                 </motion.div>
               ))}
-              
+
               {isTyping && (
                 <motion.div
                   initial={{ opacity: 0 }}

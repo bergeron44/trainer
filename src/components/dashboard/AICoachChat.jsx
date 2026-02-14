@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Send, Loader2, Sparkles, Dumbbell } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { base44 } from '@/api/base44Client';
+import api from '@/api/axios';
 import ReactMarkdown from 'react-markdown';
 
 const getTrainerPersona = (personality) => {
@@ -24,9 +24,9 @@ const getTrainerPersona = (personality) => {
   return personas[personality] || personas.drill_sergeant;
 };
 
-export default function AICoachChat({ 
-  isOpen, 
-  onClose, 
+export default function AICoachChat({
+  isOpen,
+  onClose,
   userProfile,
   currentWorkout,
   onWorkoutUpdate,
@@ -34,7 +34,7 @@ export default function AICoachChat({
 }) {
   const personality = userProfile?.trainer_personality || 'drill_sergeant';
   const persona = getTrainerPersona(personality);
-  
+
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
@@ -62,78 +62,27 @@ export default function AICoachChat({
     setIsLoading(true);
 
     try {
-      const response = await base44.integrations.Core.InvokeLLM({
-        prompt: `${persona.style}
+      // Construct the prompt manually as we did with Base44
+      const prompt = `${persona.style}\n\nUSER PROFILE:\n- Goal: ${userProfile?.goal}\n- Experience: ${userProfile?.experience_level}\n- Environment: ${userProfile?.environment}\n- Injuries: ${userProfile?.injuries || 'None'}\n\nCURRENT WORKOUT:\n- Focus: ${currentWorkout?.muscle_group}\n- Exercises: ${JSON.stringify(currentWorkout?.exercises?.map(e => ({ name: e.name, sets: e.sets, reps: e.reps, weight: e.weight })), null, 2)}\n\nUSER MESSAGE: "${userMessage}"\n\nRespond in your unique coaching style. If the user needs workout modifications, just describe them in text for now.`;
 
-USER PROFILE:
-- Goal: ${userProfile?.goal}
-- Experience: ${userProfile?.experience_level}
-- Environment: ${userProfile?.environment}
-- Injuries: ${userProfile?.injuries || 'None'}
-
-CURRENT WORKOUT:
-- Focus: ${currentWorkout?.muscle_group}
-- Exercises: ${JSON.stringify(currentWorkout?.exercises?.map(e => ({ name: e.name, sets: e.sets, reps: e.reps, weight: e.weight })), null, 2)}
-
-USER MESSAGE: "${userMessage}"
-
-Respond in your unique coaching style. If the user needs workout modifications:
-- Time constraints: Remove exercises or reduce sets
-- Pain/injury: Provide safer alternatives
-- Equipment unavailable: Suggest substitutes
-- Too hard/easy: Adjust intensity
-
-CRITICAL: If you're modifying the workout, you MUST provide the workout_update object with the COMPLETE NEW exercise list.`,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            message: { type: "string" },
-            workout_update: {
-              type: "object",
-              properties: {
-                exercises: {
-                  type: "array",
-                  items: {
-                    type: "object",
-                    properties: {
-                      id: { type: "string" },
-                      name: { type: "string" },
-                      sets: { type: "number" },
-                      reps: { type: "string" },
-                      weight: { type: "number" },
-                      rest_seconds: { type: "number" },
-                      notes: { type: "string" }
-                    },
-                    required: ["name", "sets", "reps"]
-                  }
-                }
-              }
-            }
-          },
-          required: ["message"]
-        }
+      const { data } = await api.post('/chat/response', {
+        prompt: prompt,
+        context: isInSession ? 'Workout Session' : 'Dashboard',
+        coachStyle: personality
       });
 
-      const aiMessage = response.message;
+      const aiMessage = data.response;
       setMessages(prev => [...prev, { role: 'assistant', content: aiMessage }]);
 
-      if (response.workout_update && response.workout_update.exercises && response.workout_update.exercises.length > 0) {
-        const exercisesWithIds = response.workout_update.exercises.map((ex, i) => ({
-          id: ex.id || `ex_${Date.now()}_${i}`,
-          name: ex.name,
-          sets: ex.sets,
-          reps: ex.reps,
-          weight: ex.weight || 0,
-          rest_seconds: ex.rest_seconds || 60,
-          notes: ex.notes || ''
-        }));
-        onWorkoutUpdate(exercisesWithIds);
-      }
+      // Note: Automatic workout updates via JSON schema are invalid in the simple chat controller.
+      // If we want that feature, we'd need to enhance the backend to support structured output or parsing.
+      // For now, we just show the text response.
+
     } catch (error) {
       console.error('AI Coach Error:', error);
-      setMessages(prev => [...prev, { 
-        role: 'assistant', 
-        content: "Sorry, I had a brief connection issue. Let's try that again! What do you need help with?" 
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: "Sorry, I had a brief connection issue. Let's try that again! What do you need help with?"
       }]);
     } finally {
       setIsLoading(false);
@@ -190,11 +139,10 @@ CRITICAL: If you're modifying the workout, you MUST provide the workout_update o
                   className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
                   <div
-                    className={`max-w-[85%] rounded-2xl px-4 py-3 ${
-                      message.role === 'user'
+                    className={`max-w-[85%] rounded-2xl px-4 py-3 ${message.role === 'user'
                         ? 'bg-[#00F2FF] text-black'
                         : 'bg-[#1A1A1A] text-white'
-                    }`}
+                      }`}
                   >
                     {message.role === 'assistant' ? (
                       <ReactMarkdown className="prose prose-sm prose-invert max-w-none [&>p]:mb-2 [&>p:last-child]:mb-0">
@@ -206,7 +154,7 @@ CRITICAL: If you're modifying the workout, you MUST provide the workout_update o
                   </div>
                 </motion.div>
               ))}
-              
+
               {isLoading && (
                 <motion.div
                   initial={{ opacity: 0 }}

@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence, Reorder, useMotionValue, useTransform } from 'framer-motion';
 import { GripVertical, RefreshCw, Play, Pause, Check, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { base44 } from '@/api/base44Client';
 
 const SWIPE_THRESHOLD_HALF = -80;
 const SWIPE_THRESHOLD_FULL = -160;
@@ -113,7 +112,7 @@ function SwipeableExerciseCard({
   return (
     <div className="relative overflow-hidden rounded-2xl">
       {/* Background action indicator */}
-      <motion.div 
+      <motion.div
         style={{ background }}
         className="absolute inset-0 rounded-2xl flex items-center justify-end pr-6"
       >
@@ -132,15 +131,14 @@ function SwipeableExerciseCard({
         onDragEnd={handleDragEnd}
         animate={isReplacing ? { opacity: 0, scale: 0.8, filter: 'blur(10px)' } : { opacity: 1, scale: 1, filter: 'blur(0px)' }}
         whileTap={isDragging ? { scale: 0.98 } : {}}
-        className={`relative rounded-2xl border-2 p-4 transition-colors duration-300 bg-[#1A1A1A] ${
-          isActive && timerRunning
+        className={`relative rounded-2xl border-2 p-4 transition-colors duration-300 bg-[#1A1A1A] ${isActive && timerRunning
             ? 'border-[#00F2FF]'
             : restMode
-            ? 'border-[#CCFF00]'
-            : allSetsComplete
-            ? 'border-[#CCFF00]/50'
-            : 'border-[#2A2A2A]'
-        }`}
+              ? 'border-[#CCFF00]'
+              : allSetsComplete
+                ? 'border-[#CCFF00]/50'
+                : 'border-[#2A2A2A]'
+          }`}
       >
         <div className="flex items-start gap-3">
           {/* Drag handle */}
@@ -149,9 +147,8 @@ function SwipeableExerciseCard({
           </div>
 
           {/* Exercise number badge */}
-          <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-            allSetsComplete ? 'bg-[#CCFF00] text-black' : 'bg-[#2A2A2A] text-white'
-          }`}>
+          <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${allSetsComplete ? 'bg-[#CCFF00] text-black' : 'bg-[#2A2A2A] text-white'
+            }`}>
             {allSetsComplete ? <Check className="w-4 h-4" /> : index + 1}
           </div>
 
@@ -160,7 +157,7 @@ function SwipeableExerciseCard({
             <h3 className={`font-bold text-lg truncate ${allSetsComplete ? 'text-gray-400 line-through' : 'text-white'}`}>
               {exercise.name}
             </h3>
-            
+
             <div className="flex items-center gap-4 mt-1 text-sm">
               <span className="text-gray-400">
                 <span className="text-[#00F2FF] font-semibold">{exercise.sets}</span> sets
@@ -180,13 +177,12 @@ function SwipeableExerciseCard({
               {Array.from({ length: exercise.sets }).map((_, i) => (
                 <div
                   key={i}
-                  className={`w-3 h-3 rounded-full transition-all duration-300 ${
-                    i < completedSets
+                  className={`w-3 h-3 rounded-full transition-all duration-300 ${i < completedSets
                       ? 'bg-[#CCFF00]'
                       : i === completedSets && timerRunning
-                      ? 'bg-[#00F2FF] animate-pulse'
-                      : 'bg-[#2A2A2A]'
-                  }`}
+                        ? 'bg-[#00F2FF] animate-pulse'
+                        : 'bg-[#2A2A2A]'
+                    }`}
                 />
               ))}
             </div>
@@ -197,13 +193,12 @@ function SwipeableExerciseCard({
                 <Button
                   onClick={handleStartPause}
                   size="sm"
-                  className={`w-10 h-10 rounded-full p-0 transition-all duration-300 ${
-                    restMode
+                  className={`w-10 h-10 rounded-full p-0 transition-all duration-300 ${restMode
                       ? 'bg-[#CCFF00] hover:bg-[#CCFF00]/90 text-black'
                       : timerRunning
-                      ? 'bg-[#00F2FF] hover:bg-[#00F2FF]/90 text-black'
-                      : 'bg-[#2A2A2A] hover:bg-[#3A3A3A] text-white'
-                  }`}
+                        ? 'bg-[#00F2FF] hover:bg-[#00F2FF]/90 text-black'
+                        : 'bg-[#2A2A2A] hover:bg-[#3A3A3A] text-white'
+                    }`}
                 >
                   {timerRunning ? <Pause className="w-4 h-4" /> : restMode ? <RotateCcw className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
                 </Button>
@@ -253,9 +248,9 @@ export default function InteractiveExerciseList({
   };
 
   return (
-    <Reorder.Group 
-      axis="y" 
-      values={exercises} 
+    <Reorder.Group
+      axis="y"
+      values={exercises}
       onReorder={handleReorder}
       className="space-y-3"
     >

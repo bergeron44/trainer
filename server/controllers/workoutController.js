@@ -125,9 +125,36 @@ const getActiveSession = asyncHandler(async (req, res) => {
     res.status(200).json(session || null);
 });
 
+// @desc    Get workout by ID
+// @route   GET /api/workouts/:id
+// @access  Private
+const getWorkout = asyncHandler(async (req, res) => {
+    const workout = await Workout.findById(req.params.id);
+
+    if (!workout) {
+        res.status(400);
+        throw new Error('Workout not found');
+    }
+
+    // Check for user
+    if (!req.user) {
+        res.status(401);
+        throw new Error('User not found');
+    }
+
+    // Make sure the logged in user matches the workout user
+    if (workout.user.toString() !== req.user.id) {
+        res.status(401);
+        throw new Error('User not authorized');
+    }
+
+    res.status(200).json(workout);
+});
+
 
 module.exports = {
     getWorkouts,
+    getWorkout,
     setWorkout,
     updateWorkout,
     deleteWorkout,

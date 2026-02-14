@@ -18,6 +18,7 @@ connectDB();
 app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/workouts', require('./routes/workoutRoutes'));
 app.use('/api/nutrition', require('./routes/nutritionRoutes'));
+app.use('/api/chat', require('./routes/chatRoutes'));
 
 // Health Check
 app.get('/', (req, res) => {

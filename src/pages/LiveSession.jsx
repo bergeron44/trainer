@@ -5,7 +5,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
 import { X, Trophy, Clock, Flame, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { base44 } from '@/api/base44Client';
 import CoachTicker from '@/components/session/CoachTicker';
 import FeedbackButton from '@/components/session/FeedbackButton';
 import BonusChallenge from '@/components/session/BonusChallenge';
@@ -97,7 +96,7 @@ export default function LiveSession() {
   const handleSetComplete = useCallback((exerciseId, setNumber) => {
     const newCompletedSets = { ...completedSets, [exerciseId]: setNumber };
     setCompletedSets(newCompletedSets);
-    
+
     // Save to localStorage
     const today = format(new Date(), 'yyyy-MM-dd');
     localStorage.setItem(`nexus_completed_sets_${today}`, JSON.stringify(newCompletedSets));
@@ -122,7 +121,7 @@ export default function LiveSession() {
 
   const handleFeedback = useCallback(async (feedback) => {
     setIsCoachTyping(true);
-    
+
     // Simulate AI processing
     setTimeout(async () => {
       if (feedback.energy === 'high') {
@@ -145,14 +144,19 @@ export default function LiveSession() {
         }
       } else if (feedback.energy === 'recovery') {
         setCoachMessage(getRandomMessage('heartrate'));
+        import api from '@/api/axios';
+
+        // ... inside the component ...
       } else if (feedback.energy === 'custom') {
-        // Use LLM for custom feedback
-        const response = await base44.integrations.Core.InvokeLLM({
-          prompt: `You are a fitness coach. The user just said: "${feedback.label}". 
-                   Give a brief, encouraging response (1-2 sentences max). 
-                   Be motivational but practical.`
-        });
-        setCoachMessage(response);
+        // Use custom backend API for mock LLM response
+        try {
+          const { data } = await api.post('/chat/response', {
+            prompt: `You are a fitness coach. The user just said: "${feedback.label}". Give a brief, encouraging response (1-2 sentences max). Be motivational but practical.`
+          });
+          setCoachMessage(data.response);
+        } catch (err) {
+          setCoachMessage("Keep pushing! You're doing great!");
+        }
       }
       setIsCoachTyping(false);
     }, 1000);
