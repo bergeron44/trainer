@@ -1,134 +1,141 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
-import { Flame, Beef, Wheat, Droplet, Target,
-  Check, MessageCircle, ChevronRight
+import {
+  Flame, Beef, Wheat, Droplet, Target,
+  Check, MessageCircle, ChevronRight, Plus, X
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import * as Dialog from '@radix-ui/react-dialog';
 import GlobalCoachChat from '@/components/coach/GlobalCoachChat';
+import FoodSearch from '@/components/nutrition/FoodSearch';
 import { useAuth } from '@/lib/AuthContext';
 
+// --- Coach Logic: Dynamic Meal Periods ---
+const generateCoachPeriods = (goal, dietType) => {
+  // Determine number of meals (2 to 7) based on goal and diet
+  let numMeals = 4; // default
 
-const NUTRITION_GOALS = [
-  {
-    id: 'cut',
-    label: 'Cut / Fat Loss',
-    description: 'Calorie deficit for losing body fat',
-    color: '#FF6B6B',
-    icon: '🔥'
-  },
-  {
-    id: 'maintain',
-    label: 'Maintenance',
-    description: 'Maintain current weight and body composition',
-    color: '#00F2FF',
-    icon: '⚖️'
-  },
-  {
-    id: 'bulk',
-    label: 'Bulk / Muscle Gain',
-    description: 'Calorie surplus for building muscle',
-    color: '#CCFF00',
-    icon: '💪'
+  if (goal === 'muscle_gain') numMeals = 6; // Bulking needs more meals
+  if (goal === 'weight_loss') numMeals = 3; // Cutting might mean fewer larger meals
+  if (dietType === 'keto') numMeals = Math.max(2, numMeals - 1); // Keto users often eat less frequently
+
+  // Ensure bounds
+  numMeals = Math.max(2, Math.min(7, numMeals));
+
+  // Generate labels based on count
+  const periods = [];
+  if (numMeals === 2) {
+    periods.push({ id: 'm1', label: 'First Meal' }, { id: 'm2', label: 'Final Feast' });
+  } else if (numMeals === 3) {
+    periods.push({ id: 'm1', label: 'Morning Fuel' }, { id: 'm2', label: 'Midday Recharger' }, { id: 'm3', label: 'Evening Recovery' });
+  } else if (numMeals === 4) {
+    periods.push({ id: 'm1', label: 'Breakfast' }, { id: 'm2', label: 'Lunch' }, { id: 'm3', label: 'Pre-Workout Snack' }, { id: 'm4', label: 'Dinner' });
+  } else if (numMeals >= 5) {
+    periods.push({ id: 'm1', label: 'Early Kickoff' }, { id: 'm2', label: 'Mid-Morning Snack' }, { id: 'm3', label: 'Lunch' }, { id: 'm4', label: 'Afternoon Fuel' });
+    if (numMeals >= 6) periods.push({ id: 'm5', label: 'Dinner' });
+    if (numMeals === 7) {
+      periods.push({ id: 'm6', label: 'Post-Workout Shake' });
+      periods.push({ id: 'm7', label: 'Late Night Casein' });
+    } else if (numMeals === 6) {
+      periods.push({ id: 'm6', label: 'Evening Snack' });
+    } else {
+      periods.push({ id: 'm5', label: 'Dinner' });
+    }
   }
-];
 
-const RECOMMENDATIONS = {
-  cut: [
-    {
-      title: 'Prioritize Protein',
-      description: 'Aim for 2g per kg bodyweight to preserve muscle mass while cutting.',
-      tips: ['Lean meats', 'Greek yogurt', 'Egg whites', 'Protein shakes']
-    },
-    {
-      title: 'High Volume, Low Calorie Foods',
-      description: 'Fill up on vegetables and lean proteins to stay satiated.',
-      tips: ['Leafy greens', 'Cucumber', 'Zucchini', 'Watermelon']
-    },
-    {
-      title: 'Timing Your Carbs',
-      description: 'Focus carbs around your workouts for energy and recovery.',
-      tips: ['Pre-workout: 1-2 hours before', 'Post-workout: Within 2 hours']
-    }
-  ],
-  maintain: [
-    {
-      title: 'Balanced Macros',
-      description: 'Keep a balanced ratio of protein, carbs, and fats.',
-      tips: ['40% carbs', '30% protein', '30% fats']
-    },
-    {
-      title: 'Consistent Meal Timing',
-      description: 'Eat at regular intervals to maintain energy levels.',
-      tips: ['3 main meals', '2 snacks', 'Dont skip breakfast']
-    },
-    {
-      title: 'Hydration',
-      description: 'Drink plenty of water throughout the day.',
-      tips: ['2-3 liters daily', 'More during workouts', 'Limit sugary drinks']
-    }
-  ],
-  bulk: [
-    {
-      title: 'Caloric Surplus',
-      description: 'Eat 200-500 calories above maintenance for lean gains.',
-      tips: ['Track your intake', 'Weigh weekly', 'Adjust as needed']
-    },
-    {
-      title: 'Quality Carbs for Energy',
-      description: 'Fuel your workouts with complex carbohydrates.',
-      tips: ['Oats', 'Rice', 'Sweet potatoes', 'Whole grain bread']
-    },
-    {
-      title: 'Frequent Meals',
-      description: 'Eat 5-6 smaller meals to hit your calorie goals.',
-      tips: ['Meal prep helps', 'Keep snacks handy', 'Shakes for extra calories']
-    }
-  ]
+  return periods;
 };
+
+// --- Static Inspirations ---
+const getInspirationsForPeriod = (dietType) => {
+  const db = {
+    vegan: [
+      { name: 'Tofu Scramble Bowl', cals: 415, protein: 25, carbs: 45, fat: 15 },
+      { name: 'Oatmeal & Protein Shake', cals: 350, protein: 20, carbs: 50, fat: 8 },
+      { name: 'Avocado Toast', cals: 300, protein: 10, carbs: 30, fat: 18 }
+    ],
+    keto: [
+      { name: 'Eggs & Bacon', cals: 450, protein: 25, carbs: 2, fat: 38 },
+      { name: 'Avocado & Salmon', cals: 400, protein: 28, carbs: 5, fat: 30 },
+      { name: 'Cheese Omelette', cals: 350, protein: 20, carbs: 3, fat: 28 }
+    ],
+    everything: [
+      { name: 'Greek Yogurt & Berries', cals: 250, protein: 20, carbs: 30, fat: 5 },
+      { name: 'Turkey Wrap', cals: 400, protein: 35, carbs: 40, fat: 12 },
+      { name: 'Steak & Sweet Potato', cals: 550, protein: 45, carbs: 45, fat: 20 }
+    ]
+  };
+  return db[dietType] || db['everything'];
+};
+
+const DIET_TIPS = {
+  vegan: "Plant-based proteins like lentils, tofu, and quinoa are essential for muscle repair.",
+  vegetarian: "Incorporate eggs and dairy for complete amino acid profiles.",
+  keto: "Keep carbs under 30g and focus on high-quality fats for sustained energy.",
+  everything: "Balance is key. Prioritize lean meats and complex carbohydrates."
+};
+
+const GOAL_LABELS = {
+  weight_loss: 'Fat Loss',
+  muscle_gain: 'Muscle Gain',
+  recomp: 'Maintenance',
+  athletic_performance: 'Athletic Performance'
+};
+
 export default function NutritionDemo() {
-  const { user, updateProfile } = useAuth();
-  const [nutritionGoal, setNutritionGoal] = useState(null);
+  const { user } = useAuth();
   const [chatOpen, setChatOpen] = useState(false);
   const [coachStyle, setCoachStyle] = useState('motivational');
 
-  // Map profile goal to nutrition goal
+  const profile = user?.profile || {};
+  const dietType = profile.diet_type || 'everything';
+  const goal = profile.goal || 'recomp';
+
+  const [activeSearchPeriod, setActiveSearchPeriod] = useState(null);
+  const [loggedFoods, setLoggedFoods] = useState({});
+  const [periods, setPeriods] = useState([]);
+
   useEffect(() => {
-    if (user?.profile?.goal) {
-      const goalMap = {
-        'weight_loss': 'cut',
-        'muscle_gain': 'bulk',
-        'recomp': 'maintain',
-        'athletic_performance': 'maintain' // fallback
-      };
-      setNutritionGoal(goalMap[user.profile.goal] || 'maintain');
-    }
-  }, [user]);
+    setPeriods(generateCoachPeriods(goal, dietType));
+  }, [goal, dietType]);
 
-  const handleGoalChange = async (newGoalId) => {
-    setNutritionGoal(newGoalId);
-    // Map back to profile goal
-    const profileGoalMap = {
-      'cut': 'weight_loss',
-      'bulk': 'muscle_gain',
-      'maintain': 'recomp'
+  const tdee = profile.target_calories || 2000;
+  const p_goal = profile.protein_goal || 150;
+  const c_goal = profile.carbs_goal || 200;
+  const f_goal = profile.fat_goal || 65;
+
+  const currentMacros = Object.values(loggedFoods).flat().reduce((acc, food) => {
+    return {
+      cals: acc.cals + (food.cals || 0),
+      pro: acc.pro + (food.protein || 0),
+      carb: acc.carb + (food.carbs || 0),
+      fat: acc.fat + (food.fat || 0)
     };
-
-    try {
-      await updateProfile({ goal: profileGoalMap[newGoalId] });
-    } catch (error) {
-      console.error('Failed to update nutrition goal:', error);
-    }
-  };
-
-  const recommendations = RECOMMENDATIONS[nutritionGoal] || [];
+  }, { cals: 0, pro: 0, carb: 0, fat: 0 });
 
   const macroCards = [
-    { key: 'calories', label: 'Calories', icon: Flame, value: 2200, target: 2500, color: '#00F2FF', unit: '' },
-    { key: 'protein', label: 'Protein', icon: Beef, value: 120, target: 150, color: '#CCFF00', unit: 'g' },
-    { key: 'carbs', label: 'Carbs', icon: Wheat, value: 180, target: 250, color: '#FF6B6B', unit: 'g' },
-    { key: 'fat', label: 'Fat', icon: Droplet, value: 55, target: 70, color: '#FFD93D', unit: 'g' }
+    { key: 'calories', label: 'Calories', icon: Flame, value: currentMacros.cals, target: tdee, color: '#00F2FF', unit: '' },
+    { key: 'protein', label: 'Protein', icon: Beef, value: currentMacros.pro, target: p_goal, color: '#CCFF00', unit: 'g' },
+    { key: 'carbs', label: 'Carbs', icon: Wheat, value: currentMacros.carb, target: c_goal, color: '#FF6B6B', unit: 'g' },
+    { key: 'fat', label: 'Fat', icon: Droplet, value: currentMacros.fat, target: f_goal, color: '#FFD93D', unit: 'g' }
   ];
+
+  const handleAddFood = (food) => {
+    if (!activeSearchPeriod) return;
+    setLoggedFoods(prev => ({
+      ...prev,
+      [activeSearchPeriod]: [...(prev[activeSearchPeriod] || []), food]
+    }));
+    setActiveSearchPeriod(null);
+  };
+
+  const removeFood = (periodId, index) => {
+    setLoggedFoods(prev => {
+      const updated = [...(prev[periodId] || [])];
+      updated.splice(index, 1);
+      return { ...prev, [periodId]: updated };
+    });
+  };
 
   return (
     <div className="min-h-screen px-4 py-6">
@@ -136,55 +143,24 @@ export default function NutritionDemo() {
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="mb-6"
+        className="mb-6 flex justify-between items-end"
       >
-        <h1 className="text-2xl font-bold">Nutrition</h1>
-        <p className="text-gray-500 text-sm">{format(new Date(), 'EEEE, MMMM d')}</p>
+        <div>
+          <h1 className="text-2xl font-bold">Nutrition</h1>
+          <p className="text-gray-500 text-sm">{format(new Date(), 'EEEE, MMMM d')}</p>
+        </div>
+        <div className="text-right">
+          <p className="text-[#00F2FF] font-semibold text-sm capitalize">{dietType} Diet</p>
+          <p className="text-gray-400 text-xs">{GOAL_LABELS[goal]}</p>
+        </div>
       </motion.div>
 
-      {/* Goal Selector */}
+      {/* Macro Overview */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
-        className="mb-6"
-      >
-        <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">
-          Your Goal
-        </h2>
-        <div className="grid grid-cols-3 gap-2">
-          {NUTRITION_GOALS.map((goal) => (
-            <motion.button
-              key={goal.id}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => setNutritionGoal(goal.id)}
-              className={`p-4 rounded-xl border-2 transition-all ${nutritionGoal === goal.id
-                ? 'border-[#00F2FF] bg-[#00F2FF]/10'
-                : 'border-[#2A2A2A] bg-[#1A1A1A] hover:border-[#3A3A3A]'
-                }`}
-            >
-              <div className="text-2xl mb-2">{goal.icon}</div>
-              <p className="font-semibold text-sm">{goal.label.split(' / ')[0]}</p>
-              {nutritionGoal === goal.id && (
-                <motion.div
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  className="w-5 h-5 rounded-full bg-[#00F2FF] flex items-center justify-center mx-auto mt-2"
-                >
-                  <Check className="w-3 h-3 text-black" />
-                </motion.div>
-              )}
-            </motion.button>
-          ))}
-        </div>
-      </motion.div>
-
-      {/* Macro Overview - Demo Data */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.15 }}
-        className="grid grid-cols-2 gap-3 mb-6"
+        className="grid grid-cols-2 gap-3 mb-8"
       >
         {macroCards.map((macro, index) => {
           const percentage = Math.min(Math.round((macro.value / macro.target) * 100), 100);
@@ -219,7 +195,7 @@ export default function NutritionDemo() {
                 <motion.div
                   initial={{ width: 0 }}
                   animate={{ width: `${percentage}%` }}
-                  transition={{ duration: 0.5, delay: 0.3 }}
+                  transition={{ duration: 0.8, delay: 0.4 }}
                   className="h-full rounded-full"
                   style={{ backgroundColor: macro.color }}
                 />
@@ -229,53 +205,100 @@ export default function NutritionDemo() {
         })}
       </motion.div>
 
-      {/* Recommendations */}
-      <AnimatePresence mode="wait">
-        {nutritionGoal && (
-          <motion.div
-            key={nutritionGoal}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="mb-6"
-          >
-            <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">
-              Recommendations for {NUTRITION_GOALS.find(g => g.id === nutritionGoal)?.label}
-            </h2>
-            <div className="space-y-3">
-              {recommendations.map((rec, index) => (
-                <motion.div
-                  key={rec.title}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: index * 0.1 }}
-                  className="bg-[#1A1A1A] rounded-xl p-4 border border-[#2A2A2A]"
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="w-10 h-10 rounded-lg gradient-cyan flex items-center justify-center shrink-0">
-                      <Target className="w-5 h-5 text-black" />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="font-semibold mb-1">{rec.title}</h3>
-                      <p className="text-sm text-gray-400 mb-3">{rec.description}</p>
-                      <div className="flex flex-wrap gap-2">
-                        {rec.tips.map((tip, i) => (
-                          <span
-                            key={i}
-                            className="text-xs px-2 py-1 bg-[#2A2A2A] rounded-full text-gray-300"
-                          >
-                            {tip}
-                          </span>
-                        ))}
+      {/* Diet Tip */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.2 }}
+        className="mb-8 bg-[#00F2FF]/5 border border-[#00F2FF]/20 rounded-xl p-4 flex gap-3"
+      >
+        <div className="shrink-0 mt-0.5">
+          <Target className="w-5 h-5 text-[#00F2FF]" />
+        </div>
+        <p className="text-sm text-gray-300">
+          <span className="font-semibold text-white">Coach tip:</span> {DIET_TIPS[dietType]}
+        </p>
+      </motion.div>
+
+      {/* Dynamic Daily Tracker */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.25 }}
+        className="mb-8"
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">
+            Today's Log ({periods.length} Meals)
+          </h2>
+        </div>
+
+        <div className="space-y-4">
+          {periods.map((period, index) => {
+            const periodFoods = loggedFoods[period.id] || [];
+            const inspirations = getInspirationsForPeriod(dietType);
+
+            const pCals = periodFoods.reduce((sum, f) => sum + (f.cals || 0), 0);
+
+            return (
+              <motion.div
+                key={period.id}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.3 + index * 0.1 }}
+                className="rounded-xl p-4 border bg-[#1A1A1A] border-[#2A2A2A]"
+              >
+                <div className="flex justify-between items-center mb-3">
+                  <h3 className="font-semibold text-[#00F2FF]">{period.label}</h3>
+                  <span className="text-sm text-gray-400">{pCals} kcal</span>
+                </div>
+
+                {/* Logged Foods */}
+                {periodFoods.length > 0 && (
+                  <div className="mb-3 space-y-2">
+                    {periodFoods.map((food, fIdx) => (
+                      <div key={fIdx} className="flex justify-between items-center bg-[#2A2A2A] rounded-lg p-2 text-sm">
+                        <div className="flex-1 truncate pr-2">
+                          <span className="text-white block truncate">{food.name}</span>
+                          <span className="text-xs text-gray-500">{food.cals} kcal • P:{food.protein} C:{food.carbs} F:{food.fat}</span>
+                        </div>
+                        <button
+                          onClick={() => removeFood(period.id, fIdx)}
+                          className="text-gray-500 hover:text-red-400 p-1"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
                       </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Inspirations Carousel */}
+                {periodFoods.length === 0 && (
+                  <div className="mb-3">
+                    <p className="text-xs text-gray-500 mb-2">Ideas to hit your macros:</p>
+                    <div className="flex overflow-x-auto snap-x gap-2 pb-2 scrollbar-none">
+                      {inspirations.map((insp, i) => (
+                        <div key={i} className="snap-start shrink-0 w-48 bg-[#2A2A2A] rounded-lg p-2 text-xs border border-transparent hover:border-[#00F2FF]/30 transition-all cursor-pointer">
+                          <p className="text-gray-300 font-medium truncate">{insp.name}</p>
+                          <p className="text-gray-500 mt-1">{insp.cals} kcal • {insp.protein}g Protein</p>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                </motion.div>
-              ))}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+                )}
+
+                <button
+                  onClick={() => setActiveSearchPeriod(period.id)}
+                  className="w-full py-2 flex items-center justify-center gap-2 border border-dashed border-[#3A3A3A] rounded-lg text-sm text-gray-400 hover:text-white hover:border-[#00F2FF]/50 transition-all"
+                >
+                  <Plus className="w-4 h-4" /> Add Food
+                </button>
+              </motion.div>
+            );
+          })}
+        </div>
+      </motion.div>
 
       {/* Ask Coach Section */}
       <motion.div
@@ -293,13 +316,13 @@ export default function NutritionDemo() {
             <p className="text-xs text-gray-500">Get personalized nutrition advice</p>
           </div>
         </div>
-        <Button
+        <button
           onClick={() => setChatOpen(true)}
-          className="w-full gradient-cyan text-black font-semibold"
+          className="w-full flex items-center justify-center p-3 rounded-xl gradient-cyan text-black font-semibold"
         >
-          Chat with Coach
+          <span>Chat with Coach</span>
           <ChevronRight className="w-4 h-4 ml-2" />
-        </Button>
+        </button>
       </motion.div>
 
       {/* Demo Notice */}
@@ -314,6 +337,27 @@ export default function NutritionDemo() {
         context="Nutrition"
         coachStyle={coachStyle}
       />
+
+      {/* Food Search Modal / Drawer */}
+      <Dialog.Root open={!!activeSearchPeriod} onOpenChange={(open) => !open && setActiveSearchPeriod(null)}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 bg-black/80 z-50 backdrop-blur-sm" />
+          <Dialog.Content className="fixed bottom-0 left-0 right-0 top-16 sm:inset-x-4 sm:top-[10%] sm:bottom-[10%] max-w-2xl mx-auto z-50 focus:outline-none">
+            <motion.div
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="h-full w-full"
+            >
+              <FoodSearch
+                onAddFood={handleAddFood}
+                onClose={() => setActiveSearchPeriod(null)}
+              />
+            </motion.div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </div>
   );
 }

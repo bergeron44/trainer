@@ -55,6 +55,8 @@ import Onboarding from './pages/Onboarding';
 import Profile from './pages/Profile';
 import WorkoutSession from './pages/WorkoutSession';
 import Workouts from './pages/Workouts';
+import Login from './pages/Login';
+import Register from './pages/Register';
 import __Layout from './Layout.jsx';
 
 
@@ -67,6 +69,8 @@ export const PAGES = {
     "Profile": Profile,
     "WorkoutSession": WorkoutSession,
     "Workouts": Workouts,
+    "Login": Login,
+    "Register": Register,
 }
 
 export const pagesConfig = {

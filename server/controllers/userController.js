@@ -76,6 +76,11 @@ const loginUser = asyncHandler(async (req, res) => {
 const getMe = asyncHandler(async (req, res) => {
     const user = await User.findById(req.user.id);
 
+    if (!user) {
+        res.status(404);
+        throw new Error('User not found in Database');
+    }
+
     res.status(200).json({
         id: user._id,
         name: user.name,

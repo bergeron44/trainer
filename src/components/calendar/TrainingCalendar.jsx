@@ -1,108 +1,23 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { 
-  ChevronLeft, ChevronRight, Calendar as CalendarIcon, 
-  Download, Clock, Dumbbell, Check 
+import {
+  ChevronLeft, ChevronRight, Calendar as CalendarIcon,
+  Download, Clock, Dumbbell, Check
 } from 'lucide-react';
-import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, 
-         addMonths, subMonths, eachDayOfInterval, isSameMonth, 
-         isSameDay, isToday, addDays } from 'date-fns';
+import {
+  format, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
+  addMonths, subMonths, eachDayOfInterval, isSameMonth,
+  isSameDay, isToday, addDays
+} from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
-// Exercise library for realistic plans
-const EXERCISE_LIBRARY = {
-  Push: [
-    { name: 'Bench Press', sets: 4, reps: '8-10' },
-    { name: 'Overhead Press', sets: 3, reps: '10-12' },
-    { name: 'Incline DB Press', sets: 3, reps: '10-12' },
-    { name: 'Lateral Raises', sets: 3, reps: '12-15' },
-    { name: 'Tricep Pushdowns', sets: 3, reps: '12-15' }
-  ],
-  Pull: [
-    { name: 'Deadlifts', sets: 4, reps: '6-8' },
-    { name: 'Barbell Rows', sets: 4, reps: '8-10' },
-    { name: 'Lat Pulldowns', sets: 3, reps: '10-12' },
-    { name: 'Face Pulls', sets: 3, reps: '15' },
-    { name: 'Bicep Curls', sets: 3, reps: '12-15' }
-  ],
-  Legs: [
-    { name: 'Squats', sets: 4, reps: '8-10' },
-    { name: 'Romanian Deadlifts', sets: 3, reps: '10-12' },
-    { name: 'Leg Press', sets: 3, reps: '12-15' },
-    { name: 'Leg Curls', sets: 3, reps: '12-15' },
-    { name: 'Calf Raises', sets: 4, reps: '15-20' }
-  ],
-  Upper: [
-    { name: 'Pull-ups', sets: 4, reps: '8-10' },
-    { name: 'DB Bench Press', sets: 4, reps: '10-12' },
-    { name: 'Seated Rows', sets: 3, reps: '10-12' },
-    { name: 'Arnold Press', sets: 3, reps: '10-12' },
-    { name: 'EZ Bar Curls', sets: 3, reps: '12' }
-  ],
-  Lower: [
-    { name: 'Front Squats', sets: 4, reps: '8-10' },
-    { name: 'Hip Thrusts', sets: 3, reps: '10-12' },
-    { name: 'Walking Lunges', sets: 3, reps: '12 each' },
-    { name: 'Leg Extensions', sets: 3, reps: '12-15' },
-    { name: 'Standing Calf Raises', sets: 4, reps: '15' }
-  ],
-  'Full Body': [
-    { name: 'Squats', sets: 3, reps: '8-10' },
-    { name: 'Bench Press', sets: 3, reps: '8-10' },
-    { name: 'Barbell Rows', sets: 3, reps: '10-12' },
-    { name: 'Overhead Press', sets: 3, reps: '10-12' },
-    { name: 'Plank', sets: 3, reps: '60s' }
-  ]
-};
-
-// Generate mock workout plan for full month
-const generateMockPlan = () => {
-  const today = new Date();
-  const workouts = [];
-  const muscleGroups = ['Push', 'Pull', 'Legs', 'Upper', 'Lower', 'Full Body'];
-  
-  // Generate past workouts (14 days back)
-  for (let i = -14; i < 0; i++) {
-    const date = addDays(today, i);
-    const dayOfWeek = date.getDay();
-    if (dayOfWeek === 0 || dayOfWeek === 3) continue;
-    
-    const muscleGroup = muscleGroups[Math.abs(i) % muscleGroups.length];
-    workouts.push({
-      id: `workout_past_${Math.abs(i)}`,
-      date: format(date, 'yyyy-MM-dd'),
-      muscle_group: muscleGroup,
-      exercises: EXERCISE_LIBRARY[muscleGroup] || EXERCISE_LIBRARY['Full Body'],
-      duration_minutes: 55 + Math.floor(Math.random() * 20),
-      status: 'completed'
-    });
-  }
-  
-  // Generate future workouts (28 days ahead)
-  for (let i = 0; i < 28; i++) {
-    const date = addDays(today, i);
-    const dayOfWeek = date.getDay();
-    if (dayOfWeek === 0 || dayOfWeek === 3) continue;
-    
-    const muscleGroup = muscleGroups[i % muscleGroups.length];
-    workouts.push({
-      id: `workout_${i}`,
-      date: format(date, 'yyyy-MM-dd'),
-      muscle_group: muscleGroup,
-      exercises: EXERCISE_LIBRARY[muscleGroup] || EXERCISE_LIBRARY['Full Body'],
-      duration_minutes: 60,
-      status: 'planned'
-    });
-  }
-  
-  return workouts;
-};
+// Mock generation logic removed, now purely relies on DB Workouts.
 
 const generateICS = (workouts, preferredTime) => {
   const [hours, minutes] = preferredTime.split(':').map(Number);
-  
+
   let icsContent = `BEGIN:VCALENDAR
 VERSION:2.0
 PRODID:-//Nexus AI//Training Calendar//EN
@@ -114,11 +29,11 @@ METHOD:PUBLISH
     const [year, month, day] = workout.date.split('-').map(Number);
     const startDate = new Date(year, month - 1, day, hours, minutes);
     const endDate = new Date(startDate.getTime() + (workout.duration_minutes || 60) * 60000);
-    
+
     const formatICSDate = (d) => {
       return d.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
     };
-    
+
     const exerciseList = workout.exercises
       ?.map(e => `• ${e.name}: ${e.sets}x${e.reps}`)
       .join('\\n') || '';
@@ -156,21 +71,33 @@ export default function TrainingCalendar({ workouts: propWorkouts }) {
   const [showExportModal, setShowExportModal] = useState(false);
   const [preferredTime, setPreferredTime] = useState('09:00');
   const [exportSuccess, setExportSuccess] = useState(false);
-  
-  const [workouts] = useState(() => propWorkouts || generateMockPlan());
-  
+
+  const [workouts, setWorkoutsState] = useState(propWorkouts || []);
+
+  // Keep workouts in sync if parent API data arrives later
+  React.useEffect(() => {
+    if (propWorkouts) {
+      setWorkoutsState(propWorkouts);
+    }
+  }, [propWorkouts]);
   const monthStart = startOfMonth(currentMonth);
   const monthEnd = endOfMonth(currentMonth);
   const calendarStart = startOfWeek(monthStart, { weekStartsOn: 1 });
   const calendarEnd = endOfWeek(monthEnd, { weekStartsOn: 1 });
-  
+
   const days = eachDayOfInterval({ start: calendarStart, end: calendarEnd });
-  
+
   const getWorkoutForDate = (date) => {
     const dateStr = format(date, 'yyyy-MM-dd');
-    return workouts.find(w => w.date === dateStr);
+    return workouts.find(w => {
+      try {
+        return format(new Date(w.date), 'yyyy-MM-dd') === dateStr;
+      } catch (e) {
+        return w.date === dateStr;
+      }
+    });
   };
-  
+
   const selectedWorkout = selectedDate ? getWorkoutForDate(selectedDate) : null;
 
   const handleDayClick = (day) => {
@@ -184,10 +111,10 @@ export default function TrainingCalendar({ workouts: propWorkouts }) {
   const handleExport = () => {
     // Save preference
     localStorage.setItem('nexus_preferred_workout_time', preferredTime);
-    
+
     const icsContent = generateICS(workouts, preferredTime);
     downloadICS(icsContent, `nexus-training-plan-${format(new Date(), 'yyyy-MM')}.ics`);
-    
+
     setExportSuccess(true);
     setTimeout(() => {
       setExportSuccess(false);
@@ -254,7 +181,7 @@ export default function TrainingCalendar({ workouts: propWorkouts }) {
             const workout = getWorkoutForDate(day);
             const isCurrentMonth = isSameMonth(day, currentMonth);
             const isSelected = selectedDate && isSameDay(day, selectedDate);
-            
+
             return (
               <motion.button
                 key={index}
@@ -272,9 +199,8 @@ export default function TrainingCalendar({ workouts: propWorkouts }) {
                   {format(day, 'd')}
                 </span>
                 {workout && (
-                  <div className={`w-1.5 h-1.5 rounded-full mt-0.5 ${
-                    workout.status === 'completed' ? 'bg-[#CCFF00]' : 'bg-[#00F2FF]'
-                  }`} />
+                  <div className={`w-1.5 h-1.5 rounded-full mt-0.5 ${workout.status === 'completed' ? 'bg-[#CCFF00]' : 'bg-[#00F2FF]'
+                    }`} />
                 )}
               </motion.button>
             );
@@ -307,16 +233,15 @@ export default function TrainingCalendar({ workouts: propWorkouts }) {
                       {selectedWorkout.muscle_group}
                     </DialogTitle>
                   </div>
-                  <div className={`px-3 py-1 rounded-full text-xs font-medium ${
-                    selectedWorkout.status === 'completed' 
-                      ? 'bg-[#CCFF00]/20 text-[#CCFF00]' 
-                      : 'bg-[#00F2FF]/20 text-[#00F2FF]'
-                  }`}>
+                  <div className={`px-3 py-1 rounded-full text-xs font-medium ${selectedWorkout.status === 'completed'
+                    ? 'bg-[#CCFF00]/20 text-[#CCFF00]'
+                    : 'bg-[#00F2FF]/20 text-[#00F2FF]'
+                    }`}>
                     {selectedWorkout.status === 'completed' ? 'Done' : 'Planned'}
                   </div>
                 </div>
               </DialogHeader>
-              
+
               <div className="flex items-center gap-4 py-3 border-b border-[#2A2A2A]">
                 <div className="flex items-center gap-2 text-sm text-gray-400">
                   <Clock className="w-4 h-4" />
@@ -327,10 +252,10 @@ export default function TrainingCalendar({ workouts: propWorkouts }) {
                   <span>{selectedWorkout.exercises?.length || 0} exercises</span>
                 </div>
               </div>
-              
+
               <div className="space-y-1 py-2">
                 {selectedWorkout.exercises?.map((exercise, i) => (
-                  <motion.div 
+                  <motion.div
                     key={i}
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
@@ -378,7 +303,7 @@ export default function TrainingCalendar({ workouts: propWorkouts }) {
           <DialogHeader>
             <DialogTitle className="text-xl font-bold">Export to Calendar</DialogTitle>
           </DialogHeader>
-          
+
           {exportSuccess ? (
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
@@ -402,14 +327,14 @@ export default function TrainingCalendar({ workouts: propWorkouts }) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="bg-[#1A1A1A] border-[#2A2A2A]">
-                    {['06:00', '07:00', '08:00', '09:00', '10:00', '11:00', '12:00', 
+                    {['06:00', '07:00', '08:00', '09:00', '10:00', '11:00', '12:00',
                       '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00'].map(time => (
-                      <SelectItem key={time} value={time}>{time}</SelectItem>
-                    ))}
+                        <SelectItem key={time} value={time}>{time}</SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
               </div>
-              
+
               <div className="bg-[#1A1A1A] rounded-xl p-4 border border-[#2A2A2A]">
                 <p className="text-sm text-gray-400 mb-2">This will export:</p>
                 <ul className="text-sm space-y-1">
@@ -423,7 +348,7 @@ export default function TrainingCalendar({ workouts: propWorkouts }) {
                   </li>
                 </ul>
               </div>
-              
+
               <Button
                 onClick={handleExport}
                 className="w-full h-12 gradient-cyan text-black font-semibold"
@@ -431,7 +356,7 @@ export default function TrainingCalendar({ workouts: propWorkouts }) {
                 <Download className="w-4 h-4 mr-2" />
                 Download .ics File
               </Button>
-              
+
               <p className="text-xs text-gray-500 text-center">
                 Works with Google Calendar, Apple Calendar, Outlook, and more
               </p>

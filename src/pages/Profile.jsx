@@ -79,10 +79,21 @@ export default function Profile() {
     hardcore: { label: 'Hardcore', icon: Skull, color: '#FF6B6B' }
   };
 
-  if (!profile) {
+  if (user === undefined) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="w-8 h-8 border-2 border-[#00F2FF] border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!profile || Object.keys(profile).length === 0 || !profile.goal) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center">
+        <p className="text-gray-400 mb-4">You haven't completed your profile setup.</p>
+        <Button onClick={() => navigate(createPageUrl('Onboarding'))} className="bg-[#1A1A1A] border border-[#2A2A2A] text-white hover:bg-[#2A2A2A]">
+          Complete Onboarding
+        </Button>
       </div>
     );
   }

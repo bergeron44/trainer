@@ -4,86 +4,19 @@ import { createPageUrl } from '@/utils';
 import { motion } from 'framer-motion';
 import { format } from 'date-fns';
 import { Play, CheckCircle, Calendar, Dumbbell } from 'lucide-react';
+import { useAuth } from '@/lib/AuthContext';
 import { Button } from '@/components/ui/button';
 import InteractiveExerciseList from '@/components/dashboard/InteractiveExerciseList';
 import ProgressRing from '@/components/dashboard/ProgressRing';
 import WorkoutPlanTabs from '@/components/dashboard/WorkoutPlanTabs';
 import WorkoutEditorSheet from '@/components/dashboard/WorkoutEditorSheet';
 
-const generateWorkout = (profile) => {
-  const workoutPlans = {
-    weight_loss: {
-      muscle_groups: ['Full Body', 'Upper Body', 'Lower Body', 'HIIT Circuit', 'Core & Cardio'],
-      exercises: {
-        'Full Body': [
-          { name: 'Goblet Squats', sets: 3, reps: '12-15', weight: 12, rest_seconds: 45 },
-          { name: 'Push-ups', sets: 3, reps: '10-15', weight: 0, rest_seconds: 45 },
-          { name: 'Dumbbell Rows', sets: 3, reps: '12', weight: 10, rest_seconds: 45 },
-          { name: 'Walking Lunges', sets: 3, reps: '20 steps', weight: 0, rest_seconds: 45 },
-          { name: 'Plank', sets: 3, reps: '45 sec', weight: 0, rest_seconds: 30 }
-        ]
-      }
-    },
-    muscle_gain: {
-      muscle_groups: ['Push', 'Pull', 'Legs', 'Upper', 'Lower'],
-      exercises: {
-        'Push': [
-          { name: 'Bench Press', sets: 4, reps: '8-10', weight: 60, rest_seconds: 90 },
-          { name: 'Overhead Press', sets: 4, reps: '8-10', weight: 40, rest_seconds: 90 },
-          { name: 'Incline Dumbbell Press', sets: 3, reps: '10-12', weight: 22, rest_seconds: 60 },
-          { name: 'Tricep Dips', sets: 3, reps: '10-12', weight: 0, rest_seconds: 60 },
-          { name: 'Cable Flyes', sets: 3, reps: '12-15', weight: 15, rest_seconds: 45 }
-        ]
-      }
-    },
-    recomp: {
-      muscle_groups: ['Upper A', 'Lower A', 'Upper B', 'Lower B', 'Full Body'],
-      exercises: {
-        'Upper A': [
-          { name: 'Barbell Rows', sets: 4, reps: '8-10', weight: 50, rest_seconds: 90 },
-          { name: 'Dumbbell Bench Press', sets: 4, reps: '10-12', weight: 24, rest_seconds: 90 },
-          { name: 'Pull-ups', sets: 3, reps: '8-10', weight: 0, rest_seconds: 90 },
-          { name: 'Lateral Raises', sets: 3, reps: '12-15', weight: 8, rest_seconds: 45 },
-          { name: 'Face Pulls', sets: 3, reps: '15-20', weight: 15, rest_seconds: 45 }
-        ]
-      }
-    },
-    athletic_performance: {
-      muscle_groups: ['Power', 'Speed', 'Strength', 'Agility', 'Recovery'],
-      exercises: {
-        'Power': [
-          { name: 'Power Cleans', sets: 5, reps: '3', weight: 50, rest_seconds: 120 },
-          { name: 'Box Jumps', sets: 4, reps: '5', weight: 0, rest_seconds: 90 },
-          { name: 'Medicine Ball Slams', sets: 3, reps: '10', weight: 8, rest_seconds: 60 },
-          { name: 'Broad Jumps', sets: 3, reps: '8', weight: 0, rest_seconds: 60 },
-          { name: 'Battle Ropes', sets: 3, reps: '30 sec', weight: 0, rest_seconds: 45 }
-        ]
-      }
-    }
-  };
-
-  const goal = profile?.goal || 'muscle_gain';
-  const plan = workoutPlans[goal] || workoutPlans.muscle_gain;
-  const dayOfWeek = new Date().getDay();
-  const muscleGroup = plan.muscle_groups[dayOfWeek % plan.muscle_groups.length];
-  
-  const exerciseKey = Object.keys(plan.exercises)[0];
-  const exercises = plan.exercises[exerciseKey].map((ex, i) => ({
-    ...ex,
-    id: `ex_${Date.now()}_${i}`
-  }));
-
-  return {
-    id: `workout_${Date.now()}`,
-    date: format(new Date(), 'yyyy-MM-dd'),
-    muscle_group: muscleGroup,
-    exercises,
-    status: 'planned'
-  };
-};
+// Local generation logic removed - now handled by backend 12-week AI AI Generator
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const { user, isLoadingAuth } = useAuth();
+
   const [profile, setProfile] = useState(null);
   const [todayWorkout, setTodayWorkout] = useState(null);
   const [completedSets, setCompletedSets] = useState({});
@@ -93,53 +26,126 @@ export default function Dashboard() {
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingWorkout, setEditingWorkout] = useState(null);
 
-  // Load profile and workout from localStorage
+  // Load profile and fetch authentic DB workouts
   useEffect(() => {
-    const savedProfile = localStorage.getItem('nexus_user_profile');
-    if (!savedProfile) {
+    if (isLoadingAuth) return;
+
+    const profileData = user?.profile;
+
+    if (!profileData || !profileData.goal || !profileData.tdee) {
       navigate(createPageUrl('Onboarding'));
       return;
     }
 
-    const profileData = JSON.parse(savedProfile);
     setProfile(profileData);
 
-    // Check for today's workout
-    const today = format(new Date(), 'yyyy-MM-dd');
-    const savedWorkouts = localStorage.getItem('nexus_workouts');
-    let workouts = savedWorkouts ? JSON.parse(savedWorkouts) : [];
-    
-    let todaysWorkout = workouts.find(w => w.date === today);
-    
-    if (!todaysWorkout) {
-      todaysWorkout = generateWorkout(profileData);
-      workouts.push(todaysWorkout);
-      localStorage.setItem('nexus_workouts', JSON.stringify(workouts));
-    }
-    
-    setTodayWorkout(todaysWorkout);
+    const initWorkouts = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const headers = {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        };
 
-    // Generate workout plans based on goal
-    const goal = profileData?.goal || 'muscle_gain';
-    const planNames = {
-      weight_loss: ['Full Body', 'Upper Body', 'Lower Body', 'HIIT Circuit', 'Core & Cardio'],
-      muscle_gain: ['Push', 'Pull', 'Legs', 'Upper', 'Lower'],
-      recomp: ['Upper A', 'Lower A', 'Upper B', 'Lower B', 'Full Body'],
-      athletic_performance: ['Power', 'Speed', 'Strength', 'Agility', 'Recovery']
+        // 1. Check if user needs the 12-week generative plan built
+        let needsPlan = !profileData.has_existing_plan;
+
+        if (needsPlan) {
+          const genRes = await fetch('http://localhost:5001/api/workouts/generate', {
+            method: 'POST',
+            headers
+          });
+
+          if (genRes.ok) {
+            console.log('Successfully generated 12-week DB plan');
+            // Optimistically update local profile flag
+            profileData.has_existing_plan = true;
+          }
+        }
+
+        // 2. Fetch the newly built (or existing) workouts for this week
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        // Grab the next 7 days of workouts as our "live" cache for the dashboard
+        const endOfWeek = new Date(today);
+        endOfWeek.setDate(today.getDate() + 7);
+
+        const fetchUrl = `http://localhost:5001/api/workouts?startDate=${today.toISOString()}&endDate=${endOfWeek.toISOString()}`;
+        const workRes = await fetch(fetchUrl, { headers });
+
+        if (!workRes.ok) {
+          throw new Error('Failed to fetch workouts');
+        }
+
+        const fetchedWorkouts = await workRes.json();
+
+        if (Array.isArray(fetchedWorkouts) && fetchedWorkouts.length > 0) {
+          // Normalize formatting to YYYY-MM-DD for matching
+          const todayStr = format(today, 'yyyy-MM-dd');
+
+          // Find the specific workout scheduled exactly for today
+          const todaysWorkout = fetchedWorkouts.find(w => format(new Date(w.date), 'yyyy-MM-dd') === todayStr);
+
+          if (todaysWorkout) {
+            setTodayWorkout(todaysWorkout);
+          } else {
+            // If there's no workout today (rest day), create a null-state representation or pick the next closest
+            setTodayWorkout({
+              id: 'rest_day',
+              muscle_group: 'Rest / Active Recovery',
+              exercises: [],
+              status: 'planned'
+            });
+          }
+
+          // Build dynamic tabs based on the upcoming week's routine
+          const plans = fetchedWorkouts.slice(0, 5).map((w, i) => ({
+            id: w._id || `plan_${i}`,
+            name: w.muscle_group,
+            rawItem: w
+          }));
+
+          // Ensure unique tabs (no repeating "Rest Day" tabs etc)
+          const uniquePlans = Array.from(new Map(plans.map(item => [item.name, item])).values());
+
+          setWorkoutPlans(uniquePlans);
+          setActivePlanId(uniquePlans.find(p => todaysWorkout && p.name === todaysWorkout.muscle_group)?.id || uniquePlans[0]?.id);
+
+          // Cache the full incoming list locally for quick editor matching
+          localStorage.setItem('nexus_live_workouts', JSON.stringify(fetchedWorkouts));
+        } else {
+          // Fallback to prevent infinite loader
+          setTodayWorkout({
+            id: 'error_fallback',
+            muscle_group: 'No Workouts Found',
+            exercises: [],
+            status: 'planned'
+          });
+          setWorkoutPlans([{ id: 'fb', name: 'No Workouts' }]);
+        }
+
+      } catch (err) {
+        console.error("Failed to initialize workout data via API:", err);
+        setTodayWorkout({
+          id: 'error_fallback',
+          muscle_group: 'Failed to Load',
+          exercises: [],
+          status: 'planned'
+        });
+        setWorkoutPlans([{ id: 'fb', name: 'Error' }]);
+      }
     };
-    const plans = (planNames[goal] || planNames.muscle_gain).map((name, i) => ({
-      id: `plan_${i}`,
-      name
-    }));
-    setWorkoutPlans(plans);
-    setActivePlanId(plans.find(p => p.name === todaysWorkout.muscle_group)?.id || plans[0]?.id);
+
+    initWorkouts();
 
     // Load completed sets
-    const savedCompletedSets = localStorage.getItem(`nexus_completed_sets_${today}`);
+    const todayStr = format(new Date(), 'yyyy-MM-dd');
+    const savedCompletedSets = localStorage.getItem(`nexus_completed_sets_${todayStr}`);
     if (savedCompletedSets) {
       setCompletedSets(JSON.parse(savedCompletedSets));
     }
-  }, [navigate]);
+  }, [user, isLoadingAuth, navigate]);
 
   const handleStartWorkout = () => {
     navigate(createPageUrl('LiveSession'));
@@ -151,39 +157,59 @@ export default function Dashboard() {
       [exerciseId]: setNumber
     };
     setCompletedSets(newCompletedSets);
-    
+
     // Save to localStorage
     const today = format(new Date(), 'yyyy-MM-dd');
     localStorage.setItem(`nexus_completed_sets_${today}`, JSON.stringify(newCompletedSets));
   };
 
-  const handleReorderExercises = (newOrder) => {
+  const handleReorderExercises = async (newOrder) => {
     setTodayWorkout(prev => ({ ...prev, exercises: newOrder }));
-    // Save updated order to localStorage
-    const savedWorkouts = localStorage.getItem('nexus_workouts');
-    let workouts = savedWorkouts ? JSON.parse(savedWorkouts) : [];
-    workouts = workouts.map(w => w.id === todayWorkout.id ? { ...w, exercises: newOrder } : w);
-    localStorage.setItem('nexus_workouts', JSON.stringify(workouts));
+
+    // Attempt real update to DB
+    if (todayWorkout && todayWorkout._id) {
+      try {
+        await fetch(`http://localhost:5001/api/workouts/${todayWorkout._id}`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ exercises: newOrder })
+        });
+      } catch (e) {
+        console.error("Failed reorder update", e);
+      }
+    }
   };
 
-  const handleReplaceExercise = (exerciseId, newExercise) => {
-    const newExercises = todayWorkout.exercises.map(ex => 
+  const handleReplaceExercise = async (exerciseId, newExercise) => {
+    const newExercises = todayWorkout.exercises.map(ex =>
       ex.id === exerciseId ? newExercise : ex
     );
     setTodayWorkout(prev => ({ ...prev, exercises: newExercises }));
-    // Save to localStorage
-    const savedWorkouts = localStorage.getItem('nexus_workouts');
-    let workouts = savedWorkouts ? JSON.parse(savedWorkouts) : [];
-    workouts = workouts.map(w => w.id === todayWorkout.id ? { ...w, exercises: newExercises } : w);
-    localStorage.setItem('nexus_workouts', JSON.stringify(workouts));
+
+    if (todayWorkout && todayWorkout._id) {
+      try {
+        await fetch(`http://localhost:5001/api/workouts/${todayWorkout._id}`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ exercises: newExercises })
+        });
+      } catch (e) {
+        console.error("Failed replacing exercise", e);
+      }
+    }
   };
 
   const handleOpenEditor = (plan) => {
-    // Find or generate workout for this plan
-    const savedWorkouts = localStorage.getItem('nexus_workouts');
+    const savedWorkouts = localStorage.getItem('nexus_live_workouts');
     let workouts = savedWorkouts ? JSON.parse(savedWorkouts) : [];
     let workoutForPlan = workouts.find(w => w.muscle_group === plan.name);
-    
+
     if (!workoutForPlan) {
       workoutForPlan = { ...todayWorkout, muscle_group: plan.name, id: `workout_${plan.id}` };
     }
@@ -191,30 +217,40 @@ export default function Dashboard() {
     setEditorOpen(true);
   };
 
-  const handleSaveWorkout = (updatedWorkout) => {
-    const savedWorkouts = localStorage.getItem('nexus_workouts');
-    let workouts = savedWorkouts ? JSON.parse(savedWorkouts) : [];
-    
-    const existingIndex = workouts.findIndex(w => w.id === updatedWorkout.id);
-    if (existingIndex >= 0) {
-      workouts[existingIndex] = updatedWorkout;
-    } else {
-      workouts.push(updatedWorkout);
-    }
-    
-    localStorage.setItem('nexus_workouts', JSON.stringify(workouts));
-    
-    // Update today's workout if it matches
-    if (todayWorkout?.id === updatedWorkout.id) {
+  const handleSaveWorkout = async (updatedWorkout) => {
+    if (todayWorkout?.id === updatedWorkout.id || todayWorkout?._id === updatedWorkout._id) {
       setTodayWorkout(updatedWorkout);
+    }
+
+    if (updatedWorkout._id) {
+      try {
+        await fetch(`http://localhost:5001/api/workouts/${updatedWorkout._id}`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ exercises: updatedWorkout.exercises, notes: updatedWorkout.notes })
+        });
+
+        // Force update local cache
+        const savedWorkouts = JSON.parse(localStorage.getItem('nexus_live_workouts') || '[]');
+        const updatedList = savedWorkouts.map(w => w._id === updatedWorkout._id ? updatedWorkout : w);
+        localStorage.setItem('nexus_live_workouts', JSON.stringify(updatedList));
+
+      } catch (e) {
+        console.error("Failed workout update on editor save", e);
+      }
     }
   };
 
   const handleSelectPlan = (planId) => {
     setActivePlanId(planId);
     const plan = workoutPlans.find(p => p.id === planId);
-    if (plan) {
-      const savedWorkouts = localStorage.getItem('nexus_workouts');
+    if (plan && plan.rawItem) {
+      setTodayWorkout(plan.rawItem);
+    } else if (plan) {
+      const savedWorkouts = localStorage.getItem('nexus_live_workouts');
       let workouts = savedWorkouts ? JSON.parse(savedWorkouts) : [];
       const workoutForPlan = workouts.find(w => w.muscle_group === plan.name);
       if (workoutForPlan) {
@@ -277,7 +313,7 @@ export default function Dashboard() {
             <p className="text-gray-500 text-sm">
               {completedSetsTotal} of {totalSets} sets completed
             </p>
-            
+
             {!workoutStarted ? (
               <Button
                 onClick={handleStartWorkout}
@@ -293,7 +329,7 @@ export default function Dashboard() {
               </div>
             ) : null}
           </div>
-          
+
           <ProgressRing progress={progress} size={100} strokeWidth={8}>
             <div className="text-center">
               <span className="text-2xl font-bold">{progress}%</span>
@@ -321,7 +357,7 @@ export default function Dashboard() {
         transition={{ delay: 0.3 }}
         className="mt-8 grid grid-cols-2 gap-3"
       >
-        <button 
+        <button
           onClick={() => navigate(createPageUrl('TrainingCalendar'))}
           className="bg-[#1A1A1A] rounded-xl p-4 border border-[#2A2A2A] hover:border-[#3A3A3A] transition-colors text-left"
         >
@@ -329,7 +365,7 @@ export default function Dashboard() {
           <p className="font-semibold">Calendar</p>
           <p className="text-xs text-gray-500">View full schedule</p>
         </button>
-        <button 
+        <button
           onClick={() => navigate(createPageUrl('NutritionDemo'))}
           className="bg-[#1A1A1A] rounded-xl p-4 border border-[#2A2A2A] hover:border-[#3A3A3A] transition-colors text-left"
         >

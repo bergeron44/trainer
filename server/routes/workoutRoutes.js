@@ -7,13 +7,15 @@ const {
     updateWorkout,
     deleteWorkout,
     startSession,
-    getActiveSession
+    getActiveSession,
+    generateWorkoutPlan
 } = require('../controllers/workoutController');
 const { protect } = require('../middleware/authMiddleware');
 
 router.route('/').get(protect, getWorkouts).post(protect, setWorkout);
-router.route('/:id').get(protect, getWorkout).put(protect, updateWorkout).delete(protect, deleteWorkout);
+router.route('/generate').post(protect, generateWorkoutPlan);
 router.route('/session').post(protect, startSession);
 router.route('/session/active').get(protect, getActiveSession);
+router.route('/:id').get(protect, getWorkout).put(protect, updateWorkout).delete(protect, deleteWorkout);
 
 module.exports = router;

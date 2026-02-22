@@ -153,7 +153,7 @@ const QUESTIONS = [
 
 export default function Onboarding() {
   const navigate = useNavigate();
-  const { register } = useAuth();
+  const { register, user, updateProfile } = useAuth();
   const [phase, setPhase] = useState('welcome'); // welcome, questions, plan_choice, plan_import, coach_selection, summary, account_setup
   const [currentStep, setCurrentStep] = useState(0);
   const [answers, setAnswers] = useState({});
@@ -265,7 +265,11 @@ export default function Onboarding() {
   };
 
   const handleComplete = () => {
-    setPhase('account_setup');
+    if (user) {
+      handleFinalSubmit();
+    } else {
+      setPhase('account_setup');
+    }
   };
 
   const handleFinalSubmit = async () => {
@@ -293,6 +297,23 @@ export default function Onboarding() {
       onboarding_completed: true,
       onboarding_date: new Date().toISOString()
     };
+
+    try {
+      if (user) {
+        await updateProfile(profileData);
+      } else if (answers.name && answers.email && answers.password) {
+        await register({
+          name: answers.name,
+          email: answers.email,
+          password: answers.password,
+          profile: profileData
+        });
+      }
+    } catch (error) {
+      console.error('Failed to save profile', error);
+      setIsSubmitting(false);
+      return;
+    }
 
     // Save to localStorage
     localStorage.setItem('nexus_user_profile', JSON.stringify(profileData));
@@ -355,10 +376,25 @@ export default function Onboarding() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.6 }}
-          className="text-xs text-gray-600 mt-6"
+          className="text-xs text-gray-600 mt-6 mb-4"
         >
           ⏱️ Takes about 2 minutes
         </motion.p>
+
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.7 }}
+          className="mt-6 text-sm text-gray-400"
+        >
+          Already have an account?{' '}
+          <button
+            onClick={() => navigate(createPageUrl('Login'))}
+            className="text-[#00F2FF] hover:underline font-medium"
+          >
+            Log In
+          </button>
+        </motion.div>
       </motion.div>
     );
   }
@@ -467,8 +503,8 @@ export default function Onboarding() {
                 onClick={handleFinalSubmit}
                 disabled={!answers.name || !answers.email || !answers.password}
                 className={`w-full h-12 rounded-xl font-semibold transition-all ${answers.name && answers.email && answers.password
-                    ? 'gradient-cyan text-black'
-                    : 'bg-[#2A2A2A] text-gray-500 cursor-not-allowed'
+                  ? 'gradient-cyan text-black'
+                  : 'bg-[#2A2A2A] text-gray-500 cursor-not-allowed'
                   }`}
               >
                 Create Account

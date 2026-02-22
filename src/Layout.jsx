@@ -24,7 +24,7 @@ export default function Layout({ children, currentPageName }) {
     { name: 'Profile', icon: User, page: 'Profile' },
   ];
 
-  const hideNav = currentPageName === 'Onboarding' || currentPageName === 'WorkoutSession';
+  const hideNav = ['Onboarding', 'WorkoutSession', 'Login', 'Register'].includes(currentPageName);
   const showCoachFAB = !hideNav; // Show on all pages including NutritionDemo
 
   // Get context for coach chat
@@ -138,21 +138,18 @@ export default function Layout({ children, currentPageName }) {
                   >
                     <motion.div
                       whileTap={{ scale: 0.9 }}
-                      className={`p-2 rounded-xl transition-all duration-300 ${
-                        isActive 
-                          ? 'bg-[#00F2FF]/10' 
+                      className={`p-2 rounded-xl transition-all duration-300 ${isActive
+                          ? 'bg-[#00F2FF]/10'
                           : 'hover:bg-[#1A1A1A]'
-                      }`}
+                        }`}
                     >
-                      <Icon 
-                        className={`w-5 h-5 transition-colors duration-300 ${
-                          isActive ? 'text-[#00F2FF]' : 'text-gray-500'
-                        }`} 
+                      <Icon
+                        className={`w-5 h-5 transition-colors duration-300 ${isActive ? 'text-[#00F2FF]' : 'text-gray-500'
+                          }`}
                       />
                     </motion.div>
-                    <span className={`text-[10px] font-medium transition-colors duration-300 ${
-                      isActive ? 'text-[#00F2FF]' : 'text-gray-500'
-                    }`}>
+                    <span className={`text-[10px] font-medium transition-colors duration-300 ${isActive ? 'text-[#00F2FF]' : 'text-gray-500'
+                      }`}>
                       {item.name}
                     </span>
                     {isActive && (

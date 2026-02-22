@@ -8,68 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import TrainingCalendar from '@/components/calendar/TrainingCalendar';
 
-// Generate mock workout history
-const generateMockWorkouts = () => {
-  const workouts = [];
-  const muscleGroups = ['Push', 'Pull', 'Legs', 'Upper Body', 'Lower Body', 'Full Body'];
-  const today = new Date();
-
-  // Past workouts (completed)
-  for (let i = 14; i > 0; i--) {
-    const date = addDays(today, -i);
-    const dayOfWeek = date.getDay();
-    if (dayOfWeek === 0) continue; // Skip Sundays
-
-    workouts.push({
-      id: `past_${i}`,
-      date: format(date, 'yyyy-MM-dd'),
-      muscle_group: muscleGroups[i % muscleGroups.length],
-      status: Math.random() > 0.2 ? 'completed' : 'missed',
-      exercises: [
-        { name: 'Exercise 1', sets: 4, reps: '8-10' },
-        { name: 'Exercise 2', sets: 3, reps: '10-12' },
-        { name: 'Exercise 3', sets: 3, reps: '12-15' },
-      ],
-      total_volume: Math.round(8000 + Math.random() * 5000),
-      duration_minutes: Math.round(45 + Math.random() * 30)
-    });
-  }
-
-  // Today's workout
-  workouts.push({
-    id: 'today',
-    date: format(today, 'yyyy-MM-dd'),
-    muscle_group: muscleGroups[today.getDay() % muscleGroups.length],
-    status: 'planned',
-    exercises: [
-      { name: 'Exercise 1', sets: 4, reps: '8-10' },
-      { name: 'Exercise 2', sets: 3, reps: '10-12' },
-      { name: 'Exercise 3', sets: 3, reps: '12-15' },
-    ]
-  });
-
-  // Future workouts (planned)
-  for (let i = 1; i <= 7; i++) {
-    const date = addDays(today, i);
-    const dayOfWeek = date.getDay();
-    if (dayOfWeek === 0) continue; // Skip Sundays
-
-    workouts.push({
-      id: `future_${i}`,
-      date: format(date, 'yyyy-MM-dd'),
-      muscle_group: muscleGroups[(today.getDay() + i) % muscleGroups.length],
-      status: 'planned',
-      exercises: [
-        { name: 'Exercise 1', sets: 4, reps: '8-10' },
-        { name: 'Exercise 2', sets: 3, reps: '10-12' },
-        { name: 'Exercise 3', sets: 3, reps: '12-15' },
-      ]
-    });
-  }
-
-  return workouts.sort((a, b) => new Date(b.date) - new Date(a.date));
-};
-
+// Mock generator completely replaced with live API fetching
 export default function Workouts() {
   const [viewMode, setViewMode] = useState('list'); // 'list' or 'calendar'
   const [filter, setFilter] = useState('upcoming');
@@ -187,7 +126,7 @@ export default function Workouts() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 }}
             >
-              <TrainingCalendar workouts={workouts.length > 0 ? workouts : undefined} />
+              <TrainingCalendar workouts={workouts} />
             </motion.div>
           ) : (
             <>
