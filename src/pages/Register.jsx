@@ -4,8 +4,10 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Loader2 } from 'lucide-react';
 import { createPageUrl } from '@/utils';
+import { useTranslation } from 'react-i18next';
 
 export default function Register() {
+    const { t } = useTranslation();
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -21,10 +23,9 @@ export default function Register() {
         setError(null);
         try {
             await register({ name, email, password });
-            // After registration, go to onboarding to set up profile
             navigate(createPageUrl('Onboarding'));
         } catch (err) {
-            setError(err?.response?.data?.message || err.message || 'Registration failed. Please try again.');
+            setError(err?.response?.data?.message || err.message || t('common.error'));
         } finally {
             setIsLoading(false);
         }
@@ -46,8 +47,8 @@ export default function Register() {
                     <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#00F2FF] to-[#CCFF00] flex items-center justify-center mb-4 shadow-lg shadow-[#CCFF00]/20">
                         <span className="text-3xl font-bold text-black">T</span>
                     </div>
-                    <h1 className="text-2xl font-bold text-white mb-2">Create Account</h1>
-                    <p className="text-gray-400 text-sm">Join us and start your fitness journey</p>
+                    <h1 className="text-2xl font-bold text-white mb-2">{t('register.createAccount')}</h1>
+                    <p className="text-gray-400 text-sm">{t('register.joinUs')}</p>
                 </div>
 
                 {error && (
@@ -58,37 +59,37 @@ export default function Register() {
 
                 <form onSubmit={handleRegister} className="space-y-4">
                     <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-2">Full Name</label>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">{t('register.fullName')}</label>
                         <input
                             type="text"
                             value={name}
                             onChange={(e) => setName(e.target.value)}
                             className="w-full bg-[#1A1A1A] border border-[#333] rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-[#00F2FF] focus:ring-1 focus:ring-[#00F2FF] transition-all"
-                            placeholder="John Doe"
+                            placeholder={t('register.namePlaceholder')}
                             required
                         />
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-2">Email Address</label>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">{t('register.emailAddress')}</label>
                         <input
                             type="email"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
                             className="w-full bg-[#1A1A1A] border border-[#333] rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-[#00F2FF] focus:ring-1 focus:ring-[#00F2FF] transition-all"
-                            placeholder="you@email.com"
+                            placeholder={t('register.emailPlaceholder')}
                             required
                         />
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-2">Password</label>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">{t('register.password')}</label>
                         <input
                             type="password"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                             className="w-full bg-[#1A1A1A] border border-[#333] rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-[#00F2FF] focus:ring-1 focus:ring-[#00F2FF] transition-all"
-                            placeholder="••••••••"
+                            placeholder={t('register.passwordPlaceholder')}
                             required
                         />
                     </div>
@@ -98,18 +99,18 @@ export default function Register() {
                         disabled={isLoading || !name || !email || !password}
                         className="w-full h-12 mt-6 rounded-xl font-semibold bg-gradient-to-r from-[#00F2FF] to-[#CCFF00] text-black transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
                     >
-                        {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Sign Up'}
+                        {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : t('register.signUp')}
                     </button>
                 </form>
 
                 <div className="mt-8 text-center">
                     <p className="text-gray-400 text-sm">
-                        Already have an account?{' '}
+                        {t('register.haveAccount')}{' '}
                         <button
                             onClick={() => navigate(createPageUrl('Login'))}
                             className="text-[#00F2FF] hover:underline font-medium"
                         >
-                            Log in
+                            {t('register.logIn')}
                         </button>
                     </p>
                 </div>

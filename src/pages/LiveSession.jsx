@@ -5,6 +5,7 @@ import api from '@/api/axios';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
 import { X, Trophy, Clock, Flame, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import CoachTicker from '@/components/session/CoachTicker';
 import FeedbackButton from '@/components/session/FeedbackButton';
 import BonusChallenge from '@/components/session/BonusChallenge';
@@ -50,11 +51,23 @@ const getRandomMessage = (category) => {
 };
 
 export default function LiveSession() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [workout, setWorkout] = useState(null);
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
   const [completedSets, setCompletedSets] = useState({});
-  const [coachMessage, setCoachMessage] = useState(getRandomMessage('start'));
+
+  const getTranslatedMessage = useCallback((category) => {
+    // Dynamic keys based on category
+    const count = Object.keys(t(`coach.messages.${category}`, { returnObjects: true }) || {}).length;
+    if (count > 0) {
+      const index = Math.floor(Math.random() * count);
+      return t(`coach.messages.${category}.${index}`, getRandomMessage(category));
+    }
+    return getRandomMessage(category);
+  }, [t]);
+
+  const [coachMessage, setCoachMessage] = useState('');
   const [isCoachTyping, setIsCoachTyping] = useState(false);
   const [showBonus, setShowBonus] = useState(false);
   const [bonusChallenge, setBonusChallenge] = useState('');
@@ -62,6 +75,10 @@ export default function LiveSession() {
   const [sessionStats, setSessionStats] = useState({ duration: 0, volume: 0, setsCompleted: 0 });
   const [pulsePhase, setPulsePhase] = useState('idle');
   const [sessionStartTime] = useState(Date.now());
+
+  useEffect(() => {
+    setCoachMessage(getTranslatedMessage('start'));
+  }, [getTranslatedMessage]);
 
   // Load workout
   useEffect(() => {
@@ -114,10 +131,10 @@ export default function LiveSession() {
     // Coach feedback
     setIsCoachTyping(true);
     setTimeout(() => {
-      setCoachMessage(getRandomMessage('setComplete'));
+      setCoachMessage(getTranslatedMessage('setComplete'));
       setIsCoachTyping(false);
     }, 800);
-  }, [completedSets, workout]);
+  }, [completedSets, workout, getTranslatedMessage]);
 
   const handleFeedback = useCallback(async (feedback) => {
     setIsCoachTyping(true);
@@ -126,11 +143,11 @@ export default function LiveSession() {
     setTimeout(async () => {
       if (feedback.energy === 'high') {
         // Trigger bonus challenge
-        setBonusChallenge(getRandomMessage('bonus'));
+        setBonusChallenge(getTranslatedMessage('bonus'));
         setShowBonus(true);
-        setCoachMessage(getRandomMessage('easy'));
+        setCoachMessage(getTranslatedMessage('easy'));
       } else if (feedback.energy === 'low') {
-        setCoachMessage(getRandomMessage('hard'));
+        setCoachMessage(getTranslatedMessage('hard'));
         // Suggest adjustment for next exercise
         const nextExercise = workout?.exercises[currentExerciseIndex];
         if (nextExercise) {
@@ -138,12 +155,12 @@ export default function LiveSession() {
             ...prev,
             [nextExercise.id]: {
               weight: Math.max(0, (nextExercise.weight || 0) - 5),
-              reason: 'Reduced weight based on your feedback'
+              reason: t('session.reducedWeight', 'Reduced weight based on your feedback')
             }
           }));
         }
       } else if (feedback.energy === 'recovery') {
-        setCoachMessage(getRandomMessage('heartrate'));
+        setCoachMessage(getTranslatedMessage('heartrate'));
 
       } else if (feedback.energy === 'custom') {
         // Use custom backend API for mock LLM response
@@ -153,12 +170,12 @@ export default function LiveSession() {
           });
           setCoachMessage(data.response);
         } catch (err) {
-          setCoachMessage("Keep pushing! You're doing great!");
+          setCoachMessage(t('session.keepPushing', "Keep pushing! You're doing great!"));
         }
       }
       setIsCoachTyping(false);
     }, 1000);
-  }, [workout, currentExerciseIndex]);
+  }, [workout, currentExerciseIndex, getTranslatedMessage, t]);
 
   const handleBonusAccept = () => {
     setShowBonus(false);
@@ -168,11 +185,11 @@ export default function LiveSession() {
         ...prev,
         [currentExercise.id]: {
           reps: `${parseInt(currentExercise.reps) + 2}`,
-          reason: 'Bonus challenge accepted! +2 reps'
+          reason: t('session.bonusAccepted', 'Bonus challenge accepted! +2 reps')
         }
       }));
     }
-    setCoachMessage("BONUS ACCEPTED! Let's see what you're made of! 💪");
+    setCoachMessage(t('session.bonusAccMsg', "BONUS ACCEPTED! Let's see what you're made of! 💪"));
   };
 
   const formatDuration = (seconds) => {
@@ -189,7 +206,7 @@ export default function LiveSession() {
       <div className="min-h-screen flex items-center justify-center bg-[#0A0A0A]">
         <div className="text-center">
           <div className="w-8 h-8 border-2 border-[#00F2FF] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-gray-400">Loading session...</p>
+          <p className="text-gray-400">{t('session.loading', 'Loading session...')}</p>
         </div>
       </div>
     );
@@ -225,11 +242,11 @@ export default function LiveSession() {
             </div>
             <div className="flex items-center gap-2 text-sm">
               <Flame className="w-4 h-4 text-[#FF6B6B]" />
-              <span className="font-bold">{sessionStats.setsCompleted} sets</span>
+              <span className="font-bold">{sessionStats.setsCompleted} {t('common.sets', 'sets')}</span>
             </div>
             <div className="flex items-center gap-2 text-sm">
               <Trophy className="w-4 h-4 text-[#CCFF00]" />
-              <span className="font-bold">{sessionStats.volume}kg</span>
+              <span className="font-bold">{sessionStats.volume} {t('common.kg')}</span>
             </div>
           </div>
 
@@ -250,7 +267,7 @@ export default function LiveSession() {
           </button>
 
           <div className="text-center">
-            <p className="text-xs text-gray-500 mb-1">Exercise</p>
+            <p className="text-xs text-gray-500 mb-1">{t('session.exercise', 'Exercise')}</p>
             <p className="text-lg font-bold">
               <span className="text-[#00F2FF]">{currentExerciseIndex + 1}</span>
               <span className="text-gray-500"> / {totalExercises}</span>
@@ -290,7 +307,7 @@ export default function LiveSession() {
 
         {/* Exercise queue preview */}
         <div className="mt-6">
-          <p className="text-xs text-gray-500 mb-3 uppercase tracking-wider">Up Next</p>
+          <p className="text-xs text-gray-500 mb-3 uppercase tracking-wider">{t('session.upNext', 'Up Next')}</p>
           <div className="space-y-2">
             {workout.exercises.slice(currentExerciseIndex + 1, currentExerciseIndex + 3).map((ex, i) => (
               <motion.div

@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { Search, Loader2, Plus, X, AlertCircle } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { useTranslation } from 'react-i18next';
 
 export default function FoodSearch({ onAddFood, onClose }) {
+    const { t } = useTranslation();
     const [query, setQuery] = useState('');
     const [results, setResults] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
@@ -53,7 +54,7 @@ export default function FoodSearch({ onAddFood, onClose }) {
                 setResults([]);
             }
         } catch (err) {
-            setError('Could not fetch generic food data. Please try again.');
+            setError(t('nutrition.demo.errorFetchingFood', 'Could not fetch generic food data. Please try again.'));
         } finally {
             setIsLoading(false);
         }
@@ -64,7 +65,7 @@ export default function FoodSearch({ onAddFood, onClose }) {
             {/* Search Header */}
             <div className="p-4 border-b border-[#2A2A2A] shrink-0 sticky top-0 bg-[#121212] z-10">
                 <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-lg font-bold text-white">Find Food</h2>
+                    <h2 className="text-lg font-bold text-white">{t('nutrition.demo.findFood', 'Find Food')}</h2>
                     <button onClick={onClose} className="p-2 rounded-full hover:bg-[#2A2A2A] text-gray-400 hover:text-white transition-colors">
                         <X className="w-5 h-5" />
                     </button>
@@ -75,7 +76,7 @@ export default function FoodSearch({ onAddFood, onClose }) {
                         type="text"
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
-                        placeholder="Search groceries or ingredients..."
+                        placeholder={t('nutrition.demo.searchPlaceholder', 'Search groceries or ingredients...')}
                         className="w-full bg-[#1A1A1A] border border-[#333] rounded-xl pl-10 pr-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-[#00F2FF] focus:ring-1 focus:ring-[#00F2FF] transition-all"
                         autoFocus
                     />
@@ -87,7 +88,7 @@ export default function FoodSearch({ onAddFood, onClose }) {
                 {isLoading && (
                     <div className="flex flex-col items-center justify-center p-8 text-gray-500">
                         <Loader2 className="w-6 h-6 animate-spin text-[#00F2FF] mb-2" />
-                        <span className="text-sm">Searching global database...</span>
+                        <span className="text-sm">{t('nutrition.demo.searchingDatabase', 'Searching global database...')}</span>
                     </div>
                 )}
 
@@ -100,7 +101,7 @@ export default function FoodSearch({ onAddFood, onClose }) {
 
                 {!isLoading && query.length >= 3 && results.length === 0 && !error && (
                     <div className="text-center p-8 text-gray-500 text-sm">
-                        No foods found matching "{query}".
+                        {t('nutrition.demo.noFoodsFound', 'No foods found matching "{{query}}".', { query })}
                     </div>
                 )}
 
@@ -119,14 +120,14 @@ export default function FoodSearch({ onAddFood, onClose }) {
                                         {food.image ? (
                                             <img src={food.image} alt={food.name} className="w-full h-full object-cover" />
                                         ) : (
-                                            <span className="text-xs text-gray-500">No Img</span>
+                                            <span className="text-xs text-gray-500">{t('nutrition.demo.noImg', 'No Img')}</span>
                                         )}
                                     </div>
                                     <div className="min-w-0">
                                         <h3 className="text-white text-sm font-medium truncate">{food.name}</h3>
                                         <p className="text-gray-500 text-xs truncate mb-1">{food.brand} • {food.portion}</p>
                                         <div className="flex gap-2 text-[10px] uppercase font-semibold">
-                                            <span className="text-[#00F2FF]">{food.cals} kcal</span>
+                                            <span className="text-[#00F2FF]">{food.cals} {t('nutrition.demo.kcal', 'kcal')}</span>
                                             <span className="text-[#CCFF00]">P: {food.protein}</span>
                                             <span className="text-[#FF6B6B]">C: {food.carbs}</span>
                                             <span className="text-[#FFD93D]">F: {food.fat}</span>
@@ -146,7 +147,7 @@ export default function FoodSearch({ onAddFood, onClose }) {
 
                 {query.length > 0 && query.length < 3 && (
                     <div className="text-center p-8 text-gray-500 text-sm">
-                        Keep typing to search...
+                        {t('nutrition.demo.keepTyping', 'Keep typing to search...')}
                     </div>
                 )}
             </div>

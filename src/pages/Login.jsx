@@ -4,8 +4,10 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Loader2 } from 'lucide-react';
 import { createPageUrl } from '@/utils';
+import { useTranslation } from 'react-i18next';
 
 export default function Login() {
+  const { t } = useTranslation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -20,10 +22,9 @@ export default function Login() {
     setError(null);
     try {
       await login(email, password);
-      // Determine destination. For now, Onboarding or Dashboard depending on check.
       navigate(createPageUrl('Dashboard'));
     } catch (err) {
-      setError(err?.response?.data?.message || err.message || 'Login failed. Please check your credentials.');
+      setError(err?.response?.data?.message || err.message || t('login.loginFailed'));
     } finally {
       setIsLoading(false);
     }
@@ -45,8 +46,8 @@ export default function Login() {
           <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#00F2FF] to-[#CCFF00] flex items-center justify-center mb-4 shadow-lg shadow-[#00F2FF]/20">
             <span className="text-3xl font-bold text-black">T</span>
           </div>
-          <h1 className="text-2xl font-bold text-white mb-2">Welcome Back</h1>
-          <p className="text-gray-400 text-sm">Sign in to continue your training</p>
+          <h1 className="text-2xl font-bold text-white mb-2">{t('login.welcomeBack')}</h1>
+          <p className="text-gray-400 text-sm">{t('login.signInContinue')}</p>
         </div>
 
         {error && (
@@ -57,25 +58,25 @@ export default function Login() {
 
         <form onSubmit={handleLogin} className="space-y-5">
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">Email Address</label>
+            <label className="block text-sm font-medium text-gray-300 mb-2">{t('login.emailAddress')}</label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full bg-[#1A1A1A] border border-[#333] rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-[#00F2FF] focus:ring-1 focus:ring-[#00F2FF] transition-all"
-              placeholder="you@email.com"
+              placeholder={t('login.emailPlaceholder')}
               required
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">Password</label>
+            <label className="block text-sm font-medium text-gray-300 mb-2">{t('login.password')}</label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full bg-[#1A1A1A] border border-[#333] rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-[#00F2FF] focus:ring-1 focus:ring-[#00F2FF] transition-all"
-              placeholder="••••••••"
+              placeholder={t('login.passwordPlaceholder')}
               required
             />
           </div>
@@ -85,18 +86,18 @@ export default function Login() {
             disabled={isLoading || !email || !password}
             className="w-full h-12 mt-6 rounded-xl font-semibold bg-gradient-to-r from-[#00F2FF] to-[#CCFF00] text-black transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
           >
-            {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Log In'}
+            {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : t('login.logIn')}
           </button>
         </form>
 
         <div className="mt-8 text-center">
           <p className="text-gray-400 text-sm">
-            Don't have an account?{' '}
+            {t('login.noAccount')}{' '}
             <button
               onClick={() => navigate(createPageUrl('Onboarding'))}
               className="text-[#00F2FF] hover:underline font-medium"
             >
-              Start Onboarding
+              {t('login.startOnboarding')}
             </button>
           </p>
         </div>

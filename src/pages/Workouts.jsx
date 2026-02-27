@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { format, parseISO, isToday, isFuture, addDays } from 'date-fns';
+import { format, parseISO, isToday, isFuture } from 'date-fns';
 import { Calendar, Dumbbell, Check, Clock, ChevronRight, List, CalendarDays } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import api from '@/api/axios';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -10,6 +11,7 @@ import TrainingCalendar from '@/components/calendar/TrainingCalendar';
 
 // Mock generator completely replaced with live API fetching
 export default function Workouts() {
+  const { t } = useTranslation();
   const [viewMode, setViewMode] = useState('list'); // 'list' or 'calendar'
   const [filter, setFilter] = useState('upcoming');
   const [workouts, setWorkouts] = useState([]);
@@ -52,7 +54,7 @@ export default function Workouts() {
       return (
         <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-[#CCFF00]/20 text-[#CCFF00]">
           <Check className="w-3 h-3" />
-          Done
+          {t('workouts.statusCompleted', 'Done')}
         </span>
       );
     }
@@ -60,7 +62,7 @@ export default function Workouts() {
       return (
         <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-[#00F2FF]/20 text-[#00F2FF]">
           <Dumbbell className="w-3 h-3" />
-          Today
+          {t('workouts.statusToday', 'Today')}
         </span>
       );
     }
@@ -68,13 +70,13 @@ export default function Workouts() {
       return (
         <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-gray-500/20 text-gray-400">
           <Clock className="w-3 h-3" />
-          Planned
+          {t('workouts.statusPlanned', 'Planned')}
         </span>
       );
     }
     return (
       <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-red-500/20 text-red-400">
-        Missed
+        {t('workouts.statusMissed', 'Missed')}
       </span>
     );
   };
@@ -92,8 +94,8 @@ export default function Workouts() {
       >
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold">Workouts</h1>
-            <p className="text-gray-500 text-sm">Your training history & schedule</p>
+            <h1 className="text-2xl font-bold">{t('workouts.title', 'Workouts')}</h1>
+            <p className="text-gray-500 text-sm">{t('workouts.history', 'Your training history & schedule')}</p>
           </div>
           <div className="flex items-center gap-1 bg-[#1A1A1A] rounded-xl p-1 border border-[#2A2A2A]">
             <button
@@ -140,10 +142,10 @@ export default function Workouts() {
                 <Tabs value={filter} onValueChange={setFilter}>
                   <TabsList className="bg-[#1A1A1A] border border-[#2A2A2A] w-full">
                     <TabsTrigger value="upcoming" className="flex-1 data-[state=active]:bg-[#00F2FF] data-[state=active]:text-black">
-                      Upcoming
+                      {t('workouts.upcoming', 'Upcoming')}
                     </TabsTrigger>
                     <TabsTrigger value="completed" className="flex-1 data-[state=active]:bg-[#00F2FF] data-[state=active]:text-black">
-                      Completed
+                      {t('workouts.completed', 'Completed')}
                     </TabsTrigger>
                   </TabsList>
                 </Tabs>
@@ -157,9 +159,9 @@ export default function Workouts() {
                 className="grid grid-cols-3 gap-3 mb-6"
               >
                 {[
-                  { label: 'This Week', value: completedCount, color: '#00F2FF' },
-                  { label: 'Total', value: workouts.length, color: '#CCFF00' },
-                  { label: 'Streak', value: `${streak} days`, color: '#FF6B6B' }
+                  { label: t('workouts.thisWeek', 'This Week'), value: completedCount, color: '#00F2FF' },
+                  { label: t('workouts.total', 'Total'), value: workouts.length, color: '#CCFF00' },
+                  { label: t('analytics.streak', 'Streak'), value: `${streak} ${t('common.days', 'days')}`, color: '#FF6B6B' }
                 ].map((stat, index) => (
                   <div key={stat.label} className="bg-[#1A1A1A] rounded-xl p-4 border border-[#2A2A2A]">
                     <p className="text-2xl font-bold" style={{ color: stat.color }}>{stat.value}</p>
@@ -178,7 +180,7 @@ export default function Workouts() {
                       className="text-center py-12"
                     >
                       <Calendar className="w-12 h-12 text-gray-600 mx-auto mb-4" />
-                      <p className="text-gray-500">No workouts found</p>
+                      <p className="text-gray-500">{t('dashboard.noWorkoutsFound', 'No workouts found')}</p>
                     </motion.div>
                   ) : (
                     filteredWorkouts.map((workout, index) => (
@@ -201,12 +203,12 @@ export default function Workouts() {
                               {format(parseISO(workout.date), 'EEEE, MMM d')}
                             </p>
                             <div className="flex items-center gap-4 mt-2 text-xs text-gray-400">
-                              <span>{workout.exercises?.length || 0} exercises</span>
+                              <span>{workout.exercises?.length || 0} {t('common.exercises', 'exercises')}</span>
                               {workout.total_volume && (
-                                <span>{workout.total_volume.toLocaleString()} kg total</span>
+                                <span>{workout.total_volume.toLocaleString()} {t('common.kg')} {t('workouts.total', 'total').toLowerCase()}</span>
                               )}
                               {workout.duration_minutes && (
-                                <span>{workout.duration_minutes} min</span>
+                                <span>{workout.duration_minutes} {t('common.minutes')}</span>
                               )}
                             </div>
                           </div>
@@ -238,16 +240,16 @@ export default function Workouts() {
                           {selectedWorkout.duration_minutes && (
                             <div className="flex items-center gap-2 text-sm text-gray-400">
                               <Clock className="w-4 h-4" />
-                              <span>{selectedWorkout.duration_minutes} min</span>
+                              <span>{selectedWorkout.duration_minutes} {t('common.minutes')}</span>
                             </div>
                           )}
                           <div className="flex items-center gap-2 text-sm text-gray-400">
                             <Dumbbell className="w-4 h-4" />
-                            <span>{selectedWorkout.exercises?.length || 0} exercises</span>
+                            <span>{selectedWorkout.exercises?.length || 0} {t('common.exercises', 'exercises')}</span>
                           </div>
                           {selectedWorkout.total_volume && (
                             <div className="text-sm text-gray-400">
-                              {selectedWorkout.total_volume.toLocaleString()} kg
+                              {selectedWorkout.total_volume.toLocaleString()} {t('common.kg')}
                             </div>
                           )}
                         </div>
@@ -278,7 +280,7 @@ export default function Workouts() {
                           onClick={() => setSelectedWorkout(null)}
                           className="w-full h-12 mt-2 gradient-cyan text-black font-semibold"
                         >
-                          Close
+                          {t('common.close', 'Close')}
                         </Button>
                       </>
                     )}

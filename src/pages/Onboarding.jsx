@@ -151,7 +151,10 @@ const QUESTIONS = [
   }
 ];
 
+import { useTranslation } from 'react-i18next';
+
 export default function Onboarding() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { register, user, updateProfile } = useAuth();
   const [phase, setPhase] = useState('welcome'); // welcome, questions, plan_choice, plan_import, coach_selection, summary, account_setup
@@ -348,7 +351,7 @@ export default function Onboarding() {
           transition={{ delay: 0.3 }}
           className="text-3xl font-bold mb-3"
         >
-          Let's Build Your<br />Perfect Workout
+          {t('onboarding.letsBuilt')}<br />{t('onboarding.perfectWorkout')}
         </motion.h1>
 
         <motion.p
@@ -357,7 +360,7 @@ export default function Onboarding() {
           transition={{ delay: 0.4 }}
           className="text-gray-500 mb-8 max-w-xs"
         >
-          Answer a few questions and we'll create a personalized training plan just for you
+          {t('onboarding.answerQuestions')}
         </motion.p>
 
         <motion.button
@@ -369,7 +372,7 @@ export default function Onboarding() {
           onClick={() => setPhase('questions')}
           className="w-full max-w-xs h-14 gradient-cyan text-black font-semibold rounded-xl"
         >
-          Get Started
+          {t('onboarding.getStarted')}
         </motion.button>
 
         <motion.p
@@ -378,7 +381,7 @@ export default function Onboarding() {
           transition={{ delay: 0.6 }}
           className="text-xs text-gray-600 mt-6 mb-4"
         >
-          ⏱️ Takes about 2 minutes
+          {t('onboarding.takesAbout')}
         </motion.p>
 
         <motion.div
@@ -387,12 +390,12 @@ export default function Onboarding() {
           transition={{ delay: 0.7 }}
           className="mt-6 text-sm text-gray-400"
         >
-          Already have an account?{' '}
+          {t('onboarding.alreadyAccount')}{' '}
           <button
             onClick={() => navigate(createPageUrl('Login'))}
             className="text-[#00F2FF] hover:underline font-medium"
           >
-            Log In
+            {t('login.logIn')}
           </button>
         </motion.div>
       </motion.div>
@@ -460,24 +463,24 @@ export default function Onboarding() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="w-full max-w-md bg-[#1A1A1A] p-8 rounded-2xl border border-[#2A2A2A]"
+          className="w-full max-w-md mx-auto bg-[#1A1A1A] p-8 rounded-2xl border border-[#2A2A2A]"
         >
-          <h2 className="text-2xl font-bold mb-6 text-center">Create Your Account</h2>
+          <h2 className="text-2xl font-bold mb-6 text-center">{t('onboarding.createYourAccount')}</h2>
 
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-400 mb-1">Name</label>
+              <label className="block text-sm font-medium text-gray-400 mb-1">{t('onboarding.name')}</label>
               <input
                 type="text"
                 className="w-full bg-[#0A0A0A] border border-[#2A2A2A] rounded-xl p-3 text-white focus:border-[#00F2FF] outline-none"
-                placeholder="Your Name"
+                placeholder={t('onboarding.yourName')}
                 value={answers.name || ''}
                 onChange={(e) => setAnswers(prev => ({ ...prev, name: e.target.value }))}
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-400 mb-1">Email</label>
+              <label className="block text-sm font-medium text-gray-400 mb-1">{t('onboarding.email')}</label>
               <input
                 type="email"
                 className="w-full bg-[#0A0A0A] border border-[#2A2A2A] rounded-xl p-3 text-white focus:border-[#00F2FF] outline-none"
@@ -488,7 +491,7 @@ export default function Onboarding() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-400 mb-1">Password</label>
+              <label className="block text-sm font-medium text-gray-400 mb-1">{t('login.password')}</label>
               <input
                 type="password"
                 className="w-full bg-[#0A0A0A] border border-[#2A2A2A] rounded-xl p-3 text-white focus:border-[#00F2FF] outline-none"
@@ -507,7 +510,7 @@ export default function Onboarding() {
                   : 'bg-[#2A2A2A] text-gray-500 cursor-not-allowed'
                   }`}
               >
-                Create Account
+                {t('register.createAccount')}
               </button>
             </div>
           </div>
@@ -528,8 +531,8 @@ export default function Onboarding() {
           <div className="w-20 h-20 rounded-full gradient-cyan flex items-center justify-center mx-auto mb-6">
             <Loader2 className="w-10 h-10 text-black animate-spin" />
           </div>
-          <h2 className="text-2xl font-bold mb-2">Creating your plan...</h2>
-          <p className="text-gray-500">Analyzing your data and building your personalized program</p>
+          <h2 className="text-2xl font-bold mb-2">{t('onboarding.creatingPlan')}</h2>
+          <p className="text-gray-500">{t('onboarding.analyzingData')}</p>
         </motion.div>
       </div>
     );
@@ -548,9 +551,9 @@ export default function Onboarding() {
         className="min-h-screen flex flex-col px-6 py-8"
       >
         {/* Progress bar */}
-        <div className="mb-8">
+        <div className="mb-8 max-w-lg mx-auto w-full">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-gray-500">Step {currentStep + 1} of {QUESTIONS.length}</span>
+            <span className="text-xs text-gray-500">{t('onboarding.step')} {currentStep + 1} {t('onboarding.of')} {QUESTIONS.length}</span>
             <span className="text-xs text-[#00F2FF]">{Math.round(((currentStep + 1) / QUESTIONS.length) * 100)}%</span>
           </div>
           <div className="h-1 bg-[#1A1A1A] rounded-full overflow-hidden">
@@ -562,9 +565,9 @@ export default function Onboarding() {
           </div>
         </div>
 
-        <h2 className="text-2xl font-bold mb-6">{currentQuestion.question}</h2>
+        <h2 className="text-2xl font-bold mb-6 max-w-lg mx-auto w-full">{t(`onboarding.questions.${currentQuestion.key}`)}</h2>
 
-        <div className="flex-1">
+        <div className="flex-1 max-w-lg mx-auto w-full">
           <BodyFatSelector
             value={answers.body_fat_percentage}
             onChange={(val) => setAnswers(prev => ({ ...prev, body_fat_percentage: val }))}
@@ -572,13 +575,13 @@ export default function Onboarding() {
           />
         </div>
 
-        <div className="flex gap-3 mt-8">
+        <div className="flex gap-3 mt-8 max-w-lg mx-auto w-full">
           {currentStep > 0 && (
             <button
               onClick={handleBack}
               className="flex-1 h-14 bg-transparent border border-[#2A2A2A] rounded-xl text-white font-semibold hover:bg-[#1A1A1A] transition-colors"
             >
-              Back
+              {t('common.back')}
             </button>
           )}
           <button
@@ -589,7 +592,7 @@ export default function Onboarding() {
               : 'bg-[#1A1A1A] text-gray-500 cursor-not-allowed'
               }`}
           >
-            Continue
+            {t('common.continue')}
           </button>
         </div>
       </motion.div>
@@ -600,17 +603,21 @@ export default function Onboarding() {
     <AnimatePresence mode="wait">
       <OnboardingStep
         key={currentStep}
-        question={currentQuestion.question}
+        question={t(`onboarding.questions.${currentQuestion.key}`)}
         type={currentQuestion.type}
-        options={currentQuestion.options}
+        options={Array.isArray(currentQuestion.options) ? currentQuestion.options.map(opt => ({
+          ...opt,
+          label: t(`onboarding.options.${opt.value.replace(/_[a-z]/g, match => match[1].toUpperCase()).replace(/^[^a-zA-Z]/, '')}`),
+          ...(opt.description && { description: t(`onboarding.options.${opt.value.replace(/_[a-z]/g, match => match[1].toUpperCase()).replace(/^[^a-zA-Z]/, '')}Desc`) })
+        })) : currentQuestion.options}
         value={answers[currentQuestion.key]}
         onChange={handleChange}
         onNext={handleNext}
         onBack={handleBack}
         stepNumber={currentStep + 1}
         totalSteps={QUESTIONS.length}
-        unit={currentQuestion.unit}
-        placeholder={currentQuestion.placeholder}
+        unit={t(`common.${currentQuestion.unit}`) || currentQuestion.unit}
+        placeholder={t(`onboarding.options.${currentQuestion.key}Placeholder`)}
       />
     </AnimatePresence>
   );

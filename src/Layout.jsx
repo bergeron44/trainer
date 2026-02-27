@@ -3,10 +3,13 @@ import { Link } from 'react-router-dom';
 import { createPageUrl } from './utils';
 import { Home, Dumbbell, User, Utensils } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 import GlobalCoachFAB from '@/components/coach/GlobalCoachFAB';
 import GlobalCoachChat from '@/components/coach/GlobalCoachChat';
+import LanguageToggle from '@/components/LanguageToggle';
 
 export default function Layout({ children, currentPageName }) {
+  const { t } = useTranslation();
   const [mounted, setMounted] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [coachStyle, setCoachStyle] = useState('motivational');
@@ -18,10 +21,10 @@ export default function Layout({ children, currentPageName }) {
   }, []);
 
   const navItems = [
-    { name: 'Dashboard', icon: Home, page: 'Dashboard' },
-    { name: 'Workouts', icon: Dumbbell, page: 'Workouts' },
-    { name: 'Nutrition', icon: Utensils, page: 'NutritionDemo' },
-    { name: 'Profile', icon: User, page: 'Profile' },
+    { name: t('nav.dashboard'), icon: Home, page: 'Dashboard' },
+    { name: t('nav.workouts'), icon: Dumbbell, page: 'Workouts' },
+    { name: t('nav.nutrition'), icon: Utensils, page: 'NutritionDemo' },
+    { name: t('nav.profile'), icon: User, page: 'Profile' },
   ];
 
   const hideNav = ['Onboarding', 'WorkoutSession', 'Login', 'Register'].includes(currentPageName);
@@ -104,11 +107,14 @@ export default function Layout({ children, currentPageName }) {
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -10 }}
           transition={{ duration: 0.3 }}
-          className={`${hideNav ? '' : 'pb-24'}`}
+          className={`max-w-4xl mx-auto ${hideNav ? '' : 'pb-24'}`}
         >
           {children}
         </motion.main>
       </AnimatePresence>
+
+      {/* Language Toggle */}
+      <LanguageToggle />
 
       {/* Global Coach FAB - appears on all main pages */}
       {showCoachFAB && (
@@ -139,8 +145,8 @@ export default function Layout({ children, currentPageName }) {
                     <motion.div
                       whileTap={{ scale: 0.9 }}
                       className={`p-2 rounded-xl transition-all duration-300 ${isActive
-                          ? 'bg-[#00F2FF]/10'
-                          : 'hover:bg-[#1A1A1A]'
+                        ? 'bg-[#00F2FF]/10'
+                        : 'hover:bg-[#1A1A1A]'
                         }`}
                     >
                       <Icon

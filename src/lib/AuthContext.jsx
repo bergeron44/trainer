@@ -31,7 +31,7 @@ export const AuthProvider = ({ children }) => {
       console.error('User auth check failed:', error);
       localStorage.removeItem('token');
       setIsAuthenticated(false);
-      setAuthError(error.response?.data?.message || 'Authentication failed');
+      setAuthError({ type: 'auth_required', message: error.response?.data?.message || 'Authentication failed' });
     } finally {
       setIsLoadingAuth(false);
     }
@@ -85,17 +85,23 @@ export const AuthProvider = ({ children }) => {
     }
   }
 
+  const navigateToLogin = () => {
+    window.location.href = '/Login';
+  };
+
   return (
     <AuthContext.Provider value={{
       user,
       isAuthenticated,
       isLoadingAuth,
+      isLoadingPublicSettings: false,
       authError,
       login,
       register,
       logout,
       updateProfile,
-      checkUserAuth
+      checkUserAuth,
+      navigateToLogin
     }}>
       {children}
     </AuthContext.Provider>

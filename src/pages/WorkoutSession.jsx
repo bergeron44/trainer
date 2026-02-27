@@ -9,10 +9,12 @@ import {
   SkipForward, Sparkles, Timer, Dumbbell, AlertCircle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useTranslation } from 'react-i18next';
 import AICoachChat from '@/components/dashboard/AICoachChat';
 import Confetti from 'react-confetti';
 
 export default function WorkoutSession() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
@@ -171,7 +173,7 @@ export default function WorkoutSession() {
   };
 
   const handleQuit = () => {
-    if (confirm('Are you sure you want to quit? Your progress will not be saved.')) {
+    if (window.confirm(t('session.confirmQuit', 'Are you sure you want to quit? Your progress will not be saved.'))) {
       navigate(createPageUrl('Dashboard'));
     }
   };
@@ -196,9 +198,9 @@ export default function WorkoutSession() {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[#0A0A0A] px-6">
         <AlertCircle className="w-16 h-16 text-red-500 mb-4" />
-        <h2 className="text-xl font-bold mb-2">Workout Not Found</h2>
+        <h2 className="text-xl font-bold mb-2">{t('session.workoutNotFound', 'Workout Not Found')}</h2>
         <Button onClick={() => navigate(createPageUrl('Dashboard'))}>
-          Go Home
+          {t('session.goHome', 'Go Home')}
         </Button>
       </div>
     );
@@ -235,7 +237,7 @@ export default function WorkoutSession() {
             transition={{ delay: 0.5 }}
             className="text-3xl font-bold mb-2"
           >
-            Workout Complete! 💪
+            {t('session.workoutComplete', 'Workout Complete! 💪')}
           </motion.h1>
 
           <motion.p
@@ -244,7 +246,7 @@ export default function WorkoutSession() {
             transition={{ delay: 0.6 }}
             className="text-gray-500 mb-8"
           >
-            Outstanding work today!
+            {t('session.outstandingWork', 'Outstanding work today!')}
           </motion.p>
 
           <motion.div
@@ -255,19 +257,19 @@ export default function WorkoutSession() {
           >
             <div className="bg-[#1A1A1A] rounded-xl p-6 border border-[#2A2A2A]">
               <p className="text-4xl font-bold text-[#00F2FF] mb-2">{sessionStats.duration}</p>
-              <p className="text-sm text-gray-500">Minutes</p>
+              <p className="text-sm text-gray-500">{t('common.min', 'min')}</p>
             </div>
             <div className="bg-[#1A1A1A] rounded-xl p-6 border border-[#2A2A2A]">
               <p className="text-4xl font-bold text-[#CCFF00] mb-2">{sessionStats.setsCompleted}</p>
-              <p className="text-sm text-gray-500">Sets</p>
+              <p className="text-sm text-gray-500">{t('common.sets', 'Sets')}</p>
             </div>
             <div className="bg-[#1A1A1A] rounded-xl p-6 border border-[#2A2A2A]">
               <p className="text-4xl font-bold text-[#FF6B6B] mb-2">{sessionStats.exercisesCompleted}</p>
-              <p className="text-sm text-gray-500">Exercises</p>
+              <p className="text-sm text-gray-500">{t('workouts.exercises.title', 'Exercises')}</p>
             </div>
             <div className="bg-[#1A1A1A] rounded-xl p-6 border border-[#2A2A2A]">
               <p className="text-4xl font-bold text-[#FFD93D] mb-2">+{sessionStats.xpEarned}</p>
-              <p className="text-sm text-gray-500">XP Earned</p>
+              <p className="text-sm text-gray-500">XP</p>
             </div>
           </motion.div>
 
@@ -280,7 +282,7 @@ export default function WorkoutSession() {
               onClick={handleSummaryClose}
               className="w-full h-14 gradient-cyan text-black font-semibold text-lg"
             >
-              Back to Dashboard
+              {t('session.backToDashboard', 'Back to Dashboard')}
             </Button>
           </motion.div>
         </motion.div>
@@ -297,7 +299,7 @@ export default function WorkoutSession() {
             <X className="w-6 h-6 text-gray-400" />
           </button>
           <div className="text-center">
-            <p className="text-sm text-gray-500">Exercise {currentExerciseIndex + 1} of {totalExercises}</p>
+            <p className="text-sm text-gray-500">{t('session.exercise', 'Exercise')} {currentExerciseIndex + 1} / {totalExercises}</p>
             <p className="font-semibold text-[#00F2FF]">{workout.muscle_group}</p>
           </div>
           <button onClick={handleSkipExercise} className="p-2 hover:bg-[#1A1A1A] rounded-lg transition-colors">
@@ -344,22 +346,22 @@ export default function WorkoutSession() {
             {/* Set info */}
             <div className="flex items-center justify-center gap-4 mb-8">
               <div className="text-center">
-                <p className="text-sm text-gray-500">Set</p>
+                <p className="text-sm text-gray-500">{t('session.set', 'Set')}</p>
                 <p className="text-2xl font-bold text-[#00F2FF]">
                   {currentSet}/{currentExercise?.sets}
                 </p>
               </div>
               <div className="w-px h-12 bg-[#2A2A2A]" />
               <div className="text-center">
-                <p className="text-sm text-gray-500">Reps</p>
+                <p className="text-sm text-gray-500">{t('session.reps', 'Reps')}</p>
                 <p className="text-2xl font-bold text-white">{currentExercise?.reps}</p>
               </div>
               {currentExercise?.weight > 0 && (
                 <>
                   <div className="w-px h-12 bg-[#2A2A2A]" />
                   <div className="text-center">
-                    <p className="text-sm text-gray-500">Weight</p>
-                    <p className="text-2xl font-bold text-[#CCFF00]">{currentExercise.weight} kg</p>
+                    <p className="text-sm text-gray-500">{t('session.weight', 'Weight')}</p>
+                    <p className="text-2xl font-bold text-[#CCFF00]">{currentExercise.weight} {t('common.kg')}</p>
                   </div>
                 </>
               )}
@@ -368,15 +370,15 @@ export default function WorkoutSession() {
             {/* Timer Display */}
             <motion.div
               className={`mb-8 ${restMode
-                  ? 'animate-pulse'
-                  : timerRunning
-                    ? 'animate-pulse-glow'
-                    : ''
+                ? 'animate-pulse'
+                : timerRunning
+                  ? 'animate-pulse-glow'
+                  : ''
                 }`}
             >
               {restMode ? (
                 <div>
-                  <p className="text-sm text-[#CCFF00] mb-2 uppercase tracking-wide">Rest Period</p>
+                  <p className="text-sm text-[#CCFF00] mb-2 uppercase tracking-wide">{t('session.restPeriod', 'Rest Period')}</p>
                   <motion.p
                     className="text-7xl font-bold text-[#CCFF00]"
                     animate={{
@@ -389,17 +391,17 @@ export default function WorkoutSession() {
                   >
                     {formatTime(restTime)}
                   </motion.p>
-                  <p className="text-sm text-gray-500 mt-2">Recover and prepare for next set</p>
+                  <p className="text-sm text-gray-500 mt-2">{t('session.recover', 'Recover and prepare for next set')}</p>
                 </div>
               ) : timerRunning ? (
                 <div>
-                  <p className="text-sm text-[#00F2FF] mb-2 uppercase tracking-wide">Set Duration</p>
+                  <p className="text-sm text-[#00F2FF] mb-2 uppercase tracking-wide">{t('session.setDuration', 'Set Duration')}</p>
                   <p className="text-7xl font-bold text-[#00F2FF]">{formatTime(timeElapsed)}</p>
-                  <p className="text-sm text-gray-500 mt-2">Focus on form and control</p>
+                  <p className="text-sm text-gray-500 mt-2">{t('session.focusOnForm', 'Focus on form and control')}</p>
                 </div>
               ) : (
                 <div>
-                  <p className="text-sm text-gray-500 mb-2">Ready to start?</p>
+                  <p className="text-sm text-gray-500 mb-2">{t('session.readyToStart', 'Ready to start?')}</p>
                   <Dumbbell className="w-16 h-16 text-gray-600 mx-auto" />
                 </div>
               )}
@@ -421,19 +423,19 @@ export default function WorkoutSession() {
           <Button
             onClick={timerRunning ? handleSetComplete : () => setTimerRunning(true)}
             className={`w-full h-16 text-lg font-semibold transition-all ${timerRunning
-                ? 'gradient-green text-black'
-                : 'gradient-cyan text-black'
+              ? 'gradient-green text-black'
+              : 'gradient-cyan text-black'
               }`}
           >
             {timerRunning ? (
               <>
                 <Check className="w-6 h-6 mr-3" />
-                Complete Set
+                {t('session.completeSet', 'Complete Set')}
               </>
             ) : (
               <>
                 <Play className="w-6 h-6 mr-3" />
-                Start Set
+                {t('session.startSet', 'Start Set')}
               </>
             )}
           </Button>
@@ -447,7 +449,7 @@ export default function WorkoutSession() {
             }}
             className="w-full h-16 text-lg font-semibold bg-[#1A1A1A] border-2 border-[#CCFF00] text-[#CCFF00] hover:bg-[#CCFF00] hover:text-black transition-all"
           >
-            Skip Rest
+            {t('session.skipRest', 'Skip Rest')}
           </Button>
         )}
       </div>

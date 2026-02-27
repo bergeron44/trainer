@@ -1,0 +1,38 @@
+# Trainer App Architecture Analysis
+
+## 1. Backend API & Routes
+The backend runs on an Express.js server (now port `5001`) and interacts with a MongoDB database. Access tokens and authentication are managed using JSON Web Tokens (JWT).
+
+There are four main API routes:
+- **Users** (`/api/users`): Handles authentication (`/login`, `/register`), fetching profile details (`/profile`), tracking users' onboarding processes.
+- **Workouts** (`/api/workouts`): For fetching workouts, logging workouts, getting plans, and providing analytics on previous workouts.
+- **Nutrition** (`/api/nutrition`): Logs user nutrition data, provides daily summaries, fetches water intake, and supports food search integration.
+- **Chat** (`/api/chat`): Handles AI interactions for the AI Coach, specifically taking context variables and returning response messages.
+
+## 2. Databases & Models
+The project is connected to a local MongoDB instance (`mongodb://localhost:27017/trainer`).
+There are several models defining the entities tracked:
+- **User**: Core user info (email, password hash, profile settings, API usages).
+- **Workout**: Defines workout templates, sets, and exercises.
+- **WorkoutLog**: Tracks individual workouts performed by users.
+- **WorkoutSession**: Real-time or active workout session state.
+- **NutritionLog**: Defines macro and micro details from logged foods.
+- **ChatSummary**: Tracks AI coach conversations.
+
+## 3. Frontend Structure
+The frontend is a React Application bundled with Vite, heavily utilizing TailwindCSS and Radix UI components alongside some custom React components for layouts and styling.
+
+The primary entry points (pages) include:
+- [Onboarding.jsx](file:///Users/ronberger/Downloads/trainer/src/pages/Onboarding.jsx): The default landing page routing new users to register.
+- [Login.jsx](file:///Users/ronberger/Downloads/trainer/src/pages/Login.jsx) & [Register.jsx](file:///Users/ronberger/Downloads/trainer/src/pages/Register.jsx): Replaced Base44 functionality with custom auth interfaces.
+- [Dashboard.jsx](file:///Users/ronberger/Downloads/trainer/src/pages/Dashboard.jsx), [Analytics.jsx](file:///Users/ronberger/Downloads/trainer/src/pages/Analytics.jsx), [Profile.jsx](file:///Users/ronberger/Downloads/trainer/src/pages/Profile.jsx): General data viewing segments.
+- [Workouts.jsx](file:///Users/ronberger/Downloads/trainer/src/pages/Workouts.jsx), [WorkoutSession.jsx](file:///Users/ronberger/Downloads/trainer/src/pages/WorkoutSession.jsx), [LiveSession.jsx](file:///Users/ronberger/Downloads/trainer/src/pages/LiveSession.jsx): Handling fitness functionality.
+- [NutritionDemo.jsx](file:///Users/ronberger/Downloads/trainer/src/pages/NutritionDemo.jsx): Managing daily nutritional tracking.
+
+## 4. Frontend-Backend Communication
+The communication is handled primarily by an `axios` instance configured in [src/api/axios.js](file:///Users/ronberger/Downloads/trainer/src/api/axios.js).
+
+**Axios Interceptor**: 
+The frontend automatically intercepts all outbound network requests on `api` and attaches the user's `token` (from `localStorage`) to the `Authorization: Bearer <token>` header to maintain authenticated sessions with the server easily.
+
+This is consumed across various components such as [AuthContext.jsx](file:///Users/ronberger/Downloads/trainer/src/lib/AuthContext.jsx) (for login), and the main pages (`WorkoutSession`, `Workouts`, `NutritionDemo`, etc.) make calls to the `/api/*` endpoints to fetch and submit state respectively.

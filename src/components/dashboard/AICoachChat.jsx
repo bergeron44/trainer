@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import api from '@/api/axios';
 import ReactMarkdown from 'react-markdown';
+import { useTranslation } from 'react-i18next';
 
 const getTrainerPersona = (personality) => {
   const personas = {
@@ -32,6 +33,7 @@ export default function AICoachChat({
   onWorkoutUpdate,
   isInSession = false
 }) {
+  const { t } = useTranslation();
   const personality = userProfile?.trainer_personality || 'drill_sergeant';
   const persona = getTrainerPersona(personality);
 
@@ -82,7 +84,7 @@ export default function AICoachChat({
       console.error('AI Coach Error:', error);
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: "Sorry, I had a brief connection issue. Let's try that again! What do you need help with?"
+        content: t('coach.errorConnecting', "Sorry, I had a brief connection issue. Let's try that again! What do you need help with?")
       }]);
     } finally {
       setIsLoading(false);
@@ -114,8 +116,8 @@ export default function AICoachChat({
                   <Sparkles className="w-5 h-5 text-black" />
                 </div>
                 <div>
-                  <h3 className="font-bold">Nexus AI Coach</h3>
-                  <p className="text-xs text-gray-500">Always here to help</p>
+                  <h3 className="font-bold">{t('coach.title', 'Nexus AI Coach')}</h3>
+                  <p className="text-xs text-gray-500">{t('coach.alwaysHereSubtitle', 'Always here to help')}</p>
                 </div>
               </div>
               <Button
@@ -140,8 +142,8 @@ export default function AICoachChat({
                 >
                   <div
                     className={`max-w-[85%] rounded-2xl px-4 py-3 ${message.role === 'user'
-                        ? 'bg-[#00F2FF] text-black'
-                        : 'bg-[#1A1A1A] text-white'
+                      ? 'bg-[#00F2FF] text-black'
+                      : 'bg-[#1A1A1A] text-white'
                       }`}
                   >
                     {message.role === 'assistant' ? (
@@ -163,7 +165,7 @@ export default function AICoachChat({
                 >
                   <div className="bg-[#1A1A1A] rounded-2xl px-4 py-3 flex items-center gap-2">
                     <Loader2 className="w-4 h-4 animate-spin text-[#00F2FF]" />
-                    <span className="text-sm text-gray-400">Thinking...</span>
+                    <span className="text-sm text-gray-400">{t('common.thinking', 'Thinking...')}</span>
                   </div>
                 </motion.div>
               )}
@@ -172,7 +174,11 @@ export default function AICoachChat({
 
             {/* Quick suggestions */}
             <div className="px-4 pb-2 flex gap-2 overflow-x-auto">
-              {["I'm short on time", "My shoulder hurts", "Make it harder"].map((suggestion) => (
+              {[
+                t('coach.suggestions.shortOnTime', "I'm short on time"),
+                t('coach.suggestions.shoulderHurts', "My shoulder hurts"),
+                t('coach.suggestions.makeHarder', "Make it harder")
+              ].map((suggestion) => (
                 <button
                   key={suggestion}
                   onClick={() => setInput(suggestion)}
@@ -190,7 +196,7 @@ export default function AICoachChat({
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                  placeholder="Ask me anything..."
+                  placeholder={t('coach.askMeAnything', 'Ask me anything...')}
                   className="bg-[#1A1A1A] border-[#2A2A2A] text-white focus:border-[#00F2FF] focus:ring-[#00F2FF]/20"
                 />
                 <Button

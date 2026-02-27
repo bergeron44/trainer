@@ -3,6 +3,7 @@ import { motion, AnimatePresence, Reorder } from 'framer-motion';
 import { X, GripVertical, Plus, Trash2, Save, ChevronUp, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useTranslation } from 'react-i18next';
 
 function EditableExercise({ exercise, onChange, onDelete }) {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -17,13 +18,13 @@ function EditableExercise({ exercise, onChange, onDelete }) {
         <div className="cursor-grab active:cursor-grabbing touch-none">
           <GripVertical className="w-5 h-5 text-gray-600" />
         </div>
-        
+
         <div className="flex-1 min-w-0">
           <Input
             value={exercise.name}
             onChange={(e) => updateField('name', e.target.value)}
             className="bg-transparent border-none p-0 h-auto text-white font-semibold focus:ring-0"
-            placeholder="Exercise name"
+            placeholder={t('workouts.editor.exerciseName', 'Exercise name')}
           />
         </div>
 
@@ -52,7 +53,7 @@ function EditableExercise({ exercise, onChange, onDelete }) {
           >
             <div className="px-3 pb-3 pt-1 grid grid-cols-3 gap-2">
               <div>
-                <label className="text-xs text-gray-500 mb-1 block">Sets</label>
+                <label className="text-xs text-gray-500 mb-1 block">{t('common.sets', 'Sets')}</label>
                 <Input
                   type="number"
                   value={exercise.sets}
@@ -61,7 +62,7 @@ function EditableExercise({ exercise, onChange, onDelete }) {
                 />
               </div>
               <div>
-                <label className="text-xs text-gray-500 mb-1 block">Reps</label>
+                <label className="text-xs text-gray-500 mb-1 block">{t('session.reps', 'Reps')}</label>
                 <Input
                   value={exercise.reps}
                   onChange={(e) => updateField('reps', e.target.value)}
@@ -69,7 +70,7 @@ function EditableExercise({ exercise, onChange, onDelete }) {
                 />
               </div>
               <div>
-                <label className="text-xs text-gray-500 mb-1 block">Weight (kg)</label>
+                <label className="text-xs text-gray-500 mb-1 block">{t('session.weight', 'Weight')} ({t('common.kg')})</label>
                 <Input
                   type="number"
                   value={exercise.weight || 0}
@@ -84,9 +85,9 @@ function EditableExercise({ exercise, onChange, onDelete }) {
 
       {!isExpanded && (
         <div className="px-3 pb-3 flex gap-4 text-xs text-gray-400">
-          <span><span className="text-[#00F2FF]">{exercise.sets}</span> sets</span>
-          <span><span className="text-[#00F2FF]">{exercise.reps}</span> reps</span>
-          {exercise.weight > 0 && <span><span className="text-[#CCFF00]">{exercise.weight}</span> kg</span>}
+          <span><span className="text-[#00F2FF]">{exercise.sets}</span> {t('common.sets', 'sets')}</span>
+          <span><span className="text-[#00F2FF]">{exercise.reps}</span> {t('session.reps', 'reps')}</span>
+          {exercise.weight > 0 && <span><span className="text-[#CCFF00]">{exercise.weight}</span> {t('common.kg')}</span>}
         </div>
       )}
     </div>
@@ -94,6 +95,7 @@ function EditableExercise({ exercise, onChange, onDelete }) {
 }
 
 export default function WorkoutEditorSheet({ isOpen, onClose, workout, onSave }) {
+  const { t } = useTranslation();
   const [exercises, setExercises] = useState([]);
   const [workoutName, setWorkoutName] = useState('');
 
@@ -162,9 +164,9 @@ export default function WorkoutEditorSheet({ isOpen, onClose, workout, onSave })
                   value={workoutName}
                   onChange={(e) => setWorkoutName(e.target.value)}
                   className="bg-transparent border-none text-xl font-bold p-0 h-auto focus:ring-0"
-                  placeholder="Workout name"
+                  placeholder={t('workouts.editor.workoutName', 'Workout name')}
                 />
-                <p className="text-xs text-gray-500 mt-1">{exercises.length} exercises</p>
+                <p className="text-xs text-gray-500 mt-1">{exercises.length} {t('workouts.exercises.title', 'exercises').toLowerCase()}</p>
               </div>
               <button
                 onClick={onClose}
@@ -202,7 +204,7 @@ export default function WorkoutEditorSheet({ isOpen, onClose, workout, onSave })
                 className="w-full mt-4 p-4 rounded-xl border-2 border-dashed border-[#2A2A2A] hover:border-[#00F2FF] hover:bg-[#00F2FF]/5 transition-all flex items-center justify-center gap-2 text-gray-400 hover:text-[#00F2FF]"
               >
                 <Plus className="w-5 h-5" />
-                Add Exercise
+                {t('workouts.addExercise', 'Add Exercise')}
               </button>
             </div>
 
@@ -213,7 +215,7 @@ export default function WorkoutEditorSheet({ isOpen, onClose, workout, onSave })
                 className="w-full h-12 gradient-cyan text-black font-bold"
               >
                 <Save className="w-5 h-5 mr-2" />
-                Save Workout
+                {t('common.save', 'Save Workout')}
               </Button>
             </div>
           </motion.div>

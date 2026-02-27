@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence, Reorder, useMotionValue, useTransform } from 'framer-motion';
 import { GripVertical, RefreshCw, Play, Pause, Check, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useTranslation } from 'react-i18next';
 
 const SWIPE_THRESHOLD_HALF = -80;
 const SWIPE_THRESHOLD_FULL = -160;
@@ -43,6 +44,7 @@ function SwipeableExerciseCard({
   onReplace,
   isDragging
 }) {
+  const { t } = useTranslation();
   const [timerRunning, setTimerRunning] = useState(false);
   const [timeElapsed, setTimeElapsed] = useState(0);
   const [restMode, setRestMode] = useState(false);
@@ -118,7 +120,7 @@ function SwipeableExerciseCard({
       >
         <motion.div style={{ opacity: replaceOpacity }} className="flex items-center gap-2 text-white font-semibold">
           <RefreshCw className="w-5 h-5" />
-          Replace
+          {t('workouts.replace', 'Replace')}
         </motion.div>
       </motion.div>
 
@@ -132,12 +134,12 @@ function SwipeableExerciseCard({
         animate={isReplacing ? { opacity: 0, scale: 0.8, filter: 'blur(10px)' } : { opacity: 1, scale: 1, filter: 'blur(0px)' }}
         whileTap={isDragging ? { scale: 0.98 } : {}}
         className={`relative rounded-2xl border-2 p-4 transition-colors duration-300 bg-[#1A1A1A] ${isActive && timerRunning
-            ? 'border-[#00F2FF]'
-            : restMode
-              ? 'border-[#CCFF00]'
-              : allSetsComplete
-                ? 'border-[#CCFF00]/50'
-                : 'border-[#2A2A2A]'
+          ? 'border-[#00F2FF]'
+          : restMode
+            ? 'border-[#CCFF00]'
+            : allSetsComplete
+              ? 'border-[#CCFF00]/50'
+              : 'border-[#2A2A2A]'
           }`}
       >
         <div className="flex items-start gap-3">
@@ -160,14 +162,14 @@ function SwipeableExerciseCard({
 
             <div className="flex items-center gap-4 mt-1 text-sm">
               <span className="text-gray-400">
-                <span className="text-[#00F2FF] font-semibold">{exercise.sets}</span> sets
+                <span className="text-[#00F2FF] font-semibold">{exercise.sets}</span> {t('common.sets', 'sets')}
               </span>
               <span className="text-gray-400">
-                <span className="text-[#00F2FF] font-semibold">{exercise.reps}</span> reps
+                <span className="text-[#00F2FF] font-semibold">{exercise.reps}</span> {t('session.reps', 'reps')}
               </span>
               {exercise.weight > 0 && (
                 <span className="text-gray-400">
-                  <span className="text-[#CCFF00] font-semibold">{exercise.weight}</span> kg
+                  <span className="text-[#CCFF00] font-semibold">{exercise.weight}</span> {t('common.kg')}
                 </span>
               )}
             </div>
@@ -178,10 +180,10 @@ function SwipeableExerciseCard({
                 <div
                   key={i}
                   className={`w-3 h-3 rounded-full transition-all duration-300 ${i < completedSets
-                      ? 'bg-[#CCFF00]'
-                      : i === completedSets && timerRunning
-                        ? 'bg-[#00F2FF] animate-pulse'
-                        : 'bg-[#2A2A2A]'
+                    ? 'bg-[#CCFF00]'
+                    : i === completedSets && timerRunning
+                      ? 'bg-[#00F2FF] animate-pulse'
+                      : 'bg-[#2A2A2A]'
                     }`}
                 />
               ))}
@@ -194,10 +196,10 @@ function SwipeableExerciseCard({
                   onClick={handleStartPause}
                   size="sm"
                   className={`w-10 h-10 rounded-full p-0 transition-all duration-300 ${restMode
-                      ? 'bg-[#CCFF00] hover:bg-[#CCFF00]/90 text-black'
-                      : timerRunning
-                        ? 'bg-[#00F2FF] hover:bg-[#00F2FF]/90 text-black'
-                        : 'bg-[#2A2A2A] hover:bg-[#3A3A3A] text-white'
+                    ? 'bg-[#CCFF00] hover:bg-[#CCFF00]/90 text-black'
+                    : timerRunning
+                      ? 'bg-[#00F2FF] hover:bg-[#00F2FF]/90 text-black'
+                      : 'bg-[#2A2A2A] hover:bg-[#3A3A3A] text-white'
                     }`}
                 >
                   {timerRunning ? <Pause className="w-4 h-4" /> : restMode ? <RotateCcw className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
@@ -207,12 +209,12 @@ function SwipeableExerciseCard({
                   <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="flex-1">
                     {restMode ? (
                       <div>
-                        <p className="text-xs text-[#CCFF00] font-medium">REST</p>
+                        <p className="text-xs text-[#CCFF00] font-medium">{t('session.restPeriod', 'REST')}</p>
                         <p className="text-xl font-bold text-[#CCFF00]">{formatTime(restTime)}</p>
                       </div>
                     ) : (
                       <div>
-                        <p className="text-xs text-gray-500">Set {completedSets + 1} of {exercise.sets}</p>
+                        <p className="text-xs text-gray-500">{t('session.set', 'Set')} {completedSets + 1} {t('onboarding.of', 'of')} {exercise.sets}</p>
                         <p className="text-xl font-bold text-[#00F2FF]">{formatTime(timeElapsed)}</p>
                       </div>
                     )}
@@ -221,7 +223,7 @@ function SwipeableExerciseCard({
 
                 {timerRunning && !restMode && (
                   <Button onClick={handleComplete} size="sm" className="gradient-green text-black font-semibold px-4">
-                    <Check className="w-4 h-4 mr-1" /> Done
+                    <Check className="w-4 h-4 mr-1" /> {t('common.done', 'Done')}
                   </Button>
                 )}
               </div>

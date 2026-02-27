@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { TrendingUp, Dumbbell, Target, Flame } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import StrengthChart from '@/components/analytics/StrengthChart';
 import CalendarHeatmap from '@/components/analytics/CalendarHeatmap';
 import VolumeChart from '@/components/analytics/VolumeChart';
 
 export default function Analytics() {
+  const { t } = useTranslation();
   const [profile, setProfile] = useState(null);
   const [workouts, setWorkouts] = useState([]);
 
@@ -51,30 +53,30 @@ export default function Analytics() {
   const totalVolume = 45000; // Mock total
 
   const stats = [
-    { 
-      label: 'Workouts This Week', 
-      value: completedWorkouts.length || 3, 
+    {
+      label: t('analytics.workoutsThisWeek', 'Workouts This Week'),
+      value: completedWorkouts.length || 3,
       target: profile?.workout_days_per_week || 4,
-      icon: Dumbbell, 
-      color: '#00F2FF' 
+      icon: Dumbbell,
+      color: '#00F2FF'
     },
-    { 
-      label: 'Total Volume', 
-      value: `${(totalVolume / 1000).toFixed(1)}k kg`, 
-      icon: TrendingUp, 
-      color: '#CCFF00' 
+    {
+      label: t('analytics.totalVolume', 'Total Volume'),
+      value: `${(totalVolume / 1000).toFixed(1)}k ${t('common.kg')}`,
+      icon: TrendingUp,
+      color: '#CCFF00'
     },
-    { 
-      label: 'Consistency', 
-      value: '87%', 
-      icon: Target, 
-      color: '#FF6B6B' 
+    {
+      label: t('analytics.consistency', 'Consistency'),
+      value: '87%',
+      icon: Target,
+      color: '#FF6B6B'
     },
-    { 
-      label: 'Current Streak', 
-      value: '3 days', 
-      icon: Flame, 
-      color: '#FFD93D' 
+    {
+      label: t('analytics.currentStreak', 'Current Streak'),
+      value: `3 ${t('common.days', 'days')}`,
+      icon: Flame,
+      color: '#FFD93D'
     }
   ];
 
@@ -86,8 +88,8 @@ export default function Analytics() {
         animate={{ opacity: 1, y: 0 }}
         className="mb-6"
       >
-        <h1 className="text-2xl font-bold">Analytics</h1>
-        <p className="text-gray-500 text-sm">Track your progress over time</p>
+        <h1 className="text-2xl font-bold">{t('analytics.title', 'Analytics')}</h1>
+        <p className="text-gray-500 text-sm">{t('analytics.trackProgress', 'Track your progress over time')}</p>
       </motion.div>
 
       {/* Stats Grid */}
@@ -108,7 +110,7 @@ export default function Analytics() {
               className="bg-[#1A1A1A] rounded-xl p-4 border border-[#2A2A2A]"
             >
               <div className="flex items-center gap-2 mb-2">
-                <div 
+                <div
                   className="w-8 h-8 rounded-lg flex items-center justify-center"
                   style={{ backgroundColor: `${stat.color}20` }}
                 >
@@ -159,13 +161,13 @@ export default function Analytics() {
         transition={{ delay: 0.35 }}
         className="mt-6 bg-[#1A1A1A] rounded-2xl p-4 border border-[#2A2A2A]"
       >
-        <h3 className="font-semibold mb-4">Personal Records</h3>
+        <h3 className="font-semibold mb-4">{t('analytics.personalRecords', 'Personal Records')}</h3>
         <div className="space-y-3">
           {[
-            { exercise: 'Bench Press', weight: '70 kg', date: 'Mar 15' },
-            { exercise: 'Squat', weight: '90 kg', date: 'Mar 12' },
-            { exercise: 'Deadlift', weight: '110 kg', date: 'Mar 8' },
-            { exercise: 'Overhead Press', weight: '45 kg', date: 'Mar 14' }
+            { exercise: t('workouts.exercises.benchPress', 'Bench Press'), weight: `70 ${t('common.kg')}`, date: t('analytics.mar15', 'Mar 15') },
+            { exercise: t('workouts.exercises.squat', 'Squat'), weight: `90 ${t('common.kg')}`, date: t('analytics.mar12', 'Mar 12') },
+            { exercise: t('workouts.exercises.deadlift', 'Deadlift'), weight: `110 ${t('common.kg')}`, date: t('analytics.mar8', 'Mar 8') },
+            { exercise: t('workouts.exercises.overheadPress', 'Overhead Press'), weight: `45 ${t('common.kg')}`, date: t('analytics.mar14', 'Mar 14') }
           ].map((pr, index) => (
             <div key={index} className="flex items-center justify-between py-2 border-b border-[#2A2A2A] last:border-0">
               <div>
@@ -180,7 +182,7 @@ export default function Analytics() {
 
       {/* Demo Notice */}
       <p className="text-xs text-gray-600 text-center mt-6">
-        📊 Demo data shown. In the full version, charts reflect your actual progress.
+        📊 {t('analytics.demoNotice', 'Demo data shown. In the full version, charts reflect your actual progress.')}
       </p>
     </div>
   );

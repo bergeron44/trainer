@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import { format } from 'date-fns';
 import { Play, CheckCircle, Calendar, Dumbbell } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import InteractiveExerciseList from '@/components/dashboard/InteractiveExerciseList';
 import ProgressRing from '@/components/dashboard/ProgressRing';
@@ -16,6 +17,7 @@ import WorkoutEditorSheet from '@/components/dashboard/WorkoutEditorSheet';
 export default function Dashboard() {
   const navigate = useNavigate();
   const { user, isLoadingAuth } = useAuth();
+  const { t } = useTranslation();
 
   const [profile, setProfile] = useState(null);
   const [todayWorkout, setTodayWorkout] = useState(null);
@@ -93,7 +95,7 @@ export default function Dashboard() {
             // If there's no workout today (rest day), create a null-state representation or pick the next closest
             setTodayWorkout({
               id: 'rest_day',
-              muscle_group: 'Rest / Active Recovery',
+              muscle_group: t('common.restDay', 'Rest / Active Recovery'),
               exercises: [],
               status: 'planned'
             });
@@ -118,22 +120,22 @@ export default function Dashboard() {
           // Fallback to prevent infinite loader
           setTodayWorkout({
             id: 'error_fallback',
-            muscle_group: 'No Workouts Found',
+            muscle_group: t('dashboard.noWorkoutsFound', 'No Workouts Found'),
             exercises: [],
             status: 'planned'
           });
-          setWorkoutPlans([{ id: 'fb', name: 'No Workouts' }]);
+          setWorkoutPlans([{ id: 'fb', name: t('dashboard.noWorkoutsFound', 'No Workouts') }]);
         }
 
       } catch (err) {
         console.error("Failed to initialize workout data via API:", err);
         setTodayWorkout({
           id: 'error_fallback',
-          muscle_group: 'Failed to Load',
+          muscle_group: t('dashboard.failedToLoad', 'Failed to Load'),
           exercises: [],
           status: 'planned'
         });
-        setWorkoutPlans([{ id: 'fb', name: 'Error' }]);
+        setWorkoutPlans([{ id: 'fb', name: t('common.error', 'Error') }]);
       }
     };
 
@@ -281,7 +283,7 @@ export default function Dashboard() {
       >
         <p className="text-gray-500 text-sm">{format(new Date(), 'EEEE, MMMM d')}</p>
         <h1 className="text-2xl font-bold mt-1">
-          Today's Focus: <span className="text-[#00F2FF]">{todayWorkout?.muscle_group || 'Rest Day'}</span>
+          {t('dashboard.todaysFocus', "Today's Focus:")} <span className="text-[#00F2FF]">{todayWorkout?.muscle_group || t('common.restDay', 'Rest Day')}</span>
         </h1>
       </motion.div>
 
@@ -309,9 +311,9 @@ export default function Dashboard() {
       >
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-semibold mb-1">Workout Progress</h2>
+            <h2 className="text-lg font-semibold mb-1">{t('dashboard.workoutProgress', 'Workout Progress')}</h2>
             <p className="text-gray-500 text-sm">
-              {completedSetsTotal} of {totalSets} sets completed
+              {t('dashboard.setsCompleted', '{{completed}} of {{total}} sets completed', { completed: completedSetsTotal, total: totalSets })}
             </p>
 
             {!workoutStarted ? (
@@ -320,12 +322,12 @@ export default function Dashboard() {
                 className="mt-4 gradient-cyan text-black font-semibold px-6"
               >
                 <Play className="w-4 h-4 mr-2" />
-                Start Workout
+                {t('dashboard.startWorkout', 'Start Workout')}
               </Button>
             ) : progress === 100 ? (
               <div className="mt-4 flex items-center gap-2 text-[#CCFF00]">
                 <CheckCircle className="w-5 h-5" />
-                <span className="font-semibold">Workout Complete!</span>
+                <span className="font-semibold">{t('dashboard.workoutComplete', 'Workout Complete!')}</span>
               </div>
             ) : null}
           </div>
@@ -362,16 +364,16 @@ export default function Dashboard() {
           className="bg-[#1A1A1A] rounded-xl p-4 border border-[#2A2A2A] hover:border-[#3A3A3A] transition-colors text-left"
         >
           <Calendar className="w-6 h-6 text-[#00F2FF] mb-2" />
-          <p className="font-semibold">Calendar</p>
-          <p className="text-xs text-gray-500">View full schedule</p>
+          <p className="font-semibold">{t('dashboard.calendar', 'Calendar')}</p>
+          <p className="text-xs text-gray-500">{t('dashboard.viewSchedule', 'View full schedule')}</p>
         </button>
         <button
           onClick={() => navigate(createPageUrl('NutritionDemo'))}
           className="bg-[#1A1A1A] rounded-xl p-4 border border-[#2A2A2A] hover:border-[#3A3A3A] transition-colors text-left"
         >
           <Dumbbell className="w-6 h-6 text-[#CCFF00] mb-2" />
-          <p className="font-semibold">Nutrition</p>
-          <p className="text-xs text-gray-500">Track your meals</p>
+          <p className="font-semibold">{t('navigation.nutrition', 'Nutrition')}</p>
+          <p className="text-xs text-gray-500">{t('dashboard.trackMeals', 'Track your meals')}</p>
         </button>
       </motion.div>
 
@@ -382,13 +384,13 @@ export default function Dashboard() {
         transition={{ delay: 0.35 }}
         className="mt-4 bg-[#1A1A1A] rounded-2xl p-4 border border-[#2A2A2A]"
       >
-        <h3 className="font-semibold mb-3">Today's Nutrition Target</h3>
-        <div className="grid grid-cols-4 gap-2">
+        <h3 className="font-semibold mb-3">{t('dashboard.todaysNutrition', "Today's Nutrition Target")}</h3>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           {[
-            { label: 'Calories', value: profile?.target_calories || 2000, color: '#00F2FF' },
-            { label: 'Protein', value: `${profile?.protein_goal || 150}g`, color: '#CCFF00' },
-            { label: 'Carbs', value: `${profile?.carbs_goal || 200}g`, color: '#FF6B6B' },
-            { label: 'Fat', value: `${profile?.fat_goal || 65}g`, color: '#FFD93D' }
+            { label: t('common.calories', 'Calories'), value: profile?.target_calories || 2000, color: '#00F2FF' },
+            { label: t('common.protein', 'Protein'), value: `${profile?.protein_goal || 150}g`, color: '#CCFF00' },
+            { label: t('common.carbs', 'Carbs'), value: `${profile?.carbs_goal || 200}g`, color: '#FF6B6B' },
+            { label: t('common.fat', 'Fat'), value: `${profile?.fat_goal || 65}g`, color: '#FFD93D' }
           ].map((stat) => (
             <div key={stat.label} className="text-center">
               <p className="text-xl font-bold" style={{ color: stat.color }}>{stat.value}</p>

@@ -1,17 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { format } from 'date-fns';
-import {
-  Flame, Beef, Wheat, Droplet, Target,
-  Check, MessageCircle, ChevronRight, Plus, X
-} from 'lucide-react';
+import { Flame, Beef, Wheat, Droplet, Target, MessageCircle, ChevronRight, Plus, X } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
+import { useTranslation } from 'react-i18next';
 import GlobalCoachChat from '@/components/coach/GlobalCoachChat';
 import FoodSearch from '@/components/nutrition/FoodSearch';
 import { useAuth } from '@/lib/AuthContext';
 
 // --- Coach Logic: Dynamic Meal Periods ---
-const generateCoachPeriods = (goal, dietType) => {
+const generateCoachPeriods = (goal, dietType, t = null) => {
   // Determine number of meals (2 to 7) based on goal and diet
   let numMeals = 4; // default
 
@@ -25,21 +23,21 @@ const generateCoachPeriods = (goal, dietType) => {
   // Generate labels based on count
   const periods = [];
   if (numMeals === 2) {
-    periods.push({ id: 'm1', label: 'First Meal' }, { id: 'm2', label: 'Final Feast' });
+    periods.push({ id: 'm1', label: t ? t('nutrition.meals.firstMeal', 'First Meal') : 'First Meal' }, { id: 'm2', label: t ? t('nutrition.meals.finalFeast', 'Final Feast') : 'Final Feast' });
   } else if (numMeals === 3) {
-    periods.push({ id: 'm1', label: 'Morning Fuel' }, { id: 'm2', label: 'Midday Recharger' }, { id: 'm3', label: 'Evening Recovery' });
+    periods.push({ id: 'm1', label: t ? t('nutrition.meals.morningFuel', 'Morning Fuel') : 'Morning Fuel' }, { id: 'm2', label: t ? t('nutrition.meals.middayRecharger', 'Midday Recharger') : 'Midday Recharger' }, { id: 'm3', label: t ? t('nutrition.meals.eveningRecovery', 'Evening Recovery') : 'Evening Recovery' });
   } else if (numMeals === 4) {
-    periods.push({ id: 'm1', label: 'Breakfast' }, { id: 'm2', label: 'Lunch' }, { id: 'm3', label: 'Pre-Workout Snack' }, { id: 'm4', label: 'Dinner' });
+    periods.push({ id: 'm1', label: t ? t('nutrition.breakfast', 'Breakfast') : 'Breakfast' }, { id: 'm2', label: t ? t('nutrition.lunch', 'Lunch') : 'Lunch' }, { id: 'm3', label: t ? t('nutrition.meals.preWorkoutSnack', 'Pre-Workout Snack') : 'Pre-Workout Snack' }, { id: 'm4', label: t ? t('nutrition.dinner', 'Dinner') : 'Dinner' });
   } else if (numMeals >= 5) {
-    periods.push({ id: 'm1', label: 'Early Kickoff' }, { id: 'm2', label: 'Mid-Morning Snack' }, { id: 'm3', label: 'Lunch' }, { id: 'm4', label: 'Afternoon Fuel' });
-    if (numMeals >= 6) periods.push({ id: 'm5', label: 'Dinner' });
+    periods.push({ id: 'm1', label: t ? t('nutrition.meals.earlyKickoff', 'Early Kickoff') : 'Early Kickoff' }, { id: 'm2', label: t ? t('nutrition.meals.midMorningSnack', 'Mid-Morning Snack') : 'Mid-Morning Snack' }, { id: 'm3', label: t ? t('nutrition.lunch', 'Lunch') : 'Lunch' }, { id: 'm4', label: t ? t('nutrition.meals.afternoonFuel', 'Afternoon Fuel') : 'Afternoon Fuel' });
+    if (numMeals >= 6) periods.push({ id: 'm5', label: t ? t('nutrition.dinner', 'Dinner') : 'Dinner' });
     if (numMeals === 7) {
-      periods.push({ id: 'm6', label: 'Post-Workout Shake' });
-      periods.push({ id: 'm7', label: 'Late Night Casein' });
+      periods.push({ id: 'm6', label: t ? t('nutrition.meals.postWorkoutShake', 'Post-Workout Shake') : 'Post-Workout Shake' });
+      periods.push({ id: 'm7', label: t ? t('nutrition.meals.lateNightCasein', 'Late Night Casein') : 'Late Night Casein' });
     } else if (numMeals === 6) {
-      periods.push({ id: 'm6', label: 'Evening Snack' });
+      periods.push({ id: 'm6', label: t ? t('nutrition.meals.eveningSnack', 'Evening Snack') : 'Evening Snack' });
     } else {
-      periods.push({ id: 'm5', label: 'Dinner' });
+      periods.push({ id: 'm5', label: t ? t('nutrition.dinner', 'Dinner') : 'Dinner' });
     }
   }
 
@@ -84,6 +82,7 @@ const GOAL_LABELS = {
 
 export default function NutritionDemo() {
   const { user } = useAuth();
+  const { t } = useTranslation();
   const [chatOpen, setChatOpen] = useState(false);
   const [coachStyle, setCoachStyle] = useState('motivational');
 
@@ -96,8 +95,8 @@ export default function NutritionDemo() {
   const [periods, setPeriods] = useState([]);
 
   useEffect(() => {
-    setPeriods(generateCoachPeriods(goal, dietType));
-  }, [goal, dietType]);
+    setPeriods(generateCoachPeriods(goal, dietType, t));
+  }, [goal, dietType, t]);
 
   const tdee = profile.target_calories || 2000;
   const p_goal = profile.protein_goal || 150;
@@ -114,10 +113,10 @@ export default function NutritionDemo() {
   }, { cals: 0, pro: 0, carb: 0, fat: 0 });
 
   const macroCards = [
-    { key: 'calories', label: 'Calories', icon: Flame, value: currentMacros.cals, target: tdee, color: '#00F2FF', unit: '' },
-    { key: 'protein', label: 'Protein', icon: Beef, value: currentMacros.pro, target: p_goal, color: '#CCFF00', unit: 'g' },
-    { key: 'carbs', label: 'Carbs', icon: Wheat, value: currentMacros.carb, target: c_goal, color: '#FF6B6B', unit: 'g' },
-    { key: 'fat', label: 'Fat', icon: Droplet, value: currentMacros.fat, target: f_goal, color: '#FFD93D', unit: 'g' }
+    { key: 'calories', label: t('common.calories', 'Calories'), icon: Flame, value: currentMacros.cals, target: tdee, color: '#00F2FF', unit: '' },
+    { key: 'protein', label: t('common.protein', 'Protein'), icon: Beef, value: currentMacros.pro, target: p_goal, color: '#CCFF00', unit: 'g' },
+    { key: 'carbs', label: t('common.carbs', 'Carbs'), icon: Wheat, value: currentMacros.carb, target: c_goal, color: '#FF6B6B', unit: 'g' },
+    { key: 'fat', label: t('common.fat', 'Fat'), icon: Droplet, value: currentMacros.fat, target: f_goal, color: '#FFD93D', unit: 'g' }
   ];
 
   const handleAddFood = (food) => {
@@ -146,12 +145,12 @@ export default function NutritionDemo() {
         className="mb-6 flex justify-between items-end"
       >
         <div>
-          <h1 className="text-2xl font-bold">Nutrition</h1>
+          <h1 className="text-2xl font-bold">{t('nutrition.title', 'Nutrition')}</h1>
           <p className="text-gray-500 text-sm">{format(new Date(), 'EEEE, MMMM d')}</p>
         </div>
         <div className="text-right">
-          <p className="text-[#00F2FF] font-semibold text-sm capitalize">{dietType} Diet</p>
-          <p className="text-gray-400 text-xs">{GOAL_LABELS[goal]}</p>
+          <p className="text-[#00F2FF] font-semibold text-sm capitalize">{t(`nutrition.dietTypes.${dietType}`, `${dietType} Diet`)}</p>
+          <p className="text-gray-400 text-xs">{t(`nutrition.goals.${goal}`, GOAL_LABELS[goal])}</p>
         </div>
       </motion.div>
 
@@ -216,7 +215,7 @@ export default function NutritionDemo() {
           <Target className="w-5 h-5 text-[#00F2FF]" />
         </div>
         <p className="text-sm text-gray-300">
-          <span className="font-semibold text-white">Coach tip:</span> {DIET_TIPS[dietType]}
+          <span className="font-semibold text-white">{t('nutrition.coachTip', 'Coach tip:')} </span> {t(`nutrition.dietTips.${dietType}`, DIET_TIPS[dietType])}
         </p>
       </motion.div>
 
@@ -229,7 +228,7 @@ export default function NutritionDemo() {
       >
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">
-            Today's Log ({periods.length} Meals)
+            {t('nutrition.todaysLog', "Today's Log")} ({periods.length} {t('nutrition.mealsCount', 'Meals')})
           </h2>
         </div>
 
@@ -250,7 +249,7 @@ export default function NutritionDemo() {
               >
                 <div className="flex justify-between items-center mb-3">
                   <h3 className="font-semibold text-[#00F2FF]">{period.label}</h3>
-                  <span className="text-sm text-gray-400">{pCals} kcal</span>
+                  <span className="text-sm text-gray-400">{pCals} {t('common.kcal', 'kcal')}</span>
                 </div>
 
                 {/* Logged Foods */}
@@ -259,8 +258,8 @@ export default function NutritionDemo() {
                     {periodFoods.map((food, fIdx) => (
                       <div key={fIdx} className="flex justify-between items-center bg-[#2A2A2A] rounded-lg p-2 text-sm">
                         <div className="flex-1 truncate pr-2">
-                          <span className="text-white block truncate">{food.name}</span>
-                          <span className="text-xs text-gray-500">{food.cals} kcal • P:{food.protein} C:{food.carbs} F:{food.fat}</span>
+                          <span className="text-white block truncate">{t(`nutrition.foods.${food.name}`, food.name)}</span>
+                          <span className="text-xs text-gray-500">{food.cals} {t('common.kcal', 'kcal')} • P:{food.protein} C:{food.carbs} F:{food.fat}</span>
                         </div>
                         <button
                           onClick={() => removeFood(period.id, fIdx)}
@@ -276,12 +275,12 @@ export default function NutritionDemo() {
                 {/* Inspirations Carousel */}
                 {periodFoods.length === 0 && (
                   <div className="mb-3">
-                    <p className="text-xs text-gray-500 mb-2">Ideas to hit your macros:</p>
+                    <p className="text-xs text-gray-500 mb-2">{t('nutrition.ideasToHitMacros', 'Ideas to hit your macros:')}</p>
                     <div className="flex overflow-x-auto snap-x gap-2 pb-2 scrollbar-none">
                       {inspirations.map((insp, i) => (
                         <div key={i} className="snap-start shrink-0 w-48 bg-[#2A2A2A] rounded-lg p-2 text-xs border border-transparent hover:border-[#00F2FF]/30 transition-all cursor-pointer">
-                          <p className="text-gray-300 font-medium truncate">{insp.name}</p>
-                          <p className="text-gray-500 mt-1">{insp.cals} kcal • {insp.protein}g Protein</p>
+                          <p className="text-gray-300 font-medium truncate">{t(`nutrition.inspirations.${insp.name}`, insp.name)}</p>
+                          <p className="text-gray-500 mt-1">{insp.cals} {t('common.kcal', 'kcal')} • {insp.protein}g {t('common.protein', 'Protein')}</p>
                         </div>
                       ))}
                     </div>
@@ -292,7 +291,7 @@ export default function NutritionDemo() {
                   onClick={() => setActiveSearchPeriod(period.id)}
                   className="w-full py-2 flex items-center justify-center gap-2 border border-dashed border-[#3A3A3A] rounded-lg text-sm text-gray-400 hover:text-white hover:border-[#00F2FF]/50 transition-all"
                 >
-                  <Plus className="w-4 h-4" /> Add Food
+                  <Plus className="w-4 h-4" /> {t('nutrition.addFood', 'Add Food')}
                 </button>
               </motion.div>
             );
@@ -312,22 +311,22 @@ export default function NutritionDemo() {
             <MessageCircle className="w-5 h-5 text-black" />
           </div>
           <div>
-            <h3 className="font-semibold">Ask Your Coach</h3>
-            <p className="text-xs text-gray-500">Get personalized nutrition advice</p>
+            <h3 className="font-semibold">{t('coach.askYourCoach', 'Ask Your Coach')}</h3>
+            <p className="text-xs text-gray-500">{t('coach.personalizedNutrition', 'Get personalized nutrition advice')}</p>
           </div>
         </div>
         <button
           onClick={() => setChatOpen(true)}
           className="w-full flex items-center justify-center p-3 rounded-xl gradient-cyan text-black font-semibold"
         >
-          <span>Chat with Coach</span>
+          <span>{t('coach.chatWithCoach', 'Chat with Coach')}</span>
           <ChevronRight className="w-4 h-4 ml-2" />
         </button>
       </motion.div>
 
       {/* Demo Notice */}
       <p className="text-xs text-gray-600 text-center mt-6">
-        📊 Demo data shown. In the full version, this syncs with your actual intake.
+        📊 {t('nutrition.demoNotice', 'Demo data shown. In the full version, this syncs with your actual intake.')}
       </p>
 
       {/* Global Coach Chat */}
