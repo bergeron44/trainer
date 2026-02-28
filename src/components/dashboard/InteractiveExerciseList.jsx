@@ -7,27 +7,56 @@ import { useTranslation } from 'react-i18next';
 const SWIPE_THRESHOLD_HALF = -80;
 const SWIPE_THRESHOLD_FULL = -160;
 
-// Alternative exercises database
+// Alternative exercises — names match Exercise DB canonical names
 const ALTERNATIVES = {
-  'Bench Press': ['Dumbbell Press', 'Floor Press', 'Push-ups', 'Machine Chest Press'],
-  'Overhead Press': ['Arnold Press', 'Landmine Press', 'Pike Push-ups', 'Dumbbell Shoulder Press'],
-  'Incline Dumbbell Press': ['Incline Barbell Press', 'Low Cable Flyes', 'Incline Push-ups'],
-  'Tricep Dips': ['Skull Crushers', 'Tricep Pushdowns', 'Close Grip Bench Press'],
-  'Cable Flyes': ['Dumbbell Flyes', 'Pec Deck', 'Resistance Band Flyes'],
-  'Goblet Squats': ['Air Squats', 'Leg Press', 'Split Squats'],
-  'Push-ups': ['Knee Push-ups', 'Wall Push-ups', 'Diamond Push-ups'],
-  'Dumbbell Rows': ['Cable Rows', 'Barbell Rows', 'T-Bar Rows'],
-  'Walking Lunges': ['Reverse Lunges', 'Bulgarian Split Squats', 'Step-ups'],
+  // CHEST
+  'Bench Press': ['Dumbbell Press', 'Floor Press', 'Push-Up', 'Machine Chest Press'],
+  'Incline Bench Press': ['Incline Dumbbell Press', 'Low Cable Fly', 'Incline Push-Up'],
+  'Incline Dumbbell Press': ['Incline Bench Press', 'Low Cable Fly', 'Incline Push-Up'],
+  'Dumbbell Press': ['Bench Press', 'Floor Press', 'Machine Chest Press'],
+  'Cable Chest Fly': ['Dumbbell Fly', 'Pec Deck', 'Dumbbell Press'],
+  'Dumbbell Fly': ['Cable Chest Fly', 'Pec Deck', 'Incline Dumbbell Press'],
+  'Push-Up': ['Incline Push-Up', 'Pike Push-Up', 'Dips'],
+  'Dips': ['Skull Crusher', 'Tricep Pushdown', 'Close Grip Bench Press'],
+  'Tricep Dips': ['Skull Crusher', 'Tricep Pushdown', 'Close Grip Bench Press'],
+
+  // BACK
+  'Pull-Up': ['Lat Pulldown', 'Assisted Pull-Up', 'Chin-Up'],
+  'Barbell Row': ['Seated Cable Row', 'Pendlay Row', 'T-Bar Row'],
+  'Dumbbell Row': ['Seated Cable Row', 'Barbell Row', 'T-Bar Row'],
+  'Lat Pulldown': ['Pull-Up', 'Assisted Pull-Up', 'Chin-Up'],
+  'Face Pull': ['Rear Delt Fly', 'Band Pull Apart', 'Reverse Pec Deck'],
+  'Deadlift': ['Romanian Deadlift', 'Barbell Row', 'Kettlebell Swing'],
+
+  // LEGS
+  'Squat': ['Goblet Squat', 'Leg Press', 'Hack Squat'],
+  'Goblet Squat': ['Air Squat', 'Leg Press', 'Split Squat'],
+  'Walking Lunge': ['Reverse Lunge', 'Bulgarian Split Squat', 'Step Up'],
+  'Romanian Deadlift': ['Leg Curl', 'Deadlift', 'Bulgarian Split Squat'],
+  'Leg Press': ['Squat', 'Hack Squat', 'Goblet Squat'],
+
+  // SHOULDERS
+  'Overhead Press': ['Arnold Press', 'Landmine Press', 'Dumbbell Shoulder Press'],
+  'Lateral Raise': ['Cable Lateral Raise', 'Upright Row', 'Reverse Fly'],
+  'Arnold Press': ['Overhead Press', 'Dumbbell Shoulder Press', 'Landmine Press'],
+
+  // ARMS
+  'Barbell Curl': ['Dumbbell Curl', 'Cable Curl', 'Preacher Curl'],
+  'Dumbbell Curl': ['Barbell Curl', 'Hammer Curl', 'Cable Curl'],
+  'Tricep Pushdown': ['Skull Crusher', 'Overhead Tricep Extension', 'Tricep Dips'],
+  'Skull Crusher': ['Tricep Pushdown', 'Overhead Tricep Extension', 'Close Grip Bench Press'],
+
+  // CORE
   'Plank': ['Dead Bug', 'Bird Dog', 'Hollow Hold'],
-  'Barbell Rows': ['Seated Cable Rows', 'Pendlay Rows', 'Meadows Rows'],
-  'Pull-ups': ['Lat Pulldowns', 'Assisted Pull-ups', 'Chin-ups'],
-  'Lateral Raises': ['Cable Lateral Raises', 'Leaning Lateral Raises', 'Machine Laterals'],
-  'Face Pulls': ['Rear Delt Flyes', 'Band Pull-aparts', 'Reverse Pec Deck'],
-  'Power Cleans': ['Hang Cleans', 'High Pulls', 'Kettlebell Swings'],
-  'Box Jumps': ['Jump Squats', 'Depth Jumps', 'Step-ups with Knee Drive'],
-  'Medicine Ball Slams': ['Battle Ropes', 'Kettlebell Swings', 'Burpees'],
-  'Broad Jumps': ['Standing Long Jumps', 'Tuck Jumps', 'Frog Jumps'],
-  'Battle Ropes': ['Jumping Jacks', 'Mountain Climbers', 'High Knees'],
+  'Crunch': ['Cable Crunch', 'Hanging Leg Raise', 'Russian Twist'],
+
+  // FULL BODY / POWER
+  'Power Clean': ['Hang Clean', 'High Pull', 'Kettlebell Swing'],
+  'Hang Clean': ['Power Clean', 'High Pull', 'Kettlebell Swing'],
+  'Box Jump': ['Jump Squat', 'Depth Jump', 'Tuck Jump'],
+  'Medicine Ball Slam': ['Battle Ropes', 'Kettlebell Swing', 'Burpee'],
+  'Broad Jump': ['Box Jump', 'Tuck Jump', 'Jump Squat'],
+  'Battle Ropes': ['Jumping Jack', 'Mountain Climber', 'High Knees'],
 };
 
 function getRandomAlternative(exerciseName) {
@@ -42,7 +71,8 @@ function SwipeableExerciseCard({
   onSetComplete,
   completedSets = 0,
   onReplace,
-  isDragging
+  isDragging,
+  onExerciseClick
 }) {
   const { t } = useTranslation();
   const [timerRunning, setTimerRunning] = useState(false);
@@ -156,7 +186,13 @@ function SwipeableExerciseCard({
 
           {/* Content */}
           <div className="flex-1 min-w-0">
-            <h3 className={`font-bold text-lg truncate ${allSetsComplete ? 'text-gray-400 line-through' : 'text-white'}`}>
+            <h3
+              onClick={(e) => {
+                e.stopPropagation();
+                onExerciseClick?.(index);
+              }}
+              className={`font-bold text-lg truncate cursor-pointer hover:text-[#00F2FF] transition-colors ${allSetsComplete ? 'text-gray-400 line-through' : 'text-white'}`}
+            >
               {exercise.name}
             </h3>
 
@@ -241,7 +277,8 @@ export default function InteractiveExerciseList({
   onReplace,
   isActive,
   completedSets,
-  onSetComplete
+  onSetComplete,
+  onExerciseClick
 }) {
   const [isDragging, setIsDragging] = useState(false);
 
@@ -278,6 +315,7 @@ export default function InteractiveExerciseList({
               onSetComplete={onSetComplete}
               onReplace={onReplace}
               isDragging={isDragging}
+              onExerciseClick={onExerciseClick}
             />
           </Reorder.Item>
         ))}

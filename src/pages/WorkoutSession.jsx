@@ -1,18 +1,276 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import api from '@/api/axios';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Play, Check, X,
-  SkipForward, Sparkles, Timer, Dumbbell, AlertCircle
+  Check, X, ChevronDown,
+  SkipForward, Sparkles, Timer, Dumbbell, AlertCircle, Play, Pause, RotateCcw
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from 'react-i18next';
 import AICoachChat from '@/components/dashboard/AICoachChat';
 import Confetti from 'react-confetti';
+import { getExerciseVideoUrl } from '@/data/exerciseVideos';
 
+// ──────────────────────────────────────────────
+//  Single Exercise "Reel" Slide
+// ──────────────────────────────────────────────
+function ExerciseReelSlide({
+  exercise,
+  index,
+  totalExercises,
+  slideRef,
+  videoRef,
+  exerciseData,
+  completedSets,
+  onCompleteSet,
+  isVisible,
+  isLast,
+  onFinishWorkout,
+}) {
+  const { t } = useTranslation();
+  const [restMode, setRestMode] = useState(false);
+  const [restTime, setRestTime] = useState(0);
+
+  const setsCompleted = completedSets || 0;
+  const allDone = setsCompleted >= exercise.sets;
+
+  // Rest timer
+  useEffect(() => {
+    if (!restMode || restTime <= 0) return;
+    const interval = setInterval(() => {
+      setRestTime(prev => {
+        if (prev <= 1) {
+          setRestMode(false);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [restMode, restTime]);
+
+  const handleCompleteSet = () => {
+    onCompleteSet(exercise.id);
+    const nextCompleted = setsCompleted + 1;
+    if (nextCompleted < exercise.sets) {
+      setRestMode(true);
+      setRestTime(exercise.rest_seconds || 60);
+    }
+  };
+
+  const skipRest = () => {
+    setRestMode(false);
+    setRestTime(0);
+  };
+
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const isLoading = exerciseData === 'loading';
+  const videoUrl = exerciseData?.video_url ?? null;
+  const gifUrl = exerciseData?.gif_url ?? null;
+  const instructions = exerciseData?.instructions ?? [];
+  const difficulty = exerciseData?.difficulty ?? '';
+
+  const DIFFICULTY_COLOR = {
+    beginner: '#22c55e',
+    intermediate: '#f59e0b',
+    advanced: '#ef4444',
+  };
+
+  return (
+    <div
+      ref={slideRef}
+      className="relative w-full flex-shrink-0"
+      style={{ height: '100dvh', scrollSnapAlign: 'start' }}
+    >
+      {/* ── Background Media ── */}
+      {isLoading ? (
+        <div className="absolute inset-0 bg-[#0a0a0a] flex items-center justify-center">
+          <div className="w-16 h-16 border-2 border-[#00F2FF]/30 border-t-[#00F2FF] rounded-full animate-spin" />
+        </div>
+      ) : videoUrl ? (
+        <video
+          ref={videoRef}
+          src={videoUrl}
+          muted
+          loop
+          playsInline
+          preload={isVisible ? 'auto' : 'none'}
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+      ) : gifUrl ? (
+        <img
+          src={gifUrl}
+          alt={exercise.name}
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+      ) : (
+        <div className="absolute inset-0 bg-[#0d0d0d] flex flex-col items-center justify-center px-6">
+          <Dumbbell className="w-20 h-20 text-[#00F2FF]/15 mb-4" />
+          {instructions.length > 0 && (
+            <div className="space-y-3 overflow-y-auto max-h-[30vh]">
+              {instructions.map((step, i) => (
+                <div key={i} className="flex gap-3">
+                  <span className="flex-shrink-0 w-6 h-6 rounded-full bg-[#00F2FF]/15 border border-[#00F2FF]/30 flex items-center justify-center text-[#00F2FF] text-xs font-bold">
+                    {i + 1}
+                  </span>
+                  <p className="text-white/60 text-sm leading-relaxed">{step}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Gradient overlays ── */}
+      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-black/60 pointer-events-none" />
+
+      {/* ── Top bar: exercise counter ── */}
+      <div
+        className="absolute left-0 right-0 z-20 px-5 flex items-center justify-between"
+        style={{ top: 'max(env(safe-area-inset-top, 0px), 16px)' }}
+      >
+        <p className="text-white/50 text-xs uppercase tracking-widest">
+          {t('session.exercise', 'Exercise')} {index + 1} / {totalExercises}
+        </p>
+        {difficulty && (
+          <span
+            className="text-xs font-semibold px-2 py-0.5 rounded-full border"
+            style={{
+              color: DIFFICULTY_COLOR[difficulty] ?? '#fff',
+              borderColor: DIFFICULTY_COLOR[difficulty] ?? '#fff',
+              backgroundColor: (DIFFICULTY_COLOR[difficulty] ?? '#fff') + '22',
+            }}
+          >
+            {difficulty}
+          </span>
+        )}
+      </div>
+
+      {/* ── Bottom content ── */}
+      <div
+        className="absolute bottom-0 left-0 right-0 z-20 px-5"
+        style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 32px)' }}
+      >
+        {/* Exercise name */}
+        <h2 className="text-white text-3xl font-bold leading-tight mb-1">
+          {exercise.name}
+        </h2>
+
+        {/* Sets & reps info */}
+        <p className="text-[#00F2FF] text-lg font-semibold mb-4">
+          {exercise.sets} {t('common.sets', 'sets')} × {exercise.reps} {t('session.reps', 'reps')}
+          {exercise.weight > 0 ? ` · ${exercise.weight} ${t('common.kg', 'kg')}` : ''}
+        </p>
+
+        {/* ── Set progress dots ── */}
+        <div className="flex items-center gap-2 mb-6">
+          {Array.from({ length: exercise.sets }).map((_, i) => (
+            <motion.div
+              key={i}
+              animate={{
+                scale: i === setsCompleted && !allDone ? [1, 1.3, 1] : 1,
+                backgroundColor:
+                  i < setsCompleted
+                    ? '#CCFF00'
+                    : i === setsCompleted && !allDone
+                      ? '#00F2FF'
+                      : '#333333',
+              }}
+              transition={{
+                scale: { duration: 1, repeat: i === setsCompleted && !allDone ? Infinity : 0 },
+                backgroundColor: { duration: 0.3 },
+              }}
+              className="w-4 h-4 rounded-full"
+            />
+          ))}
+          <span className="text-white/40 text-sm ml-2">
+            {setsCompleted}/{exercise.sets}
+          </span>
+        </div>
+
+        {/* ── Action Area ── */}
+        {allDone ? (
+          // All sets completed for this exercise
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="text-center"
+          >
+            <div className="flex items-center justify-center gap-2 mb-4">
+              <Check className="w-6 h-6 text-[#CCFF00]" />
+              <span className="text-[#CCFF00] text-xl font-bold">
+                {t('session.exerciseDone', 'Exercise Complete!')}
+              </span>
+            </div>
+
+            {isLast ? (
+              <Button
+                onClick={onFinishWorkout}
+                className="w-full h-14 rounded-2xl gradient-green text-black font-bold text-lg"
+              >
+                {t('session.finishWorkout', 'Finish Workout')} 🔥
+              </Button>
+            ) : (
+              <motion.div
+                animate={{ y: [0, -8, 0] }}
+                transition={{ duration: 1.5, repeat: Infinity }}
+                className="flex flex-col items-center gap-1 text-white/40"
+              >
+                <ChevronDown className="w-6 h-6" />
+                <span className="text-sm">{t('session.swipeNext', 'Swipe down for next exercise')}</span>
+              </motion.div>
+            )}
+          </motion.div>
+        ) : restMode ? (
+          // Rest period
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="text-center"
+          >
+            <p className="text-[#CCFF00] text-sm uppercase tracking-wider mb-2">
+              {t('session.restPeriod', 'Rest Period')}
+            </p>
+            <motion.p
+              className="text-5xl font-bold text-[#CCFF00] mb-4"
+              animate={{ scale: restTime <= 5 ? [1, 1.08, 1] : 1 }}
+              transition={{ duration: 1, repeat: restTime <= 5 ? Infinity : 0 }}
+            >
+              {formatTime(restTime)}
+            </motion.p>
+            <Button
+              onClick={skipRest}
+              className="w-full h-14 rounded-2xl bg-[#1A1A1A] border-2 border-[#CCFF00] text-[#CCFF00] hover:bg-[#CCFF00] hover:text-black transition-all font-semibold text-lg"
+            >
+              {t('session.skipRest', 'Skip Rest')}
+            </Button>
+          </motion.div>
+        ) : (
+          // Ready to do a set
+          <Button
+            onClick={handleCompleteSet}
+            className="w-full h-14 rounded-2xl gradient-cyan text-black font-bold text-lg"
+          >
+            <Check className="w-5 h-5 mr-2" />
+            {t('session.completeSet', 'Complete Set')} {setsCompleted + 1}
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────
+//  Main Workout Session (Reels-style)
+// ──────────────────────────────────────────────
 export default function WorkoutSession() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -20,22 +278,22 @@ export default function WorkoutSession() {
   const [searchParams] = useSearchParams();
   const workoutId = searchParams.get('id');
 
-  const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
-  const [currentSet, setCurrentSet] = useState(1);
-  const [timerRunning, setTimerRunning] = useState(false);
-  const [timeElapsed, setTimeElapsed] = useState(0);
-  const [restMode, setRestMode] = useState(false);
-  const [restTime, setRestTime] = useState(0);
-  const [sessionStartTime] = useState(Date.now());
   const [completedSets, setCompletedSets] = useState({});
   const [chatOpen, setChatOpen] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
   const [sessionStats, setSessionStats] = useState(null);
+  const [sessionStartTime] = useState(Date.now());
+  const [currentIndex, setCurrentIndex] = useState(0);
 
+  // Exercise media data
+  const [exerciseMap, setExerciseMap] = useState({});
+  const slideRefs = useRef([]);
+  const videoRefs = useRef([]);
+
+  // ── Fetch workout ──
   const { data: workout, isLoading } = useQuery({
     queryKey: ['workout', workoutId],
     queryFn: async () => {
-      // Use custom API endpoint to get workout by ID
       const { data } = await api.get(`/workouts/${workoutId}`);
       return data;
     },
@@ -52,7 +310,6 @@ export default function WorkoutSession() {
 
   const updateWorkoutMutation = useMutation({
     mutationFn: async ({ exercises }) => {
-      // Use custom API to update workout
       return api.put(`/workouts/${workoutId}`, { exercises });
     },
     onSuccess: () => {
@@ -60,76 +317,54 @@ export default function WorkoutSession() {
     }
   });
 
-  useEffect(() => {
-    let interval;
-    if (timerRunning && !restMode) {
-      interval = setInterval(() => {
-        setTimeElapsed(prev => prev + 1);
-      }, 1000);
-    } else if (restMode && restTime > 0) {
-      interval = setInterval(() => {
-        setRestTime(prev => {
-          if (prev <= 1) {
-            setRestMode(false);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    }
-    return () => clearInterval(interval);
-  }, [timerRunning, restMode, restTime]);
-
-  const formatTime = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  const currentExercise = workout?.exercises?.[currentExerciseIndex];
-  const totalExercises = workout?.exercises?.length || 0;
-  const exerciseProgress = ((currentExerciseIndex + 1) / totalExercises) * 100;
-
-  const handleSetComplete = () => {
-    if (!currentExercise) return;
-
-    setTimerRunning(false);
-    setTimeElapsed(0);
-
-    const exerciseId = currentExercise.id;
-    const newCompletedSets = {
-      ...completedSets,
-      [exerciseId]: (completedSets[exerciseId] || 0) + 1
-    };
-    setCompletedSets(newCompletedSets);
-
-    if (currentSet < currentExercise.sets) {
-      setCurrentSet(prev => prev + 1);
-      setRestMode(true);
-      setRestTime(currentExercise.rest_seconds || 60);
-    } else {
-      // Move to next exercise
-      if (currentExerciseIndex < totalExercises - 1) {
-        setCurrentExerciseIndex(prev => prev + 1);
-        setCurrentSet(1);
-        setRestMode(false);
-      } else {
-        // Workout complete!
-        handleFinishWorkout();
+  // ── Fetch exercise media from DB, with Cloudinary fallback ──
+  const fetchExercise = useCallback(async (name) => {
+    setExerciseMap(prev => ({ ...prev, [name]: 'loading' }));
+    try {
+      const { data } = await api.get(`/exercises/lookup?name=${encodeURIComponent(name)}`);
+      if (data && !data.video_url) {
+        data.video_url = getExerciseVideoUrl(name);
       }
+      setExerciseMap(prev => ({ ...prev, [name]: data ?? { video_url: getExerciseVideoUrl(name) } }));
+    } catch {
+      setExerciseMap(prev => ({ ...prev, [name]: { video_url: getExerciseVideoUrl(name) } }));
     }
-  };
+  }, []);
 
-  const handleSkipExercise = () => {
-    if (currentExerciseIndex < totalExercises - 1) {
-      setCurrentExerciseIndex(prev => prev + 1);
-      setCurrentSet(1);
-      setTimerRunning(false);
-      setRestMode(false);
-      setTimeElapsed(0);
-    } else {
-      handleFinishWorkout();
-    }
+  useEffect(() => {
+    if (!workout?.exercises?.length) return;
+    workout.exercises.forEach(ex => fetchExercise(ex.name));
+  }, [workout?.exercises?.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── IntersectionObserver: track visible slide, play/pause videos ──
+  useEffect(() => {
+    if (!workout?.exercises?.length) return;
+    const observers = slideRefs.current.map((slide, index) => {
+      if (!slide) return null;
+      const obs = new IntersectionObserver(
+        ([entry]) => {
+          if (entry.isIntersecting) {
+            setCurrentIndex(index);
+            videoRefs.current[index]?.play().catch(() => { });
+          } else {
+            const v = videoRefs.current[index];
+            if (v) { v.pause(); v.currentTime = 0; }
+          }
+        },
+        { threshold: 0.5 },
+      );
+      obs.observe(slide);
+      return obs;
+    });
+    return () => observers.forEach(obs => obs?.disconnect());
+  }, [workout?.exercises?.length]);
+
+  // ── Handlers ──
+  const handleCompleteSet = (exerciseId) => {
+    setCompletedSets(prev => ({
+      ...prev,
+      [exerciseId]: (prev[exerciseId] || 0) + 1
+    }));
   };
 
   const handleFinishWorkout = async () => {
@@ -140,7 +375,7 @@ export default function WorkoutSession() {
     const stats = {
       duration: sessionDuration,
       setsCompleted: totalSetsCompleted,
-      exercisesCompleted: currentExerciseIndex + 1,
+      exercisesCompleted: workout.exercises.length,
       xpEarned
     };
 
@@ -148,13 +383,11 @@ export default function WorkoutSession() {
     setShowSummary(true);
 
     try {
-      // Update workout status
       await api.put(`/workouts/${workoutId}`, {
         status: 'completed',
         duration_minutes: sessionDuration
       });
 
-      // Create session record
       await api.post('/workouts/session', {
         workout_id: workoutId,
         start_time: new Date(sessionStartTime).toISOString(),
@@ -186,6 +419,7 @@ export default function WorkoutSession() {
     updateWorkoutMutation.mutate({ exercises: newExercises });
   };
 
+  // ── Loading state ──
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#0A0A0A]">
@@ -206,6 +440,7 @@ export default function WorkoutSession() {
     );
   }
 
+  // ── Summary screen ──
   if (showSummary && sessionStats) {
     return (
       <div className="min-h-screen bg-[#0A0A0A] flex items-center justify-center px-6 relative overflow-hidden">
@@ -290,181 +525,81 @@ export default function WorkoutSession() {
     );
   }
 
+  // ──────────────────────────────────────────────
+  //  Main Reels-style workout view
+  // ──────────────────────────────────────────────
+  const exercises = workout.exercises || [];
+
   return (
-    <div className="min-h-screen bg-[#0A0A0A] flex flex-col">
-      {/* Header */}
-      <div className="px-4 py-4 border-b border-[#2A2A2A]">
-        <div className="flex items-center justify-between mb-4">
-          <button onClick={handleQuit} className="p-2 hover:bg-[#1A1A1A] rounded-lg transition-colors">
-            <X className="w-6 h-6 text-gray-400" />
-          </button>
-          <div className="text-center">
-            <p className="text-sm text-gray-500">{t('session.exercise', 'Exercise')} {currentExerciseIndex + 1} / {totalExercises}</p>
-            <p className="font-semibold text-[#00F2FF]">{workout.muscle_group}</p>
-          </div>
-          <button onClick={handleSkipExercise} className="p-2 hover:bg-[#1A1A1A] rounded-lg transition-colors">
-            <SkipForward className="w-6 h-6 text-gray-400" />
-          </button>
-        </div>
+    <div className="fixed inset-0 z-[90] bg-black">
+      {/* ── Close / Quit button ── */}
+      <button
+        onClick={handleQuit}
+        style={{ top: 'max(env(safe-area-inset-top, 0px), 16px)' }}
+        className="absolute left-4 z-[110] w-10 h-10 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center text-white border border-white/20 hover:bg-black/70 transition-colors"
+      >
+        <X className="w-5 h-5" />
+      </button>
 
-        {/* Progress bar */}
-        <div className="h-1.5 bg-[#1A1A1A] rounded-full overflow-hidden">
-          <motion.div
-            initial={{ width: 0 }}
-            animate={{ width: `${exerciseProgress}%` }}
-            className="h-full bg-gradient-to-r from-[#00F2FF] to-[#CCFF00] rounded-full"
-          />
-        </div>
-      </div>
-
-      {/* Main Exercise Display */}
-      <div className="flex-1 flex flex-col justify-center px-6">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={currentExerciseIndex}
-            initial={{ opacity: 0, x: 100 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -100 }}
-            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-            className="text-center"
-          >
-            {/* Exercise name */}
-            <motion.h2
-              className="text-3xl font-bold mb-6"
-              animate={restMode ? {} : timerRunning ? {
-                scale: [1, 1.02, 1],
-              } : {}}
-              transition={{
-                duration: 1,
-                repeat: Infinity,
-                ease: "easeInOut"
+      {/* ── Vertical progress dots (right side) ── */}
+      <div
+        className="absolute right-4 z-[110] flex flex-col gap-1.5"
+        style={{ top: 'max(env(safe-area-inset-top, 0px), 16px)', marginTop: '56px' }}
+      >
+        {exercises.map((ex, i) => {
+          const exDone = (completedSets[ex.id] || 0) >= ex.sets;
+          return (
+            <div
+              key={i}
+              className="w-1.5 rounded-full transition-all duration-300"
+              style={{
+                height: i === currentIndex ? '24px' : '8px',
+                background: exDone
+                  ? '#CCFF00'
+                  : i === currentIndex
+                    ? '#00F2FF'
+                    : 'rgba(255,255,255,0.25)',
               }}
-            >
-              {currentExercise?.name}
-            </motion.h2>
-
-            {/* Set info */}
-            <div className="flex items-center justify-center gap-4 mb-8">
-              <div className="text-center">
-                <p className="text-sm text-gray-500">{t('session.set', 'Set')}</p>
-                <p className="text-2xl font-bold text-[#00F2FF]">
-                  {currentSet}/{currentExercise?.sets}
-                </p>
-              </div>
-              <div className="w-px h-12 bg-[#2A2A2A]" />
-              <div className="text-center">
-                <p className="text-sm text-gray-500">{t('session.reps', 'Reps')}</p>
-                <p className="text-2xl font-bold text-white">{currentExercise?.reps}</p>
-              </div>
-              {currentExercise?.weight > 0 && (
-                <>
-                  <div className="w-px h-12 bg-[#2A2A2A]" />
-                  <div className="text-center">
-                    <p className="text-sm text-gray-500">{t('session.weight', 'Weight')}</p>
-                    <p className="text-2xl font-bold text-[#CCFF00]">{currentExercise.weight} {t('common.kg')}</p>
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* Timer Display */}
-            <motion.div
-              className={`mb-8 ${restMode
-                ? 'animate-pulse'
-                : timerRunning
-                  ? 'animate-pulse-glow'
-                  : ''
-                }`}
-            >
-              {restMode ? (
-                <div>
-                  <p className="text-sm text-[#CCFF00] mb-2 uppercase tracking-wide">{t('session.restPeriod', 'Rest Period')}</p>
-                  <motion.p
-                    className="text-7xl font-bold text-[#CCFF00]"
-                    animate={{
-                      scale: restTime <= 5 ? [1, 1.1, 1] : 1,
-                    }}
-                    transition={{
-                      duration: 1,
-                      repeat: restTime <= 5 ? Infinity : 0,
-                    }}
-                  >
-                    {formatTime(restTime)}
-                  </motion.p>
-                  <p className="text-sm text-gray-500 mt-2">{t('session.recover', 'Recover and prepare for next set')}</p>
-                </div>
-              ) : timerRunning ? (
-                <div>
-                  <p className="text-sm text-[#00F2FF] mb-2 uppercase tracking-wide">{t('session.setDuration', 'Set Duration')}</p>
-                  <p className="text-7xl font-bold text-[#00F2FF]">{formatTime(timeElapsed)}</p>
-                  <p className="text-sm text-gray-500 mt-2">{t('session.focusOnForm', 'Focus on form and control')}</p>
-                </div>
-              ) : (
-                <div>
-                  <p className="text-sm text-gray-500 mb-2">{t('session.readyToStart', 'Ready to start?')}</p>
-                  <Dumbbell className="w-16 h-16 text-gray-600 mx-auto" />
-                </div>
-              )}
-            </motion.div>
-
-            {/* Exercise notes */}
-            {currentExercise?.notes && (
-              <div className="bg-[#1A1A1A] rounded-xl p-4 border border-[#2A2A2A] mb-8">
-                <p className="text-sm text-gray-400">💡 {currentExercise.notes}</p>
-              </div>
-            )}
-          </motion.div>
-        </AnimatePresence>
+            />
+          );
+        })}
       </div>
 
-      {/* Bottom Controls */}
-      <div className="px-6 pb-8">
-        {!restMode && (
-          <Button
-            onClick={timerRunning ? handleSetComplete : () => setTimerRunning(true)}
-            className={`w-full h-16 text-lg font-semibold transition-all ${timerRunning
-              ? 'gradient-green text-black'
-              : 'gradient-cyan text-black'
-              }`}
-          >
-            {timerRunning ? (
-              <>
-                <Check className="w-6 h-6 mr-3" />
-                {t('session.completeSet', 'Complete Set')}
-              </>
-            ) : (
-              <>
-                <Play className="w-6 h-6 mr-3" />
-                {t('session.startSet', 'Start Set')}
-              </>
-            )}
-          </Button>
-        )}
-
-        {restMode && (
-          <Button
-            onClick={() => {
-              setRestMode(false);
-              setRestTime(0);
-            }}
-            className="w-full h-16 text-lg font-semibold bg-[#1A1A1A] border-2 border-[#CCFF00] text-[#CCFF00] hover:bg-[#CCFF00] hover:text-black transition-all"
-          >
-            {t('session.skipRest', 'Skip Rest')}
-          </Button>
-        )}
+      {/* ── Scroll-snap container ── */}
+      <div
+        className="h-full w-full overflow-y-scroll"
+        style={{ scrollSnapType: 'y mandatory' }}
+      >
+        {exercises.map((exercise, index) => (
+          <ExerciseReelSlide
+            key={exercise.id || index}
+            exercise={exercise}
+            index={index}
+            totalExercises={exercises.length}
+            slideRef={el => { slideRefs.current[index] = el; }}
+            videoRef={el => { videoRefs.current[index] = el; }}
+            exerciseData={exerciseMap[exercise.name]}
+            completedSets={completedSets[exercise.id] || 0}
+            onCompleteSet={handleCompleteSet}
+            isVisible={Math.abs(index - currentIndex) <= 1}
+            isLast={index === exercises.length - 1}
+            onFinishWorkout={handleFinishWorkout}
+          />
+        ))}
       </div>
 
-      {/* Floating AI Coach */}
+      {/* ── Floating AI Coach button ── */}
       <motion.button
         onClick={() => setChatOpen(true)}
         whileHover={{ scale: 1.1 }}
         whileTap={{ scale: 0.95 }}
-        className="fixed bottom-28 right-6 w-14 h-14 rounded-full gradient-cyan flex items-center justify-center shadow-lg glow-cyan z-40"
+        className="fixed bottom-8 right-6 w-14 h-14 rounded-full gradient-cyan flex items-center justify-center shadow-lg glow-cyan z-[100]"
+        style={{ bottom: 'max(env(safe-area-inset-bottom, 0px), 32px)' }}
       >
         <Sparkles className="w-6 h-6 text-black" />
       </motion.button>
 
-      {/* AI Coach Chat */}
+      {/* ── AI Coach Chat ── */}
       <AICoachChat
         isOpen={chatOpen}
         onClose={() => setChatOpen(false)}

@@ -1,16 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
 import { Play, CheckCircle, Calendar, Dumbbell } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
-import InteractiveExerciseList from '@/components/dashboard/InteractiveExerciseList';
+import ExercisePreviewCard from '@/components/dashboard/ExercisePreviewCard';
 import ProgressRing from '@/components/dashboard/ProgressRing';
 import WorkoutPlanTabs from '@/components/dashboard/WorkoutPlanTabs';
 import WorkoutEditorSheet from '@/components/dashboard/WorkoutEditorSheet';
+import WorkoutReelsPreview from '@/components/workouts/WorkoutReelsPreview';
 
 // Local generation logic removed - now handled by backend 12-week AI AI Generator
 
@@ -27,6 +28,8 @@ export default function Dashboard() {
   const [activePlanId, setActivePlanId] = useState(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingWorkout, setEditingWorkout] = useState(null);
+  const [showReels, setShowReels] = useState(false);
+  const [reelsStartIndex, setReelsStartIndex] = useState(0);
 
   // Load profile and fetch authentic DB workouts
   useEffect(() => {
@@ -150,7 +153,19 @@ export default function Dashboard() {
   }, [user, isLoadingAuth, navigate]);
 
   const handleStartWorkout = () => {
-    navigate(createPageUrl('LiveSession'));
+    if (todayWorkout?.exercises?.length > 0) {
+      setReelsStartIndex(0);
+      setShowReels(true);
+    } else {
+      navigate(createPageUrl('LiveSession'));
+    }
+  };
+
+  const handleExerciseClick = (exerciseIndex) => {
+    if (todayWorkout?.exercises?.length > 0) {
+      setReelsStartIndex(exerciseIndex);
+      setShowReels(true);
+    }
   };
 
   const handleSetComplete = (exerciseId, setNumber) => {
@@ -340,16 +355,23 @@ export default function Dashboard() {
         </div>
       </motion.div>
 
-      {/* Exercises */}
-      {todayWorkout?.exercises && (
-        <InteractiveExerciseList
-          exercises={todayWorkout.exercises}
-          onReorder={handleReorderExercises}
-          onReplace={handleReplaceExercise}
-          isActive={workoutStarted}
-          completedSets={completedSets}
-          onSetComplete={handleSetComplete}
-        />
+      {/* Exercises — Preview Cards */}
+      {todayWorkout?.exercises?.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.15 }}
+          className="space-y-3"
+        >
+          {todayWorkout.exercises.map((exercise, index) => (
+            <ExercisePreviewCard
+              key={exercise.id || index}
+              exercise={exercise}
+              index={index}
+              onClick={handleExerciseClick}
+            />
+          ))}
+        </motion.div>
       )}
 
       {/* Quick Links */}
@@ -407,6 +429,22 @@ export default function Dashboard() {
         workout={editingWorkout}
         onSave={handleSaveWorkout}
       />
+
+      {/* Workout Preview Reels — opens before session starts */}
+      <AnimatePresence>
+        {showReels && (
+          <WorkoutReelsPreview
+            exercises={todayWorkout.exercises}
+            startIndex={reelsStartIndex}
+            onClose={() => setShowReels(false)}
+            onStart={() => {
+              const workoutId = todayWorkout._id || todayWorkout.id;
+              setShowReels(false);
+              navigate(`/WorkoutSession?id=${workoutId}`);
+            }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

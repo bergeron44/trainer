@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format, parseISO, isToday, isFuture } from 'date-fns';
 import { Calendar, Dumbbell, Check, Clock, ChevronRight, List, CalendarDays } from 'lucide-react';
@@ -8,14 +9,17 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import TrainingCalendar from '@/components/calendar/TrainingCalendar';
+import WorkoutReelsPreview from '@/components/workouts/WorkoutReelsPreview';
 
 // Mock generator completely replaced with live API fetching
 export default function Workouts() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [viewMode, setViewMode] = useState('list'); // 'list' or 'calendar'
   const [filter, setFilter] = useState('upcoming');
   const [workouts, setWorkouts] = useState([]);
   const [selectedWorkout, setSelectedWorkout] = useState(null);
+  const [previewWorkout, setPreviewWorkout] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -185,7 +189,7 @@ export default function Workouts() {
                   ) : (
                     filteredWorkouts.map((workout, index) => (
                       <motion.button
-                        key={workout.id}
+                        key={workout._id || workout.id || `workout-${index}`}
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -20 }}
@@ -277,8 +281,18 @@ export default function Workouts() {
                         </div>
 
                         <Button
-                          onClick={() => setSelectedWorkout(null)}
+                          onClick={() => {
+                            setPreviewWorkout(selectedWorkout);
+                            setSelectedWorkout(null);
+                          }}
                           className="w-full h-12 mt-2 gradient-cyan text-black font-semibold"
+                        >
+                          {t('workouts.previewStart', 'Preview & Start')}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => setSelectedWorkout(null)}
+                          className="w-full h-10 mt-2 border-[#2A2A2A] text-gray-400 hover:text-white"
                         >
                           {t('common.close', 'Close')}
                         </Button>
@@ -291,6 +305,21 @@ export default function Workouts() {
           )}
         </>
       )}
+
+      {/* Workout Preview Reels overlay */}
+      <AnimatePresence>
+        {previewWorkout && (
+          <WorkoutReelsPreview
+            exercises={previewWorkout.exercises}
+            onClose={() => setPreviewWorkout(null)}
+            onStart={() => {
+              const workoutId = previewWorkout._id || previewWorkout.id;
+              setPreviewWorkout(null);
+              navigate(`/WorkoutSession?id=${workoutId}`);
+            }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
