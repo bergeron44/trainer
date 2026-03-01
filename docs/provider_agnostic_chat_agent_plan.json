@@ -1,0 +1,274 @@
+{
+  "title": "Provider-Agnostic Chat Agent Plan",
+  "scope": "Build the trainer chat brain using OpenAI SDK first, while keeping architecture provider-agnostic for future LLM swaps.",
+  "phases": [
+    {
+      "id": 1,
+      "name": "Define Provider-Agnostic Contract",
+      "goal": "Establish backend abstractions so controllers and UI are decoupled from any LLM vendor.",
+      "tasks": [
+        "Create ChatProvider interface (e.g. server/ai/core/chatProvider.js) with generate({ system, messages, context, userId, metadata }).",
+        "Define normalized request and response DTOs shared by providers and orchestrator.",
+        "Create provider registry/factory (e.g. server/ai/providers/index.js) selected by LLM_PROVIDER env var."
+      ],
+      "deliverables": [
+        "ChatProvider contract",
+        "Provider selection factory",
+        "Generic DTO definitions"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "Implement OpenAI Provider First",
+      "goal": "Ship first production provider via OpenAI SDK without leaking OpenAI specifics to controller layer.",
+      "tasks": [
+        "Implement OpenAIChatProvider using openai package and map generic DTOs to OpenAI request format.",
+        "Read configuration from env: OPENAI_API_KEY, OPENAI_MODEL, timeout, max tokens, temperature.",
+        "Normalize provider output to { text, usage, provider, model, finishReason, raw? }."
+      ],
+      "deliverables": [
+        "OpenAI provider implementation",
+        "Environment-based model config",
+        "Normalized response mapping"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "Add Brain Orchestration Service",
+      "goal": "Centralize intelligence and policy in one service instead of controller/UI prompt assembly.",
+      "tasks": [
+        "Create ChatBrainService (e.g. server/services/chatBrainService.js).",
+        "Handle persona/system prompt composition and context shaping.",
+        "Inject memory from chat summaries.",
+        "Apply guardrails: context truncation, empty prompt checks, token budget constraints.",
+        "Run persistence hooks for chat summaries and metadata."
+      ],
+      "deliverables": [
+        "ChatBrainService orchestrator",
+        "Prompt composition strategy",
+        "Memory and guardrail pipeline"
+      ]
+    },
+    {
+      "id": 4,
+      "name": "Refactor Chat Controller",
+      "goal": "Move business logic out of controller and ensure secure user-scoped persistence.",
+      "tasks": [
+        "Replace mock generateResponse logic in server/controllers/chatController.js with ChatBrainService calls.",
+        "Scope summary reads and writes by authenticated user (req.user.id) in getSummaries and createSummary.",
+        "Add structured error handling: safe user messages + server-side logging context."
+      ],
+      "deliverables": [
+        "Thin controller with orchestrator integration",
+        "Per-user summary filtering and creation",
+        "Consistent error mapping"
+      ]
+    },
+    {
+      "id": 5,
+      "name": "Frontend Payload Contract Upgrade",
+      "goal": "Send structured chat payloads while preserving existing UX.",
+      "tasks": [
+        "Update AICoachChat and GlobalCoachChat to send messages + personaId + structured context.",
+        "Avoid sending one concatenated mega-prompt from frontend.",
+        "Maintain temporary backward compatibility in backend for old payload shape during migration."
+      ],
+      "deliverables": [
+        "Structured chat request payloads",
+        "Backward-compatible transition path",
+        "No visual/UX regression"
+      ]
+    },
+    {
+      "id": 6,
+      "name": "Reliability and Observability",
+      "goal": "Make chat behavior measurable, debuggable, and safe under load.",
+      "tasks": [
+        "Add request IDs and logs for provider/model/latency/token usage/error type.",
+        "Add retry policy for transient provider failures.",
+        "Add rate limiting on /api/chat/response."
+      ],
+      "deliverables": [
+        "Operational logs and metrics hooks",
+        "Transient retry handling",
+        "API abuse protection"
+      ]
+    },
+    {
+      "id": 7,
+      "name": "Testing Strategy",
+      "goal": "Protect architecture and behavior with unit and integration coverage.",
+      "tasks": [
+        "Unit tests for provider contract conformance and prompt composition.",
+        "Unit tests for controller validation and error mapping.",
+        "Integration tests for /api/chat/response with mocked provider.",
+        "Integration tests for per-user summaries read/write behavior."
+      ],
+      "deliverables": [
+        "Unit test suite",
+        "Integration test suite",
+        "Manual smoke checklist for both chat UIs"
+      ]
+    },
+    {
+      "id": 8,
+      "name": "Multi-Provider Expansion",
+      "goal": "Enable future vendor swapping without controller/frontend changes.",
+      "tasks": [
+        "Add AnthropicChatProvider and GeminiChatProvider implementing ChatProvider interface.",
+        "Add optional provider/model routing policy (global, per-environment, later per-user).",
+        "Keep ChatBrainService and API contract unchanged."
+      ],
+      "deliverables": [
+        "Additional provider adapters",
+        "Routing policy extension",
+        "Stable external API surface"
+      ]
+    }
+  ],
+  "delivery_sequence": [
+    {
+      "phase": "PR 1",
+      "includes": [
+        "Provider interface",
+        "OpenAI provider",
+        "Brain service",
+        "Controller migration"
+      ]
+    },
+    {
+      "phase": "PR 2",
+      "includes": [
+        "Frontend structured payload refactor",
+        "Backward compatibility bridge",
+        "Backward compatibility cleanup after rollout"
+      ]
+    },
+    {
+      "phase": "PR 3",
+      "includes": [
+        "Tests",
+        "Logging and metrics",
+        "Rate limiting",
+        "Environment and docs updates"
+      ]
+    }
+  ],
+  "execution_status": {
+    "last_updated": "2026-02-27",
+    "steps": [
+      {
+        "phase_id": 1,
+        "name": "Define Provider-Agnostic Contract",
+        "status": "completed",
+        "completed_work": [
+          "Added chat provider contract with validated generateSafe flow.",
+          "Added shared Zod schemas for normalized chat input/output DTOs.",
+          "Added provider registry/factory with LLM_PROVIDER selection and built-in registration."
+        ],
+        "files": [
+          "trainer/server/ai/core/chatProvider.js",
+          "trainer/server/ai/core/chatSchemas.js",
+          "trainer/server/ai/providers/index.js",
+          "trainer/server/ai/index.js"
+        ]
+      },
+      {
+        "phase_id": 2,
+        "name": "Implement OpenAI Provider First",
+        "status": "completed",
+        "completed_work": [
+          "Implemented OpenAIChatProvider using OpenAI SDK Responses API.",
+          "Mapped generic DTOs to provider request payload (instructions, messages, options, metadata, safety identifier).",
+          "Added env-driven config (OPENAI_API_KEY, OPENAI_MODEL, OPENAI_BASE_URL, OPENAI_TIMEOUT_MS, OPENAI_MAX_RETRIES, OPENAI_TEMPERATURE, OPENAI_MAX_OUTPUT_TOKENS).",
+          "Normalized provider output to { text, provider, model, finishReason, usage, raw? }."
+        ],
+        "files": [
+          "trainer/server/ai/providers/openaiChatProvider.js"
+        ]
+      },
+      {
+        "phase_id": 3,
+        "name": "Add Brain Orchestration Service",
+        "status": "completed",
+        "completed_work": [
+          "Implemented ChatBrainService to centralize persona/system prompt composition.",
+          "Added memory loading from ChatSummary and memory-aware prompt injection.",
+          "Added guardrails for empty inputs, message truncation, message-count limits, and token-budget pruning.",
+          "Added summary persistence hook with safe error handling and optional lifecycle hooks."
+        ],
+        "files": [
+          "trainer/server/services/chatBrainService.js"
+        ]
+      },
+      {
+        "phase_id": 4,
+        "name": "Refactor Chat Controller",
+        "status": "completed",
+        "completed_work": [
+          "Replaced mock chat logic with ChatBrainService integration in /api/chat/response.",
+          "Added structured chat error mapping for validation, provider configuration, and upstream failures.",
+          "Scoped chat summary queries to the authenticated user in getSummaries.",
+          "Scoped chat summary creation to the authenticated user in createSummary and added payload validation."
+        ],
+        "files": [
+          "trainer/server/controllers/chatController.js",
+          "trainer/server/ai/providers/openaiChatProvider.js"
+        ]
+      },
+      {
+        "phase_id": 5,
+        "name": "Frontend Payload Contract Upgrade",
+        "status": "completed",
+        "completed_work": [
+          "Migrated AICoachChat to send structured messages, personaId, and structured context.",
+          "Migrated GlobalCoachChat to send structured messages, personaId, and structured context.",
+          "Removed frontend prompt-concatenation mega-prompt construction.",
+          "Removed extra /chat/summaries write call from GlobalCoachChat to avoid duplicate summary persistence."
+        ],
+        "files": [
+          "trainer/src/components/dashboard/AICoachChat.jsx",
+          "trainer/src/components/coach/GlobalCoachChat.jsx"
+        ]
+      },
+      {
+        "phase_id": 6,
+        "name": "Reliability and Observability",
+        "status": "completed",
+        "completed_work": [
+          "Added request ID middleware and response header propagation.",
+          "Added chat response logs with provider/model/latency/usage/error type/requestId.",
+          "Added transient provider retry strategy in ChatBrainService with configurable backoff.",
+          "Added in-memory rate limiting middleware on /api/chat/response."
+        ],
+        "files": [
+          "trainer/server/middleware/requestContextMiddleware.js",
+          "trainer/server/middleware/rateLimitMiddleware.js",
+          "trainer/server/services/chatBrainService.js",
+          "trainer/server/controllers/chatController.js",
+          "trainer/server/routes/chatRoutes.js",
+          "trainer/server/index.js"
+        ]
+      },
+      {
+        "phase_id": 7,
+        "name": "Testing Strategy",
+        "status": "completed",
+        "completed_work": [
+          "Added unit tests for provider contract validation.",
+          "Added unit tests for ChatBrainService persona/memory orchestration and retry behavior.",
+          "Added integration-style controller tests for /chat response mapping and user-scoped summaries read/write.",
+          "Added backend test script using Node test runner and verified all tests passing."
+        ],
+        "files": [
+          "trainer/server/tests/chatProvider.test.js",
+          "trainer/server/tests/chatBrainService.test.js",
+          "trainer/server/tests/chatController.test.js",
+          "trainer/server/package.json",
+          "trainer/server/controllers/chatController.js"
+        ]
+      }
+    ]
+  },
+  "next_step": "Execute Step 8: implement additional provider adapters (e.g. Anthropic/Gemini) behind the same ChatProvider interface."
+}
