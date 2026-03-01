@@ -1,56 +1,151 @@
 const ChatSummary = require('../models/ChatSummary');
 const asyncHandler = require('express-async-handler');
+const ChatBrainService = require('../services/chatBrainService');
 
-// @desc    Generate a response (Mock AI)
+let chatBrainService = new ChatBrainService();
+
+function clampInt(value, { min, max, fallback }) {
+    const parsed = Number.parseInt(value, 10);
+    if (!Number.isFinite(parsed)) return fallback;
+    return Math.min(max, Math.max(min, parsed));
+}
+
+function sanitizeContext(context) {
+    if (!context) return undefined;
+    if (typeof context === 'string') return context;
+    if (typeof context === 'object') return JSON.stringify(context);
+    return String(context);
+}
+
+function mapChatError(error) {
+    if (error?.name === 'ZodError') {
+        return {
+            status: 400,
+            code: 'CHAT_VALIDATION_ERROR',
+            message: 'Invalid chat payload.',
+            details: error.issues || [],
+        };
+    }
+
+    if (
+        typeof error?.message === 'string' &&
+        error.message.toLowerCase().includes('not configured')
+    ) {
+        return {
+            status: 503,
+            code: 'CHAT_PROVIDER_NOT_CONFIGURED',
+            message: 'Chat provider is not configured on the server.',
+        };
+    }
+
+    if (typeof error?.status === 'number') {
+        return {
+            status: 502,
+            code: 'CHAT_PROVIDER_ERROR',
+            message: 'Upstream AI provider request failed.',
+        };
+    }
+
+    return {
+        status: 500,
+        code: 'CHAT_INTERNAL_ERROR',
+        message: 'Failed to generate chat response.',
+    };
+}
+
+function classifyError(error) {
+    if (error?.name === 'ZodError') return 'validation';
+    if (typeof error?.status === 'number') return 'provider_http';
+    if (error?.code) return `provider_${String(error.code).toLowerCase()}`;
+    return 'internal';
+}
+
+// @desc    Generate a response
 // @route   POST /api/chat/response
 // @access  Private
 const generateResponse = asyncHandler(async (req, res) => {
-    const { prompt, context, coachStyle } = req.body;
+    const start = Date.now();
+    try {
+        const {
+            prompt,
+            messages,
+            context,
+            coachStyle,
+            personaId,
+            system,
+            metadata,
+            options,
+            persistSummary,
+            memoryLimit,
+        } = req.body || {};
 
-    // In a real app, you would call OpenAI/Anthropic API here.
-    // For now, we'll use a simple rule-based mock response.
+        const result = await chatBrainService.generateResponse({
+            prompt,
+            messages,
+            context,
+            coachStyle,
+            personaId,
+            system,
+            metadata,
+            options,
+            persistSummary,
+            memoryLimit,
+            userId: req.user.id,
+        });
 
-    let response = "I'm here to help you crush your goals! 💪";
+        const latencyMs = Date.now() - start;
+        console.log('chat.response.success', {
+            requestId: req.requestId,
+            userId: req.user?.id,
+            provider: result.provider,
+            model: result.model,
+            latencyMs,
+            usage: result.usage,
+        });
 
-    const lowerPrompt = prompt.toLowerCase();
-
-    if (lowerPrompt.includes('nutrition') || lowerPrompt.includes('eat') || lowerPrompt.includes('food')) {
-        response = "Nutrition is key! 🍎 Focus on whole foods and hitting your protein goals. Need specific meal ideas?";
-    } else if (lowerPrompt.includes('workout') || lowerPrompt.includes('exercise') || lowerPrompt.includes('gym')) {
-        response = "Consistency is king in the gym! 🏋️‍♂️ Stick to the plan and push for progress over perfection.";
-    } else if (lowerPrompt.includes('tired') || lowerPrompt.includes('rest')) {
-        response = "Rest is when the muscles grow! 😴 Listen to your body, but don't let excuses win.";
+        res.json({
+            response: result.response,
+            provider: result.provider,
+            model: result.model,
+            finishReason: result.finishReason,
+            usage: result.usage,
+            meta: result.meta,
+            requestId: req.requestId,
+        });
+    } catch (error) {
+        const mappedError = mapChatError(error);
+        const latencyMs = Date.now() - start;
+        console.error('chatController.generateResponse error:', {
+            code: mappedError.code,
+            message: error?.message,
+            status: error?.status,
+            userId: req.user?.id,
+            requestId: req.requestId,
+            errorType: classifyError(error),
+            latencyMs,
+        });
+        res.status(mappedError.status).json({
+            error: mappedError.code,
+            message: mappedError.message,
+            details: mappedError.details,
+            requestId: req.requestId,
+        });
     }
-
-    // Verify context/style for flavor (optional enhancement)
-    if (coachStyle === 'hardcore') {
-        response = response.toUpperCase() + " NO EXCUSES!";
-    } else if (coachStyle === 'spicy') {
-        response += " Don't slack off now! 🔥";
-    }
-
-    res.json({ response });
 });
 
 // @desc    Get chat summaries
 // @route   GET /api/chat/summaries
 // @access  Private
 const getSummaries = asyncHandler(async (req, res) => {
-    // Assuming ChatSummary model has a 'user' field, though the provided schema definition was minimal.
-    // If the schema in 'entitis' file didn't specify a user, we might need to adjust.
-    // Ideally, we filter by req.user.id
+    const limit = clampInt(req.query.limit, {
+        min: 1,
+        max: 20,
+        fallback: 5,
+    });
 
-    // Check if ChatSummary model has user field, if not, we might need to update the model or just return all (not ideal for multi-user)
-    // For now, let's assume valid schema or user-agnostic for this phase if schema is simple.
-    // Actually, let's check the model file content in next steps if needed. 
-    // Based on typical pattern:
-    const summaries = await ChatSummary.find({}).sort({ createdAt: -1 }).limit(5); // Adjusted to not filter by user if schema doesn't have it yet, or add it.
-
-    // NOTE: If ChatSummary schema doesn't have 'user', we should look into adding it. 
-    // But for this refactor, we stick to existing structure unless we edit model.
-    // We'll trust existing schema has timestamps (check entitis or model file).
-    // Schema in 'entitis': "ChatSummary": { "id": "uuid", "created_date": "datetime", ... }
-    // Mongoose equivalent usually has createdAt.
+    const summaries = await ChatSummary.find({ user: req.user.id })
+        .sort({ createdAt: -1 })
+        .limit(limit);
 
     res.json(summaries);
 });
@@ -60,19 +155,35 @@ const getSummaries = asyncHandler(async (req, res) => {
 // @access  Private
 const createSummary = asyncHandler(async (req, res) => {
     const { user_request, ai_response, context } = req.body;
+    if (!user_request || !ai_response) {
+        return res.status(400).json({
+            error: 'CHAT_SUMMARY_VALIDATION_ERROR',
+            message: 'user_request and ai_response are required.',
+        });
+    }
 
     const summary = await ChatSummary.create({
+        user: req.user.id,
         user_request,
         ai_response,
-        context,
-        // user: req.user.id // Add this if we update the schema
+        context: sanitizeContext(context),
     });
 
     res.status(201).json(summary);
 });
 
+function setChatBrainServiceForTests(service) {
+    chatBrainService = service;
+}
+
+function resetChatBrainServiceForTests() {
+    chatBrainService = new ChatBrainService();
+}
+
 module.exports = {
     generateResponse,
     getSummaries,
     createSummary,
+    setChatBrainServiceForTests,
+    resetChatBrainServiceForTests,
 };

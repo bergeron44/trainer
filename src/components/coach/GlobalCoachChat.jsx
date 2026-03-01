@@ -75,25 +75,29 @@ export default function GlobalCoachChat({
     if (!input.trim() || isTyping) return;
 
     const userMessage = input.trim();
+    const outgoingMessages = [...messages, { role: 'user', content: userMessage }]
+      .filter((message, index) => !(index === 0 && message.role === 'assistant'))
+      .slice(-12)
+      .map(({ role, content }) => ({ role, content }));
+
+    const structuredContext = {
+      label: context,
+      page: 'GlobalCoachChat',
+      memoryCount: pastMemories.length
+    };
+
     setInput('');
     setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
     setIsTyping(true);
 
-    // Build memory context from past summaries
-    let memoryContext = '';
-    if (pastMemories.length > 0) {
-      memoryContext = '\n\nPAST USER INTERACTIONS (for context):\n' +
-        pastMemories.map(m => `- User: ${m.user_request} → Coach: ${m.ai_response}`).join('\n');
-    }
-
-    // Build the full prompt with persona and memory
-    const systemPrompt = `${persona.style}\n\nYou are helping with: ${context}.${memoryContext}\n\nKeep responses concise and actionable (2-3 sentences max).`;
-
     try {
-      // Call custom backend API
       const { data } = await api.post('/chat/response', {
-        prompt: `${systemPrompt}\n\nUser: ${userMessage}`,
-        context,
+        messages: outgoingMessages,
+        context: structuredContext,
+        personaId: coachStyle,
+        metadata: {
+          surface: 'GlobalCoachChat'
+        },
         coachStyle
       });
 
@@ -101,26 +105,12 @@ export default function GlobalCoachChat({
       setMessages(prev => [...prev, { role: 'assistant', content: aiResponse }]);
       setIsTyping(false);
 
-      // Summarize and save to memory (in background)
-      (async () => {
-        try {
-          // The backend createSummary endpoint expects user_request, ai_response.
-          await api.post('/chat/summaries', {
-            user_request: userMessage,
-            ai_response: aiResponse,
-            context: context
-          });
-
-          // Update local memories
-          setPastMemories(prev => [{
-            user_request: userMessage,
-            ai_response: aiResponse,
-            context: context
-          }, ...prev].slice(0, 5));
-        } catch (err) {
-          console.error("Failed to save chat summary", err);
-        }
-      })();
+      // Update local memory indicator without additional write calls.
+      setPastMemories(prev => [{
+        user_request: userMessage,
+        ai_response: aiResponse,
+        context: context
+      }, ...prev].slice(0, 5));
     } catch (error) {
       console.error("Chat error:", error);
       setMessages(prev => [...prev, { role: 'assistant', content: "I'm having trouble connecting right now. Let's try again in a moment!" }]);

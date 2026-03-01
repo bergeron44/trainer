@@ -59,17 +59,44 @@ export default function AICoachChat({
     if (!input.trim() || isLoading) return;
 
     const userMessage = input.trim();
+    const outgoingMessages = [...messages, { role: 'user', content: userMessage }]
+      .filter((message, index) => !(index === 0 && message.role === 'assistant'))
+      .slice(-12)
+      .map(({ role, content }) => ({ role, content }));
+
+    const structuredContext = {
+      label: isInSession ? 'Workout Session' : 'Dashboard',
+      page: isInSession ? 'WorkoutSession' : 'Dashboard',
+      userProfile: {
+        goal: userProfile?.goal,
+        experience_level: userProfile?.experience_level,
+        environment: userProfile?.environment,
+        injuries: userProfile?.injuries || 'None'
+      },
+      currentWorkout: currentWorkout ? {
+        muscle_group: currentWorkout?.muscle_group,
+        exercises: currentWorkout?.exercises?.map((exercise) => ({
+          name: exercise.name,
+          sets: exercise.sets,
+          reps: exercise.reps,
+          weight: exercise.weight
+        }))
+      } : null
+    };
+
     setInput('');
     setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
     setIsLoading(true);
 
     try {
-      // Construct the prompt manually as we did with Base44
-      const prompt = `${persona.style}\n\nUSER PROFILE:\n- Goal: ${userProfile?.goal}\n- Experience: ${userProfile?.experience_level}\n- Environment: ${userProfile?.environment}\n- Injuries: ${userProfile?.injuries || 'None'}\n\nCURRENT WORKOUT:\n- Focus: ${currentWorkout?.muscle_group}\n- Exercises: ${JSON.stringify(currentWorkout?.exercises?.map(e => ({ name: e.name, sets: e.sets, reps: e.reps, weight: e.weight })), null, 2)}\n\nUSER MESSAGE: "${userMessage}"\n\nRespond in your unique coaching style. If the user needs workout modifications, just describe them in text for now.`;
-
       const { data } = await api.post('/chat/response', {
-        prompt: prompt,
-        context: isInSession ? 'Workout Session' : 'Dashboard',
+        messages: outgoingMessages,
+        context: structuredContext,
+        personaId: personality,
+        metadata: {
+          surface: 'AICoachChat',
+          is_in_session: isInSession
+        },
         coachStyle: personality
       });
 
