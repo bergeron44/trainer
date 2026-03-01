@@ -1,68 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence, Reorder, useMotionValue, useTransform } from 'framer-motion';
 import { GripVertical, RefreshCw, Play, Pause, Check, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from 'react-i18next';
+import api from '@/api/axios';
 
 const SWIPE_THRESHOLD_HALF = -80;
 const SWIPE_THRESHOLD_FULL = -160;
-
-// Alternative exercises — names match Exercise DB canonical names
-const ALTERNATIVES = {
-  // CHEST
-  'Bench Press': ['Dumbbell Press', 'Floor Press', 'Push-Up', 'Machine Chest Press'],
-  'Incline Bench Press': ['Incline Dumbbell Press', 'Low Cable Fly', 'Incline Push-Up'],
-  'Incline Dumbbell Press': ['Incline Bench Press', 'Low Cable Fly', 'Incline Push-Up'],
-  'Dumbbell Press': ['Bench Press', 'Floor Press', 'Machine Chest Press'],
-  'Cable Chest Fly': ['Dumbbell Fly', 'Pec Deck', 'Dumbbell Press'],
-  'Dumbbell Fly': ['Cable Chest Fly', 'Pec Deck', 'Incline Dumbbell Press'],
-  'Push-Up': ['Incline Push-Up', 'Pike Push-Up', 'Dips'],
-  'Dips': ['Skull Crusher', 'Tricep Pushdown', 'Close Grip Bench Press'],
-  'Tricep Dips': ['Skull Crusher', 'Tricep Pushdown', 'Close Grip Bench Press'],
-
-  // BACK
-  'Pull-Up': ['Lat Pulldown', 'Assisted Pull-Up', 'Chin-Up'],
-  'Barbell Row': ['Seated Cable Row', 'Pendlay Row', 'T-Bar Row'],
-  'Dumbbell Row': ['Seated Cable Row', 'Barbell Row', 'T-Bar Row'],
-  'Lat Pulldown': ['Pull-Up', 'Assisted Pull-Up', 'Chin-Up'],
-  'Face Pull': ['Rear Delt Fly', 'Band Pull Apart', 'Reverse Pec Deck'],
-  'Deadlift': ['Romanian Deadlift', 'Barbell Row', 'Kettlebell Swing'],
-
-  // LEGS
-  'Squat': ['Goblet Squat', 'Leg Press', 'Hack Squat'],
-  'Goblet Squat': ['Air Squat', 'Leg Press', 'Split Squat'],
-  'Walking Lunge': ['Reverse Lunge', 'Bulgarian Split Squat', 'Step Up'],
-  'Romanian Deadlift': ['Leg Curl', 'Deadlift', 'Bulgarian Split Squat'],
-  'Leg Press': ['Squat', 'Hack Squat', 'Goblet Squat'],
-
-  // SHOULDERS
-  'Overhead Press': ['Arnold Press', 'Landmine Press', 'Dumbbell Shoulder Press'],
-  'Lateral Raise': ['Cable Lateral Raise', 'Upright Row', 'Reverse Fly'],
-  'Arnold Press': ['Overhead Press', 'Dumbbell Shoulder Press', 'Landmine Press'],
-
-  // ARMS
-  'Barbell Curl': ['Dumbbell Curl', 'Cable Curl', 'Preacher Curl'],
-  'Dumbbell Curl': ['Barbell Curl', 'Hammer Curl', 'Cable Curl'],
-  'Tricep Pushdown': ['Skull Crusher', 'Overhead Tricep Extension', 'Tricep Dips'],
-  'Skull Crusher': ['Tricep Pushdown', 'Overhead Tricep Extension', 'Close Grip Bench Press'],
-
-  // CORE
-  'Plank': ['Dead Bug', 'Bird Dog', 'Hollow Hold'],
-  'Crunch': ['Cable Crunch', 'Hanging Leg Raise', 'Russian Twist'],
-
-  // FULL BODY / POWER
-  'Power Clean': ['Hang Clean', 'High Pull', 'Kettlebell Swing'],
-  'Hang Clean': ['Power Clean', 'High Pull', 'Kettlebell Swing'],
-  'Box Jump': ['Jump Squat', 'Depth Jump', 'Tuck Jump'],
-  'Medicine Ball Slam': ['Battle Ropes', 'Kettlebell Swing', 'Burpee'],
-  'Broad Jump': ['Box Jump', 'Tuck Jump', 'Jump Squat'],
-  'Battle Ropes': ['Jumping Jack', 'Mountain Climber', 'High Knees'],
-};
-
-function getRandomAlternative(exerciseName) {
-  const alts = ALTERNATIVES[exerciseName] || ['Alternative Exercise'];
-  return alts[Math.floor(Math.random() * alts.length)];
-}
 
 function SwipeableExerciseCard({
   exercise,
@@ -80,6 +24,13 @@ function SwipeableExerciseCard({
   const [restMode, setRestMode] = useState(false);
   const [restTime, setRestTime] = useState(0);
   const [isReplacing, setIsReplacing] = useState(false);
+  const [alternatives, setAlternatives] = useState([]);
+
+  useEffect(() => {
+    api.get(`/exercises/lookup?name=${encodeURIComponent(exercise.name)}`)
+      .then(({ data }) => { if (data?.alternatives?.length) setAlternatives(data.alternatives); })
+      .catch(() => {});
+  }, [exercise.name]);
 
   const x = useMotionValue(0);
   const background = useTransform(
@@ -123,19 +74,24 @@ function SwipeableExerciseCard({
     setTimerRunning(!timerRunning);
   };
 
+  const getAlternativeName = () => {
+    if (alternatives.length) return alternatives[Math.floor(Math.random() * alternatives.length)];
+    return exercise.name;
+  };
+
   const handleDragEnd = async (_, info) => {
     const offset = info.offset.x;
     if (offset < SWIPE_THRESHOLD_FULL) {
-      // Full swipe - auto replace with AI
+      // Full swipe - auto replace
       setIsReplacing(true);
-      const newExercise = getRandomAlternative(exercise.name);
+      const newName = getAlternativeName();
       setTimeout(() => {
-        onReplace(exercise.id, { ...exercise, name: newExercise, id: `ex_${Date.now()}` });
+        onReplace(exercise.id, { ...exercise, name: newName, id: `ex_${Date.now()}` });
         setIsReplacing(false);
       }, 600);
     } else if (offset < SWIPE_THRESHOLD_HALF) {
-      // Half swipe - show replace option
-      onReplace(exercise.id, { ...exercise, name: getRandomAlternative(exercise.name), id: `ex_${Date.now()}` });
+      // Half swipe - replace immediately
+      onReplace(exercise.id, { ...exercise, name: getAlternativeName(), id: `ex_${Date.now()}` });
     }
   };
 

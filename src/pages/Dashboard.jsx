@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
-import { Play, CheckCircle, Calendar, Dumbbell } from 'lucide-react';
+import { Play, CheckCircle, Flame, Clock, Layers } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
@@ -12,8 +12,6 @@ import ProgressRing from '@/components/dashboard/ProgressRing';
 import WorkoutPlanTabs from '@/components/dashboard/WorkoutPlanTabs';
 import WorkoutEditorSheet from '@/components/dashboard/WorkoutEditorSheet';
 import WorkoutReelsPreview from '@/components/workouts/WorkoutReelsPreview';
-
-// Local generation logic removed - now handled by backend 12-week AI AI Generator
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -31,7 +29,6 @@ export default function Dashboard() {
   const [showReels, setShowReels] = useState(false);
   const [reelsStartIndex, setReelsStartIndex] = useState(0);
 
-  // Load profile and fetch authentic DB workouts
   useEffect(() => {
     if (isLoadingAuth) return;
 
@@ -52,7 +49,6 @@ export default function Dashboard() {
           'Content-Type': 'application/json'
         };
 
-        // 1. Check if user needs the 12-week generative plan built
         let needsPlan = !profileData.has_existing_plan;
 
         if (needsPlan) {
@@ -60,42 +56,31 @@ export default function Dashboard() {
             method: 'POST',
             headers
           });
-
           if (genRes.ok) {
-            console.log('Successfully generated 12-week DB plan');
-            // Optimistically update local profile flag
             profileData.has_existing_plan = true;
           }
         }
 
-        // 2. Fetch the newly built (or existing) workouts for this week
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
-        // Grab the next 7 days of workouts as our "live" cache for the dashboard
         const endOfWeek = new Date(today);
         endOfWeek.setDate(today.getDate() + 7);
 
         const fetchUrl = `http://localhost:5001/api/workouts?startDate=${today.toISOString()}&endDate=${endOfWeek.toISOString()}`;
         const workRes = await fetch(fetchUrl, { headers });
 
-        if (!workRes.ok) {
-          throw new Error('Failed to fetch workouts');
-        }
+        if (!workRes.ok) throw new Error('Failed to fetch workouts');
 
         const fetchedWorkouts = await workRes.json();
 
         if (Array.isArray(fetchedWorkouts) && fetchedWorkouts.length > 0) {
-          // Normalize formatting to YYYY-MM-DD for matching
           const todayStr = format(today, 'yyyy-MM-dd');
-
-          // Find the specific workout scheduled exactly for today
           const todaysWorkout = fetchedWorkouts.find(w => format(new Date(w.date), 'yyyy-MM-dd') === todayStr);
 
           if (todaysWorkout) {
             setTodayWorkout(todaysWorkout);
           } else {
-            // If there's no workout today (rest day), create a null-state representation or pick the next closest
             setTodayWorkout({
               id: 'rest_day',
               muscle_group: t('common.restDay', 'Rest / Active Recovery'),
@@ -104,23 +89,18 @@ export default function Dashboard() {
             });
           }
 
-          // Build dynamic tabs based on the upcoming week's routine
           const plans = fetchedWorkouts.slice(0, 5).map((w, i) => ({
             id: w._id || `plan_${i}`,
             name: w.muscle_group,
             rawItem: w
           }));
 
-          // Ensure unique tabs (no repeating "Rest Day" tabs etc)
           const uniquePlans = Array.from(new Map(plans.map(item => [item.name, item])).values());
-
           setWorkoutPlans(uniquePlans);
           setActivePlanId(uniquePlans.find(p => todaysWorkout && p.name === todaysWorkout.muscle_group)?.id || uniquePlans[0]?.id);
 
-          // Cache the full incoming list locally for quick editor matching
           localStorage.setItem('nexus_live_workouts', JSON.stringify(fetchedWorkouts));
         } else {
-          // Fallback to prevent infinite loader
           setTodayWorkout({
             id: 'error_fallback',
             muscle_group: t('dashboard.noWorkoutsFound', 'No Workouts Found'),
@@ -129,9 +109,8 @@ export default function Dashboard() {
           });
           setWorkoutPlans([{ id: 'fb', name: t('dashboard.noWorkoutsFound', 'No Workouts') }]);
         }
-
       } catch (err) {
-        console.error("Failed to initialize workout data via API:", err);
+        console.error('Failed to initialize workout data:', err);
         setTodayWorkout({
           id: 'error_fallback',
           muscle_group: t('dashboard.failedToLoad', 'Failed to Load'),
@@ -144,16 +123,14 @@ export default function Dashboard() {
 
     initWorkouts();
 
-    // Load completed sets
     const todayStr = format(new Date(), 'yyyy-MM-dd');
-    const savedCompletedSets = localStorage.getItem(`nexus_completed_sets_${todayStr}`);
-    if (savedCompletedSets) {
-      setCompletedSets(JSON.parse(savedCompletedSets));
-    }
+    const saved = localStorage.getItem(`nexus_completed_sets_${todayStr}`);
+    if (saved) setCompletedSets(JSON.parse(saved));
   }, [user, isLoadingAuth, navigate]);
 
   const handleStartWorkout = () => {
     if (todayWorkout?.exercises?.length > 0) {
+      setWorkoutStarted(true);
       setReelsStartIndex(0);
       setShowReels(true);
     } else {
@@ -168,68 +145,11 @@ export default function Dashboard() {
     }
   };
 
-  const handleSetComplete = (exerciseId, setNumber) => {
-    const newCompletedSets = {
-      ...completedSets,
-      [exerciseId]: setNumber
-    };
-    setCompletedSets(newCompletedSets);
-
-    // Save to localStorage
-    const today = format(new Date(), 'yyyy-MM-dd');
-    localStorage.setItem(`nexus_completed_sets_${today}`, JSON.stringify(newCompletedSets));
-  };
-
-  const handleReorderExercises = async (newOrder) => {
-    setTodayWorkout(prev => ({ ...prev, exercises: newOrder }));
-
-    // Attempt real update to DB
-    if (todayWorkout && todayWorkout._id) {
-      try {
-        await fetch(`http://localhost:5001/api/workouts/${todayWorkout._id}`, {
-          method: 'PUT',
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ exercises: newOrder })
-        });
-      } catch (e) {
-        console.error("Failed reorder update", e);
-      }
-    }
-  };
-
-  const handleReplaceExercise = async (exerciseId, newExercise) => {
-    const newExercises = todayWorkout.exercises.map(ex =>
-      ex.id === exerciseId ? newExercise : ex
-    );
-    setTodayWorkout(prev => ({ ...prev, exercises: newExercises }));
-
-    if (todayWorkout && todayWorkout._id) {
-      try {
-        await fetch(`http://localhost:5001/api/workouts/${todayWorkout._id}`, {
-          method: 'PUT',
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ exercises: newExercises })
-        });
-      } catch (e) {
-        console.error("Failed replacing exercise", e);
-      }
-    }
-  };
-
   const handleOpenEditor = (plan) => {
-    const savedWorkouts = localStorage.getItem('nexus_live_workouts');
-    let workouts = savedWorkouts ? JSON.parse(savedWorkouts) : [];
+    const saved = localStorage.getItem('nexus_live_workouts');
+    let workouts = saved ? JSON.parse(saved) : [];
     let workoutForPlan = workouts.find(w => w.muscle_group === plan.name);
-
-    if (!workoutForPlan) {
-      workoutForPlan = { ...todayWorkout, muscle_group: plan.name, id: `workout_${plan.id}` };
-    }
+    if (!workoutForPlan) workoutForPlan = { ...todayWorkout, muscle_group: plan.name, id: `workout_${plan.id}` };
     setEditingWorkout(workoutForPlan);
     setEditorOpen(true);
   };
@@ -238,7 +158,6 @@ export default function Dashboard() {
     if (todayWorkout?.id === updatedWorkout.id || todayWorkout?._id === updatedWorkout._id) {
       setTodayWorkout(updatedWorkout);
     }
-
     if (updatedWorkout._id) {
       try {
         await fetch(`http://localhost:5001/api/workouts/${updatedWorkout._id}`, {
@@ -249,14 +168,10 @@ export default function Dashboard() {
           },
           body: JSON.stringify({ exercises: updatedWorkout.exercises, notes: updatedWorkout.notes })
         });
-
-        // Force update local cache
-        const savedWorkouts = JSON.parse(localStorage.getItem('nexus_live_workouts') || '[]');
-        const updatedList = savedWorkouts.map(w => w._id === updatedWorkout._id ? updatedWorkout : w);
-        localStorage.setItem('nexus_live_workouts', JSON.stringify(updatedList));
-
+        const saved = JSON.parse(localStorage.getItem('nexus_live_workouts') || '[]');
+        localStorage.setItem('nexus_live_workouts', JSON.stringify(saved.map(w => w._id === updatedWorkout._id ? updatedWorkout : w)));
       } catch (e) {
-        console.error("Failed workout update on editor save", e);
+        console.error('Failed workout update', e);
       }
     }
   };
@@ -264,50 +179,54 @@ export default function Dashboard() {
   const handleSelectPlan = (planId) => {
     setActivePlanId(planId);
     const plan = workoutPlans.find(p => p.id === planId);
-    if (plan && plan.rawItem) {
+    if (plan?.rawItem) {
       setTodayWorkout(plan.rawItem);
     } else if (plan) {
-      const savedWorkouts = localStorage.getItem('nexus_live_workouts');
-      let workouts = savedWorkouts ? JSON.parse(savedWorkouts) : [];
-      const workoutForPlan = workouts.find(w => w.muscle_group === plan.name);
-      if (workoutForPlan) {
-        setTodayWorkout(workoutForPlan);
-      }
+      const saved = localStorage.getItem('nexus_live_workouts');
+      const workouts = saved ? JSON.parse(saved) : [];
+      const found = workouts.find(w => w.muscle_group === plan.name);
+      if (found) setTodayWorkout(found);
     }
   };
 
   const totalSets = todayWorkout?.exercises?.reduce((acc, ex) => acc + ex.sets, 0) || 0;
-  const completedSetsTotal = Object.values(completedSets).reduce((acc, sets) => acc + sets, 0);
+  const completedSetsTotal = Object.values(completedSets).reduce((acc, n) => acc + n, 0);
   const progress = totalSets > 0 ? Math.round((completedSetsTotal / totalSets) * 100) : 0;
+
+  // Estimated workout duration in minutes
+  const estimatedDuration = todayWorkout?.exercises?.length > 0
+    ? Math.round(todayWorkout.exercises.reduce((acc, ex) => acc + ex.sets * (45 + (ex.rest_seconds || 90)), 0) / 60)
+    : 0;
 
   if (!profile || !todayWorkout) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-[#0A0A0A]">
         <div className="w-8 h-8 border-2 border-[#00F2FF] border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen px-4 py-6">
-      {/* Header */}
+    <div className="min-h-screen bg-[#0A0A0A] px-4 pt-6 pb-28">
+
+      {/* ── Header ── */}
       <motion.div
-        initial={{ opacity: 0, y: -20 }}
+        initial={{ opacity: 0, y: -16 }}
         animate={{ opacity: 1, y: 0 }}
-        className="mb-4"
+        className="mb-5"
       >
         <p className="text-gray-500 text-sm">{format(new Date(), 'EEEE, MMMM d')}</p>
-        <h1 className="text-2xl font-bold mt-1">
-          {t('dashboard.todaysFocus', "Today's Focus:")} <span className="text-[#00F2FF]">{todayWorkout?.muscle_group || t('common.restDay', 'Rest Day')}</span>
+        <h1 className="text-2xl font-black text-white mt-0.5">
+          {t('dashboard.greeting', 'Ready to train,')} <span className="text-[#00F2FF]">{user?.name?.split(' ')[0] || 'Champ'}</span> 💪
         </h1>
       </motion.div>
 
-      {/* Workout Plan Tabs */}
+      {/* ── Week Day Tabs ── */}
       <motion.div
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
         transition={{ delay: 0.05 }}
-        className="mb-6"
+        className="mb-5"
       >
         <WorkoutPlanTabs
           plans={workoutPlans}
@@ -317,112 +236,143 @@ export default function Dashboard() {
         />
       </motion.div>
 
-      {/* Progress Section */}
+      {/* ── Today's Workout Hero Card ── */}
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
+        initial={{ opacity: 0, y: 24 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
-        className="bg-gradient-to-br from-[#1A1A1A] to-[#0A0A0A] rounded-3xl p-6 border border-[#2A2A2A] mb-8"
+        transition={{ delay: 0.1, type: 'spring', stiffness: 280, damping: 28 }}
+        className="relative overflow-hidden rounded-3xl mb-5"
+        style={{
+          background: 'linear-gradient(135deg, #001820 0%, #001008 50%, #080808 100%)',
+          border: '1px solid rgba(0,242,255,0.18)'
+        }}
       >
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-semibold mb-1">{t('dashboard.workoutProgress', 'Workout Progress')}</h2>
-            <p className="text-gray-500 text-sm">
-              {t('dashboard.setsCompleted', '{{completed}} of {{total}} sets completed', { completed: completedSetsTotal, total: totalSets })}
-            </p>
+        {/* Glow blobs */}
+        <div className="absolute -top-16 -right-16 w-56 h-56 bg-[#00F2FF]/8 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-12 -left-12 w-40 h-40 bg-[#CCFF00]/5 rounded-full blur-3xl pointer-events-none" />
 
-            {!workoutStarted ? (
-              <Button
-                onClick={handleStartWorkout}
-                className="mt-4 gradient-cyan text-black font-semibold px-6"
-              >
-                <Play className="w-4 h-4 mr-2" />
-                {t('dashboard.startWorkout', 'Start Workout')}
-              </Button>
-            ) : progress === 100 ? (
-              <div className="mt-4 flex items-center gap-2 text-[#CCFF00]">
-                <CheckCircle className="w-5 h-5" />
-                <span className="font-semibold">{t('dashboard.workoutComplete', 'Workout Complete!')}</span>
+        <div className="relative p-6">
+          {/* Top row: muscle group + progress ring */}
+          <div className="flex items-start justify-between mb-4">
+            <div className="flex-1 min-w-0 pr-4">
+              <p className="text-[#00F2FF] text-xs font-semibold uppercase tracking-widest mb-1">
+                {t('dashboard.todaysFocus', "Today's Focus")}
+              </p>
+              <h2 className="text-3xl font-black text-white leading-tight truncate">
+                {todayWorkout.muscle_group}
+              </h2>
+
+              {/* Stats pills */}
+              <div className="flex items-center gap-3 mt-3">
+                {todayWorkout.exercises.length > 0 && (
+                  <>
+                    <div className="flex items-center gap-1.5 text-xs text-gray-400 bg-white/5 rounded-full px-3 py-1">
+                      <Layers className="w-3 h-3 text-[#00F2FF]" />
+                      <span><span className="text-white font-semibold">{todayWorkout.exercises.length}</span> exercises</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-xs text-gray-400 bg-white/5 rounded-full px-3 py-1">
+                      <Clock className="w-3 h-3 text-[#CCFF00]" />
+                      <span>~<span className="text-white font-semibold">{estimatedDuration}</span> min</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-xs text-gray-400 bg-white/5 rounded-full px-3 py-1">
+                      <Flame className="w-3 h-3 text-orange-400" />
+                      <span><span className="text-white font-semibold">{totalSets}</span> sets</span>
+                    </div>
+                  </>
+                )}
               </div>
-            ) : null}
+            </div>
+
+            {/* Progress ring */}
+            <ProgressRing progress={progress} size={84} strokeWidth={7}>
+              <div className="text-center">
+                <span className="text-xl font-black text-white">{progress}%</span>
+              </div>
+            </ProgressRing>
           </div>
 
-          <ProgressRing progress={progress} size={100} strokeWidth={8}>
-            <div className="text-center">
-              <span className="text-2xl font-bold">{progress}%</span>
-            </div>
-          </ProgressRing>
+          {/* Progress text */}
+          {totalSets > 0 && (
+            <p className="text-xs text-gray-500 mb-4">
+              {completedSetsTotal} {t('common.of', 'of')} {totalSets} {t('common.sets', 'sets')} {t('dashboard.completed', 'completed')}
+            </p>
+          )}
+
+          {/* Action button */}
+          {todayWorkout.exercises.length > 0 ? (
+            progress === 100 ? (
+              <div className="flex items-center gap-2.5 py-3.5 px-5 bg-[#CCFF00]/10 rounded-2xl border border-[#CCFF00]/25">
+                <CheckCircle className="w-5 h-5 text-[#CCFF00]" />
+                <span className="text-[#CCFF00] font-bold">{t('dashboard.workoutComplete', 'Workout Complete!')}</span>
+              </div>
+            ) : (
+              <Button
+                onClick={handleStartWorkout}
+                className="w-full h-13 gradient-cyan text-black font-black text-base rounded-2xl shadow-lg shadow-[#00F2FF]/20 hover:shadow-[#00F2FF]/30 transition-shadow"
+              >
+                <Play className="w-5 h-5 mr-2 fill-black" />
+                {workoutStarted
+                  ? t('dashboard.continueWorkout', 'Continue Workout')
+                  : t('dashboard.startWorkout', 'Start Workout')}
+              </Button>
+            )
+          ) : (
+            <p className="text-sm text-gray-500 text-center py-2">
+              {t('dashboard.restDay', '🧘 Rest Day — Recover & Recharge')}
+            </p>
+          )}
         </div>
       </motion.div>
 
-      {/* Exercises — Preview Cards */}
-      {todayWorkout?.exercises?.length > 0 && (
+      {/* ── Exercise List ── */}
+      {todayWorkout.exercises.length > 0 && (
         <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.15 }}
-          className="space-y-3"
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.18 }}
         >
-          {todayWorkout.exercises.map((exercise, index) => (
-            <ExercisePreviewCard
-              key={exercise.id || index}
-              exercise={exercise}
-              index={index}
-              onClick={handleExerciseClick}
-            />
-          ))}
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">
+            {t('dashboard.exercises', 'Exercises')}
+          </p>
+          <div className="space-y-2.5">
+            {todayWorkout.exercises.map((exercise, index) => (
+              <ExercisePreviewCard
+                key={exercise.id || index}
+                exercise={exercise}
+                index={index}
+                onClick={handleExerciseClick}
+              />
+            ))}
+          </div>
         </motion.div>
       )}
 
-      {/* Quick Links */}
+      {/* ── Nutrition Quick Stats ── */}
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
+        initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.3 }}
-        className="mt-8 grid grid-cols-2 gap-3"
+        transition={{ delay: 0.25 }}
+        className="mt-6 bg-[#111] rounded-2xl p-4 border border-[#1E1E1E]"
       >
-        <button
-          onClick={() => navigate(createPageUrl('TrainingCalendar'))}
-          className="bg-[#1A1A1A] rounded-xl p-4 border border-[#2A2A2A] hover:border-[#3A3A3A] transition-colors text-left"
-        >
-          <Calendar className="w-6 h-6 text-[#00F2FF] mb-2" />
-          <p className="font-semibold">{t('dashboard.calendar', 'Calendar')}</p>
-          <p className="text-xs text-gray-500">{t('dashboard.viewSchedule', 'View full schedule')}</p>
-        </button>
-        <button
-          onClick={() => navigate(createPageUrl('NutritionDemo'))}
-          className="bg-[#1A1A1A] rounded-xl p-4 border border-[#2A2A2A] hover:border-[#3A3A3A] transition-colors text-left"
-        >
-          <Dumbbell className="w-6 h-6 text-[#CCFF00] mb-2" />
-          <p className="font-semibold">{t('navigation.nutrition', 'Nutrition')}</p>
-          <p className="text-xs text-gray-500">{t('dashboard.trackMeals', 'Track your meals')}</p>
-        </button>
-      </motion.div>
-
-      {/* Nutrition Quick Stats */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.35 }}
-        className="mt-4 bg-[#1A1A1A] rounded-2xl p-4 border border-[#2A2A2A]"
-      >
-        <h3 className="font-semibold mb-3">{t('dashboard.todaysNutrition', "Today's Nutrition Target")}</h3>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">
+          {t('dashboard.todaysNutrition', "Today's Nutrition")}
+        </h3>
+        <div className="grid grid-cols-4 gap-2">
           {[
-            { label: t('common.calories', 'Calories'), value: profile?.target_calories || 2000, color: '#00F2FF' },
-            { label: t('common.protein', 'Protein'), value: `${profile?.protein_goal || 150}g`, color: '#CCFF00' },
+            { label: t('common.calories', 'Cal'), value: profile?.target_calories || 2000, color: '#00F2FF' },
+            { label: t('common.protein', 'Pro'), value: `${profile?.protein_goal || 150}g`, color: '#CCFF00' },
             { label: t('common.carbs', 'Carbs'), value: `${profile?.carbs_goal || 200}g`, color: '#FF6B6B' },
             { label: t('common.fat', 'Fat'), value: `${profile?.fat_goal || 65}g`, color: '#FFD93D' }
-          ].map((stat) => (
-            <div key={stat.label} className="text-center">
-              <p className="text-xl font-bold" style={{ color: stat.color }}>{stat.value}</p>
-              <p className="text-xs text-gray-500">{stat.label}</p>
+          ].map(stat => (
+            <div key={stat.label} className="text-center py-2 rounded-xl bg-white/3">
+              <p className="text-lg font-black" style={{ color: stat.color }}>{stat.value}</p>
+              <p className="text-xs text-gray-500 mt-0.5">{stat.label}</p>
             </div>
           ))}
         </div>
       </motion.div>
 
-      {/* Workout Editor Sheet */}
+      {/* ── Workout Editor Sheet ── */}
       <WorkoutEditorSheet
         isOpen={editorOpen}
         onClose={() => setEditorOpen(false)}
@@ -430,7 +380,7 @@ export default function Dashboard() {
         onSave={handleSaveWorkout}
       />
 
-      {/* Workout Preview Reels — opens before session starts */}
+      {/* ── Video Reels Preview ── */}
       <AnimatePresence>
         {showReels && (
           <WorkoutReelsPreview

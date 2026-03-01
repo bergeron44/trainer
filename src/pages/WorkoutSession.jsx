@@ -318,23 +318,24 @@ export default function WorkoutSession() {
   });
 
   // ── Fetch exercise media from DB, with Cloudinary fallback ──
+  const gender = profile?.gender || 'male';
   const fetchExercise = useCallback(async (name) => {
     setExerciseMap(prev => ({ ...prev, [name]: 'loading' }));
     try {
       const { data } = await api.get(`/exercises/lookup?name=${encodeURIComponent(name)}`);
       if (data && !data.video_url) {
-        data.video_url = getExerciseVideoUrl(name);
+        data.video_url = getExerciseVideoUrl(name, gender);
       }
-      setExerciseMap(prev => ({ ...prev, [name]: data ?? { video_url: getExerciseVideoUrl(name) } }));
+      setExerciseMap(prev => ({ ...prev, [name]: data ?? { video_url: getExerciseVideoUrl(name, gender) } }));
     } catch {
-      setExerciseMap(prev => ({ ...prev, [name]: { video_url: getExerciseVideoUrl(name) } }));
+      setExerciseMap(prev => ({ ...prev, [name]: { video_url: getExerciseVideoUrl(name, gender) } }));
     }
-  }, []);
+  }, [gender]);
 
   useEffect(() => {
     if (!workout?.exercises?.length) return;
     workout.exercises.forEach(ex => fetchExercise(ex.name));
-  }, [workout?.exercises?.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [workout?.exercises?.length, gender]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── IntersectionObserver: track visible slide, play/pause videos ──
   useEffect(() => {

@@ -1,6 +1,7 @@
 const asyncHandler = require('express-async-handler');
 const Workout = require('../models/Workout');
 const WorkoutSession = require('../models/WorkoutSession');
+const Exercise = require('../models/Exercise');
 
 // @desc    Get workouts
 // @route   GET /api/workouts
@@ -184,32 +185,78 @@ const generateWorkoutPlan = asyncHandler(async (req, res) => {
     const targetGoal = user.profile.goal || 'recomp';
 
     // -----------------------------------------------------
-    // 12-WEEK DEMO AI TEMPLATES
+    // BUILD PLAN FROM DB EXERCISES
     // -----------------------------------------------------
-    let planTemplate = [];
+    const frequencyPerWeek = user.profile.workout_days_per_week || 3;
 
-    // Helper: A generic Hypertrophy Push/Pull/Legs rotation (3 days a week)
-    const templates = {
+    // Helper: pick N random exercises from a DB query result
+    function pickRandom(arr, n) {
+        const shuffled = [...arr].sort(() => Math.random() - 0.5);
+        return shuffled.slice(0, n);
+    }
+
+    // Helper: map an Exercise doc → workout exercise entry
+    function toWorkoutEx(ex) {
+        return {
+            name:         ex.name,
+            sets:         ex.default_sets,
+            reps:         ex.default_reps,
+            rest_seconds: ex.rest_seconds,
+            weight:       0,
+        };
+    }
+
+    // Fetch exercises from DB grouped by movement pattern
+    const [pushExercises, pullExercises, legsExercises, coreExercises, cardioExercises, fullBodyExercises] =
+        await Promise.all([
+            Exercise.find({ movement_type: 'push',     video_url: { $ne: null } }).lean(),
+            Exercise.find({ movement_type: 'pull',     video_url: { $ne: null } }).lean(),
+            Exercise.find({ movement_type: 'legs',     video_url: { $ne: null } }).lean(),
+            Exercise.find({ movement_type: 'core',     video_url: { $ne: null } }).lean(),
+            Exercise.find({ movement_type: 'cardio',   video_url: { $ne: null } }).lean(),
+            Exercise.find({ movement_type: 'full_body',video_url: { $ne: null } }).lean(),
+        ]);
+
+    // Define workout day "slots" per goal — each slot picks from a pool
+    const DAY_TEMPLATES = {
         muscle_gain: [
-            { group: 'Push', exercises: [{ name: 'Bench Press', sets: 4, reps: '8-10', rest_seconds: 90 }, { name: 'Overhead Press', sets: 4, reps: '8-10', rest_seconds: 90 }, { name: 'Tricep Extensions', sets: 3, reps: '10-12', rest_seconds: 60 }] },
-            { group: 'Pull', exercises: [{ name: 'Pull-ups', sets: 4, reps: '8-10', rest_seconds: 90 }, { name: 'Barbell Rows', sets: 4, reps: '8-10', rest_seconds: 90 }, { name: 'Bicep Curls', sets: 3, reps: '10-12', rest_seconds: 60 }] },
-            { group: 'Legs', exercises: [{ name: 'Squats', sets: 4, reps: '8-10', rest_seconds: 120 }, { name: 'Romanian Deadlifts', sets: 4, reps: '8-10', rest_seconds: 90 }, { name: 'Calf Raises', sets: 4, reps: '15-20', rest_seconds: 60 }] }
+            { group: 'Push',  pools: [{ src: pushExercises,  compound: 2, isolation: 3 }] },
+            { group: 'Pull',  pools: [{ src: pullExercises,  compound: 2, isolation: 3 }] },
+            { group: 'Legs',  pools: [{ src: legsExercises,  compound: 2, isolation: 3 }] },
         ],
         weight_loss: [
-            { group: 'Full Body Circuit', exercises: [{ name: 'Burpees', sets: 4, reps: '15', rest_seconds: 45 }, { name: 'Kettlebell Swings', sets: 4, reps: '20', rest_seconds: 45 }, { name: 'Mountain Climbers', sets: 4, reps: '40', rest_seconds: 45 }] },
-            { group: 'Upper Body + Core', exercises: [{ name: 'Push-ups', sets: 3, reps: '15', rest_seconds: 60 }, { name: 'Plank', sets: 3, reps: '60s', rest_seconds: 45 }, { name: 'Dumbbell Rows', sets: 3, reps: '15', rest_seconds: 60 }] },
-            { group: 'Lower Body HIIT', exercises: [{ name: 'Jump Squats', sets: 4, reps: '15', rest_seconds: 45 }, { name: 'Walking Lunges', sets: 4, reps: '20', rest_seconds: 45 }, { name: 'Box Jumps', sets: 4, reps: '12', rest_seconds: 60 }] }
+            { group: 'Full Body Circuit', pools: [{ src: cardioExercises,  compound: 3, isolation: 2 }, { src: fullBodyExercises, compound: 1, isolation: 0 }] },
+            { group: 'Upper + Core',      pools: [{ src: pushExercises,    compound: 2, isolation: 1 }, { src: coreExercises,     compound: 0, isolation: 2 }] },
+            { group: 'Lower HIIT',        pools: [{ src: legsExercises,    compound: 2, isolation: 2 }, { src: cardioExercises,   compound: 0, isolation: 1 }] },
         ],
         athletic_performance: [
-            { group: 'Power & Speed', exercises: [{ name: 'Power Cleans', sets: 5, reps: '3', rest_seconds: 120 }, { name: 'Box Jumps', sets: 4, reps: '5', rest_seconds: 90 }, { name: 'Medicine Ball Slams', sets: 4, reps: '10', rest_seconds: 60 }] },
-            { group: 'Agility & Core', exercises: [{ name: 'Agility Ladder Drills', sets: 4, reps: '2 mins', rest_seconds: 60 }, { name: 'Russian Twists', sets: 3, reps: '20', rest_seconds: 45 }, { name: 'Sprints', sets: 5, reps: '50m', rest_seconds: 90 }] },
-            { group: 'Functional Strength', exercises: [{ name: 'Deadlifts', sets: 4, reps: '5', rest_seconds: 120 }, { name: 'Farmer Walks', sets: 3, reps: '40m', rest_seconds: 60 }, { name: 'Prowler Push', sets: 3, reps: '20m', rest_seconds: 90 }] }
-        ]
+            { group: 'Power & Speed',      pools: [{ src: fullBodyExercises, compound: 2, isolation: 1 }, { src: cardioExercises,  compound: 0, isolation: 2 }] },
+            { group: 'Agility & Core',     pools: [{ src: coreExercises,    compound: 2, isolation: 2 }, { src: cardioExercises,  compound: 0, isolation: 1 }] },
+            { group: 'Functional Strength',pools: [{ src: pullExercises,    compound: 2, isolation: 1 }, { src: legsExercises,    compound: 2, isolation: 0 }] },
+        ],
     };
 
-    // Fallback appropriately
-    planTemplate = templates[targetGoal] || templates['muscle_gain'];
-    const frequencyPerWeek = user.profile.workout_days_per_week || 3;
+    const daySlots = DAY_TEMPLATES[targetGoal] || DAY_TEMPLATES['muscle_gain'];
+
+    // Build exercise list for each slot by sampling from DB pools
+    function buildDayExercises(slot) {
+        const exercises = [];
+        for (const { src, compound, isolation } of slot.pools) {
+            // compound exercises = default_sets >= 4 (heavy), isolation = less
+            const heavy = src.filter(e => e.default_sets >= 4);
+            const light = src.filter(e => e.default_sets < 4);
+            exercises.push(...pickRandom(heavy.length ? heavy : src, compound).map(toWorkoutEx));
+            exercises.push(...pickRandom(light.length  ? light  : src, isolation).map(toWorkoutEx));
+        }
+        // Deduplicate by name (in case same exercise appears in multiple pools)
+        const seen = new Set();
+        return exercises.filter(e => seen.has(e.name) ? false : seen.add(e.name));
+    }
+
+    let planTemplate = daySlots.map(slot => ({
+        group:     slot.group,
+        exercises: buildDayExercises(slot),
+    }));
 
     // -----------------------------------------------------
     // Generate dates mapped out for 12 weeks (84 days)

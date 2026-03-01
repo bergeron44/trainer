@@ -21,12 +21,46 @@ router.get('/lookup', protect, async (req, res) => {
         const { name } = req.query;
         if (!name) return res.status(400).json({ message: 'name is required' });
 
-        // Exact match first
-        let exercise = await Exercise.findOne({ name: new RegExp(`^${name}$`, 'i') });
+        // Escape regex special chars
+        const escapeRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-        // Partial match fallback
+        // 1. Exact match (case insensitive)
+        let exercise = await Exercise.findOne({ name: new RegExp(`^${escapeRe(name)}$`, 'i') });
+
+        // 2. Strip trailing 's' / 'es' to handle plurals  ("Pull-ups" → "Pull-Up", "Barbell Rows" → "Barbell Row")
         if (!exercise) {
-            exercise = await Exercise.findOne({ name: new RegExp(name, 'i') });
+            const singular = name.replace(/e?s$/i, '');
+            if (singular !== name) {
+                exercise = await Exercise.findOne({ name: new RegExp(`^${escapeRe(singular)}$`, 'i') });
+                // Also try singular with a partial to catch "Barbell Row" when "Barbell Rows" given
+                if (!exercise) {
+                    exercise = await Exercise.findOne({ name: new RegExp(escapeRe(singular), 'i') });
+                }
+            }
+        }
+
+        // 3. Partial match with the original name
+        if (!exercise) {
+            exercise = await Exercise.findOne({ name: new RegExp(escapeRe(name), 'i') });
+        }
+
+        // 4. Word-by-word scoring — pick the DB exercise whose name contains the most words from the query
+        if (!exercise) {
+            const words = name.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+            if (words.length > 0) {
+                const candidates = await Exercise.find({
+                    name: new RegExp(words[0], 'i')   // at least the first word matches
+                }).lean();
+                if (candidates.length > 0) {
+                    // Score = number of query words found in the candidate name
+                    const scored = candidates.map(c => ({
+                        ex: c,
+                        score: words.filter(w => c.name.toLowerCase().includes(w)).length
+                    }));
+                    scored.sort((a, b) => b.score - a.score);
+                    if (scored[0].score > 0) exercise = scored[0].ex;
+                }
+            }
         }
 
         if (!exercise) return res.status(404).json({ message: 'Exercise not found' });
