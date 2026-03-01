@@ -1,8 +1,11 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { Wand2, FileText, ChevronLeft } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 export default function PlanChoice({ onSelect, onBack }) {
+  const { t } = useTranslation();
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -19,12 +22,12 @@ export default function PlanChoice({ onSelect, onBack }) {
           className="flex items-center gap-2 text-gray-500 mb-6 hover:text-white transition-colors"
         >
           <ChevronLeft className="w-4 h-4" />
-          Back
+          {t('common.back', 'Back')}
         </button>
 
-        <h2 className="text-2xl font-bold mb-2">You're Experienced!</h2>
+        <h2 className="text-2xl font-bold mb-2">{t('onboarding.planChoice.title', "You're Experienced!")}</h2>
         <p className="text-gray-500 mb-8">
-          Would you like to build a new plan or import your existing routine?
+          {t('onboarding.planChoice.subtitle', 'Would you like to build a new plan or import your existing routine?')}
         </p>
 
         <div className="space-y-4">
@@ -39,9 +42,9 @@ export default function PlanChoice({ onSelect, onBack }) {
                 <Wand2 className="w-6 h-6 text-[#00F2FF]" />
               </div>
               <div>
-                <h3 className="font-semibold text-lg mb-1">Build New AI Plan</h3>
+                <h3 className="font-semibold text-lg mb-1">{t('onboarding.planChoice.aiPlan', 'Build New AI Plan')}</h3>
                 <p className="text-sm text-gray-500">
-                  Let Nexus AI create a personalized program based on your goals
+                  {t('onboarding.planChoice.aiPlanDesc', 'Let Nexus AI create a personalized program based on your goals')}
                 </p>
               </div>
             </div>
@@ -58,9 +61,9 @@ export default function PlanChoice({ onSelect, onBack }) {
                 <FileText className="w-6 h-6 text-[#CCFF00]" />
               </div>
               <div>
-                <h3 className="font-semibold text-lg mb-1">Use My Current Routine</h3>
+                <h3 className="font-semibold text-lg mb-1">{t('onboarding.planChoice.existingRoutine', 'Use My Current Routine')}</h3>
                 <p className="text-sm text-gray-500">
-                  Continue with your existing workout routine (you can adjust later)
+                  {t('onboarding.planChoice.existingRoutineDesc', 'Continue with your existing workout routine (you can adjust later)')}
                 </p>
               </div>
             </div>
@@ -68,7 +71,7 @@ export default function PlanChoice({ onSelect, onBack }) {
         </div>
 
         <p className="text-xs text-gray-600 text-center mt-8">
-          💡 You can always change this later in settings
+          {t('onboarding.planChoice.changeLater', '💡 You can always change this later in settings')}
         </p>
       </motion.div>
     </motion.div>

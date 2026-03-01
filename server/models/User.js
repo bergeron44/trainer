@@ -51,7 +51,18 @@ const userSchema = mongoose.Schema({
         },
         onboarding_completed: { type: Boolean, default: false },
         has_existing_plan: { type: Boolean, default: false }
-    }
+    },
+    liked_foods: [{
+        name: String,
+        image: String,
+        calories: Number,
+        protein: Number,
+        carbs: Number,
+        fat: Number
+    }],
+    disliked_foods: [{
+        name: String
+    }]
 }, {
     timestamps: true
 });

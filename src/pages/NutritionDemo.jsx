@@ -1,26 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
-import { Flame, Beef, Wheat, Droplet, Target, MessageCircle, ChevronRight, Plus, X } from 'lucide-react';
+import { Flame, Beef, Wheat, Droplet, Target, MessageCircle, ChevronRight, Plus, X, Heart, Utensils } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { useTranslation } from 'react-i18next';
 import GlobalCoachChat from '@/components/coach/GlobalCoachChat';
 import FoodSearch from '@/components/nutrition/FoodSearch';
+import FoodSwipeGame from '@/components/nutrition/FoodSwipeGame';
+import MealPlanCard from '@/components/nutrition/MealPlanCard';
 import { useAuth } from '@/lib/AuthContext';
+import api from '@/api/axios';
 
 // --- Coach Logic: Dynamic Meal Periods ---
 const generateCoachPeriods = (goal, dietType, t = null) => {
-  // Determine number of meals (2 to 7) based on goal and diet
-  let numMeals = 4; // default
-
-  if (goal === 'muscle_gain') numMeals = 6; // Bulking needs more meals
-  if (goal === 'weight_loss') numMeals = 3; // Cutting might mean fewer larger meals
-  if (dietType === 'keto') numMeals = Math.max(2, numMeals - 1); // Keto users often eat less frequently
-
-  // Ensure bounds
+  let numMeals = 4;
+  if (goal === 'muscle_gain') numMeals = 6;
+  if (goal === 'weight_loss') numMeals = 3;
+  if (dietType === 'keto') numMeals = Math.max(2, numMeals - 1);
   numMeals = Math.max(2, Math.min(7, numMeals));
 
-  // Generate labels based on count
   const periods = [];
   if (numMeals === 2) {
     periods.push({ id: 'm1', label: t ? t('nutrition.meals.firstMeal', 'First Meal') : 'First Meal' }, { id: 'm2', label: t ? t('nutrition.meals.finalFeast', 'Final Feast') : 'Final Feast' });
@@ -40,7 +38,6 @@ const generateCoachPeriods = (goal, dietType, t = null) => {
       periods.push({ id: 'm5', label: t ? t('nutrition.dinner', 'Dinner') : 'Dinner' });
     }
   }
-
   return periods;
 };
 
@@ -86,6 +83,14 @@ export default function NutritionDemo() {
   const [chatOpen, setChatOpen] = useState(false);
   const [coachStyle, setCoachStyle] = useState('motivational');
 
+  // Swipe game & meal planner state
+  const [showSwipeGame, setShowSwipeGame] = useState(false);
+  const [showMealPlan, setShowMealPlan] = useState(false);
+  const [currentMeal, setCurrentMeal] = useState(null);
+  const [isMealLoading, setIsMealLoading] = useState(false);
+  const [likedFoods, setLikedFoods] = useState([]);
+  const [dislikedFoods, setDislikedFoods] = useState([]);
+
   const profile = user?.profile || {};
   const dietType = profile.diet_type || 'everything';
   const goal = profile.goal || 'recomp';
@@ -97,6 +102,21 @@ export default function NutritionDemo() {
   useEffect(() => {
     setPeriods(generateCoachPeriods(goal, dietType, t));
   }, [goal, dietType, t]);
+
+  // Load food preferences on mount
+  useEffect(() => {
+    loadFoodPreferences();
+  }, []);
+
+  const loadFoodPreferences = async () => {
+    try {
+      const res = await api.get('/users/food-preferences');
+      setLikedFoods(res.data.liked_foods || []);
+      setDislikedFoods(res.data.disliked_foods || []);
+    } catch (err) {
+      console.error('Failed to load food preferences:', err);
+    }
+  };
 
   const tdee = profile.target_calories || 2000;
   const p_goal = profile.protein_goal || 150;
@@ -136,6 +156,85 @@ export default function NutritionDemo() {
     });
   };
 
+  // ─── Meal Planner ────────────────────────────────────────
+  const requestMealPlan = async () => {
+    setShowMealPlan(true);
+    setIsMealLoading(true);
+    setCurrentMeal(null);
+
+    const now = new Date();
+    const mealsEaten = Object.values(loggedFoods).filter(arr => arr.length > 0).length;
+
+    try {
+      const res = await api.post('/nutrition/meal-plan', {
+        liked_foods: likedFoods,
+        disliked_foods: dislikedFoods.map(f => f.name),
+        current_calories_consumed: currentMacros.cals,
+        target_calories: tdee,
+        remaining_calories: Math.max(0, tdee - currentMacros.cals),
+        protein_goal: p_goal,
+        protein_consumed: currentMacros.pro,
+        carbs_goal: c_goal,
+        carbs_consumed: currentMacros.carb,
+        fat_goal: f_goal,
+        fat_consumed: currentMacros.fat,
+        time_of_day: format(now, 'HH:mm'),
+        meal_period: getCurrentMealPeriod(now),
+        meals_eaten_today: mealsEaten,
+        total_meals_planned: periods.length,
+        diet_type: dietType,
+        goal: goal,
+      });
+      setCurrentMeal(res.data);
+    } catch (err) {
+      console.error('Failed to generate meal plan:', err);
+      setCurrentMeal(null);
+    } finally {
+      setIsMealLoading(false);
+    }
+  };
+
+  const getCurrentMealPeriod = (now) => {
+    const hour = now.getHours();
+    if (hour < 10) return 'Breakfast';
+    if (hour < 13) return 'Lunch';
+    if (hour < 16) return 'Afternoon Snack';
+    if (hour < 20) return 'Dinner';
+    return 'Evening Snack';
+  };
+
+  const handleLogMeal = (meal) => {
+    // Add meal foods to the appropriate period
+    const hour = new Date().getHours();
+    let periodId = 'm2'; // default lunch
+    if (hour < 10) periodId = 'm1';
+    else if (hour < 14) periodId = 'm2';
+    else if (hour < 17) periodId = 'm3';
+    else periodId = 'm4';
+
+    const foods = meal.foods.map(f => ({
+      name: f.name,
+      cals: f.calories,
+      protein: f.protein,
+      carbs: f.carbs,
+      fat: f.fat,
+    }));
+
+    setLoggedFoods(prev => ({
+      ...prev,
+      [periodId]: [...(prev[periodId] || []), ...foods]
+    }));
+
+    setShowMealPlan(false);
+    setCurrentMeal(null);
+  };
+
+  const handleSwipeGameClose = () => {
+    setShowSwipeGame(false);
+    // Reload preferences after swiping
+    loadFoodPreferences();
+  };
+
   return (
     <div className="min-h-screen px-4 py-6">
       {/* Header */}
@@ -152,6 +251,46 @@ export default function NutritionDemo() {
           <p className="text-[#00F2FF] font-semibold text-sm capitalize">{t(`nutrition.dietTypes.${dietType}`, `${dietType} Diet`)}</p>
           <p className="text-gray-400 text-xs">{t(`nutrition.goals.${goal}`, GOAL_LABELS[goal])}</p>
         </div>
+      </motion.div>
+
+      {/* ─── Action Buttons ─────────────────────────────────── */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.05 }}
+        className="grid grid-cols-2 gap-3 mb-6"
+      >
+        <button
+          onClick={() => setShowSwipeGame(true)}
+          className="relative overflow-hidden rounded-xl p-4 border border-[#2A2A2A] bg-gradient-to-br from-[#1A1A1A] to-[#0D0D0D] hover:border-pink-500/30 transition-all group"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-pink-500/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+              <Heart className="w-5 h-5 text-pink-400" />
+            </div>
+            <div className="text-left">
+              <p className="text-sm font-semibold text-white">{t('nutrition.rateFood', 'Rate Food')}</p>
+              <p className="text-xs text-gray-500">{likedFoods.length} {t('nutrition.liked', 'liked')}</p>
+            </div>
+          </div>
+          <div className="absolute -bottom-2 -right-2 text-4xl opacity-10 group-hover:opacity-20 transition-opacity">💘</div>
+        </button>
+
+        <button
+          onClick={requestMealPlan}
+          className="relative overflow-hidden rounded-xl p-4 border border-[#2A2A2A] bg-gradient-to-br from-[#1A1A1A] to-[#0D0D0D] hover:border-[#00F2FF]/30 transition-all group"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-[#00F2FF]/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+              <Utensils className="w-5 h-5 text-[#00F2FF]" />
+            </div>
+            <div className="text-left">
+              <p className="text-sm font-semibold text-white">{t('nutrition.planMeal', 'Plan Meal')}</p>
+              <p className="text-xs text-gray-500">{t('nutrition.aiPowered', 'AI Powered')}</p>
+            </div>
+          </div>
+          <div className="absolute -bottom-2 -right-2 text-4xl opacity-10 group-hover:opacity-20 transition-opacity">🍽️</div>
+        </button>
       </motion.div>
 
       {/* Macro Overview */}
@@ -357,6 +496,30 @@ export default function NutritionDemo() {
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
+
+      {/* Food Swipe Game Overlay */}
+      <AnimatePresence>
+        {showSwipeGame && (
+          <FoodSwipeGame
+            onClose={handleSwipeGameClose}
+            existingLiked={likedFoods}
+            existingDisliked={dislikedFoods}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Meal Plan Overlay */}
+      <AnimatePresence>
+        {showMealPlan && (
+          <MealPlanCard
+            meal={currentMeal}
+            isLoading={isMealLoading}
+            onClose={() => { setShowMealPlan(false); setCurrentMeal(null); }}
+            onRefresh={requestMealPlan}
+            onLogMeal={handleLogMeal}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

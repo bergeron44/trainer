@@ -1,39 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence, Reorder, useMotionValue, useTransform } from 'framer-motion';
 import { GripVertical, RefreshCw, Play, Pause, Check, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from 'react-i18next';
+import api from '@/api/axios';
 
 const SWIPE_THRESHOLD_HALF = -80;
 const SWIPE_THRESHOLD_FULL = -160;
-
-// Alternative exercises database
-const ALTERNATIVES = {
-  'Bench Press': ['Dumbbell Press', 'Floor Press', 'Push-ups', 'Machine Chest Press'],
-  'Overhead Press': ['Arnold Press', 'Landmine Press', 'Pike Push-ups', 'Dumbbell Shoulder Press'],
-  'Incline Dumbbell Press': ['Incline Barbell Press', 'Low Cable Flyes', 'Incline Push-ups'],
-  'Tricep Dips': ['Skull Crushers', 'Tricep Pushdowns', 'Close Grip Bench Press'],
-  'Cable Flyes': ['Dumbbell Flyes', 'Pec Deck', 'Resistance Band Flyes'],
-  'Goblet Squats': ['Air Squats', 'Leg Press', 'Split Squats'],
-  'Push-ups': ['Knee Push-ups', 'Wall Push-ups', 'Diamond Push-ups'],
-  'Dumbbell Rows': ['Cable Rows', 'Barbell Rows', 'T-Bar Rows'],
-  'Walking Lunges': ['Reverse Lunges', 'Bulgarian Split Squats', 'Step-ups'],
-  'Plank': ['Dead Bug', 'Bird Dog', 'Hollow Hold'],
-  'Barbell Rows': ['Seated Cable Rows', 'Pendlay Rows', 'Meadows Rows'],
-  'Pull-ups': ['Lat Pulldowns', 'Assisted Pull-ups', 'Chin-ups'],
-  'Lateral Raises': ['Cable Lateral Raises', 'Leaning Lateral Raises', 'Machine Laterals'],
-  'Face Pulls': ['Rear Delt Flyes', 'Band Pull-aparts', 'Reverse Pec Deck'],
-  'Power Cleans': ['Hang Cleans', 'High Pulls', 'Kettlebell Swings'],
-  'Box Jumps': ['Jump Squats', 'Depth Jumps', 'Step-ups with Knee Drive'],
-  'Medicine Ball Slams': ['Battle Ropes', 'Kettlebell Swings', 'Burpees'],
-  'Broad Jumps': ['Standing Long Jumps', 'Tuck Jumps', 'Frog Jumps'],
-  'Battle Ropes': ['Jumping Jacks', 'Mountain Climbers', 'High Knees'],
-};
-
-function getRandomAlternative(exerciseName) {
-  const alts = ALTERNATIVES[exerciseName] || ['Alternative Exercise'];
-  return alts[Math.floor(Math.random() * alts.length)];
-}
 
 function SwipeableExerciseCard({
   exercise,
@@ -42,7 +15,8 @@ function SwipeableExerciseCard({
   onSetComplete,
   completedSets = 0,
   onReplace,
-  isDragging
+  isDragging,
+  onExerciseClick
 }) {
   const { t } = useTranslation();
   const [timerRunning, setTimerRunning] = useState(false);
@@ -50,6 +24,13 @@ function SwipeableExerciseCard({
   const [restMode, setRestMode] = useState(false);
   const [restTime, setRestTime] = useState(0);
   const [isReplacing, setIsReplacing] = useState(false);
+  const [alternatives, setAlternatives] = useState([]);
+
+  useEffect(() => {
+    api.get(`/exercises/lookup?name=${encodeURIComponent(exercise.name)}`)
+      .then(({ data }) => { if (data?.alternatives?.length) setAlternatives(data.alternatives); })
+      .catch(() => {});
+  }, [exercise.name]);
 
   const x = useMotionValue(0);
   const background = useTransform(
@@ -93,19 +74,24 @@ function SwipeableExerciseCard({
     setTimerRunning(!timerRunning);
   };
 
+  const getAlternativeName = () => {
+    if (alternatives.length) return alternatives[Math.floor(Math.random() * alternatives.length)];
+    return exercise.name;
+  };
+
   const handleDragEnd = async (_, info) => {
     const offset = info.offset.x;
     if (offset < SWIPE_THRESHOLD_FULL) {
-      // Full swipe - auto replace with AI
+      // Full swipe - auto replace
       setIsReplacing(true);
-      const newExercise = getRandomAlternative(exercise.name);
+      const newName = getAlternativeName();
       setTimeout(() => {
-        onReplace(exercise.id, { ...exercise, name: newExercise, id: `ex_${Date.now()}` });
+        onReplace(exercise.id, { ...exercise, name: newName, id: `ex_${Date.now()}` });
         setIsReplacing(false);
       }, 600);
     } else if (offset < SWIPE_THRESHOLD_HALF) {
-      // Half swipe - show replace option
-      onReplace(exercise.id, { ...exercise, name: getRandomAlternative(exercise.name), id: `ex_${Date.now()}` });
+      // Half swipe - replace immediately
+      onReplace(exercise.id, { ...exercise, name: getAlternativeName(), id: `ex_${Date.now()}` });
     }
   };
 
@@ -156,7 +142,13 @@ function SwipeableExerciseCard({
 
           {/* Content */}
           <div className="flex-1 min-w-0">
-            <h3 className={`font-bold text-lg truncate ${allSetsComplete ? 'text-gray-400 line-through' : 'text-white'}`}>
+            <h3
+              onClick={(e) => {
+                e.stopPropagation();
+                onExerciseClick?.(index);
+              }}
+              className={`font-bold text-lg truncate cursor-pointer hover:text-[#00F2FF] transition-colors ${allSetsComplete ? 'text-gray-400 line-through' : 'text-white'}`}
+            >
               {exercise.name}
             </h3>
 
@@ -241,7 +233,8 @@ export default function InteractiveExerciseList({
   onReplace,
   isActive,
   completedSets,
-  onSetComplete
+  onSetComplete,
+  onExerciseClick
 }) {
   const [isDragging, setIsDragging] = useState(false);
 
@@ -278,6 +271,7 @@ export default function InteractiveExerciseList({
               onSetComplete={onSetComplete}
               onReplace={onReplace}
               isDragging={isDragging}
+              onExerciseClick={onExerciseClick}
             />
           </Reorder.Item>
         ))}

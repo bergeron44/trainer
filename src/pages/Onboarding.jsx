@@ -565,7 +565,7 @@ export default function Onboarding() {
           </div>
         </div>
 
-        <h2 className="text-2xl font-bold mb-6 max-w-lg mx-auto w-full">{t(`onboarding.questions.${currentQuestion.key}`)}</h2>
+        <h2 className="text-2xl font-bold mb-6 max-w-lg mx-auto w-full">{t(`onboarding.questions.${currentQuestion.key}`, currentQuestion.question)}</h2>
 
         <div className="flex-1 max-w-lg mx-auto w-full">
           <BodyFatSelector
@@ -603,13 +603,16 @@ export default function Onboarding() {
     <AnimatePresence mode="wait">
       <OnboardingStep
         key={currentStep}
-        question={t(`onboarding.questions.${currentQuestion.key}`)}
+        question={t(`onboarding.questions.${currentQuestion.key}`, currentQuestion.question)}
         type={currentQuestion.type}
-        options={Array.isArray(currentQuestion.options) ? currentQuestion.options.map(opt => ({
-          ...opt,
-          label: t(`onboarding.options.${opt.value.replace(/_[a-z]/g, match => match[1].toUpperCase()).replace(/^[^a-zA-Z]/, '')}`),
-          ...(opt.description && { description: t(`onboarding.options.${opt.value.replace(/_[a-z]/g, match => match[1].toUpperCase()).replace(/^[^a-zA-Z]/, '')}Desc`) })
-        })) : currentQuestion.options}
+        options={Array.isArray(currentQuestion.options) ? currentQuestion.options.map(opt => {
+          const camelKey = opt.value.toString().replace(/_([a-z])/g, (_, c) => c.toUpperCase()).replace(/^\d+/, '');
+          return {
+            ...opt,
+            label: t(`onboarding.options.${camelKey}`, opt.label),
+            ...(opt.description && { description: t(`onboarding.options.${camelKey}Desc`, opt.description) }),
+          };
+        }) : currentQuestion.options}
         value={answers[currentQuestion.key]}
         onChange={handleChange}
         onNext={handleNext}

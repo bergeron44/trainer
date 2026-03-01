@@ -4,7 +4,9 @@ const {
     registerUser,
     loginUser,
     getMe,
-    updateProfile
+    updateProfile,
+    addFoodPreference,
+    getFoodPreferences
 } = require('../controllers/userController');
 const { protect } = require('../middleware/authMiddleware');
 
@@ -12,5 +14,7 @@ router.post('/', registerUser);
 router.post('/login', loginUser);
 router.get('/me', protect, getMe);
 router.put('/profile', protect, updateProfile);
+router.post('/food-preference', protect, addFoodPreference);
+router.get('/food-preferences', protect, getFoodPreferences);
 
 module.exports = router;
