@@ -230,7 +230,13 @@
             "noImg": "No Img",
             "kcal": "kcal",
             "keepTyping": "Keep typing to search..."
-        }
+        },
+        "swipeHint": "Swipe what you love — so we know what to cook for you 🍽️",
+        "allRatedTitle": "We already know your preferences!",
+        "allRatedSub": "You can request a meal from the AI coach",
+        "requestMeal": "Request a Meal",
+        "sessionDone": "Session Complete!",
+        "savingPrefs": "Saving your preferences..."
     },
     "profile": {
         "title": "Profile",
