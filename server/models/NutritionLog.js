@@ -12,6 +12,10 @@ const nutritionLogSchema = mongoose.Schema({
     protein: Number,
     carbs: Number,
     fat: Number,
+    archived: {
+        type: Boolean,
+        default: false
+    },
     foods: [{
         name: String,
         portion: String,

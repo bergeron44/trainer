@@ -22,6 +22,10 @@ const workoutSchema = mongoose.Schema({
         enum: ['planned', 'in_progress', 'completed'],
         default: 'planned'
     },
+    archived: {
+        type: Boolean,
+        default: false
+    },
     duration_minutes: Number,
     total_volume: Number,
     notes: String

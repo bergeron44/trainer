@@ -2,6 +2,8 @@ const { ChatProvider, assertChatProvider } = require('./core/chatProvider');
 const {
     ChatGenerateInputSchema,
     ChatGenerateOutputSchema,
+    ChatToolCallSchema,
+    ChatToolDefinitionSchema,
     validateChatGenerateInput,
     validateChatGenerateOutput,
 } = require('./core/chatSchemas');
@@ -18,6 +20,8 @@ module.exports = {
     assertChatProvider,
     ChatGenerateInputSchema,
     ChatGenerateOutputSchema,
+    ChatToolCallSchema,
+    ChatToolDefinitionSchema,
     validateChatGenerateInput,
     validateChatGenerateOutput,
     registerChatProvider,

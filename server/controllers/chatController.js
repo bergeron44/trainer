@@ -27,6 +27,15 @@ function mapChatError(error) {
         };
     }
 
+    if (typeof error?.code === 'string' && error.code.startsWith('TOOL_')) {
+        return {
+            status: typeof error?.status === 'number' ? error.status : 400,
+            code: error.code,
+            message: error.message || 'Tool execution failed.',
+            details: error.details,
+        };
+    }
+
     if (
         typeof error?.message === 'string' &&
         error.message.toLowerCase().includes('not configured')
@@ -86,7 +95,10 @@ const generateResponse = asyncHandler(async (req, res) => {
             coachStyle,
             personaId,
             system,
-            metadata,
+            metadata: {
+                ...(metadata || {}),
+                requestId: req.requestId,
+            },
             options,
             persistSummary,
             memoryLimit,
@@ -110,6 +122,7 @@ const generateResponse = asyncHandler(async (req, res) => {
             finishReason: result.finishReason,
             usage: result.usage,
             meta: result.meta,
+            toolTrace: result.toolTrace,
             requestId: req.requestId,
         });
     } catch (error) {

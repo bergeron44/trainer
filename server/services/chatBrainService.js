@@ -2,6 +2,7 @@ const { z } = require('zod');
 const ChatSummary = require('../models/ChatSummary');
 const { createChatProvider } = require('../ai/providers');
 const { assertChatProvider } = require('../ai/core/chatProvider');
+const { createToolExecutor } = require('../ai/tools');
 
 const DEFAULT_PERSONA = 'default';
 const DEFAULT_MEMORY_LIMIT = 5;
@@ -9,6 +10,8 @@ const DEFAULT_MAX_MESSAGES = 20;
 const DEFAULT_MAX_MESSAGE_CHARS = 2000;
 const DEFAULT_MAX_SYSTEM_CHARS = 3500;
 const DEFAULT_MAX_INPUT_TOKENS = 6000;
+const DEFAULT_MAX_TOOL_CALLS_PER_RESPONSE = 3;
+const DEFAULT_MAX_TOOL_ITERATIONS = 4;
 const MIN_MESSAGES_TO_KEEP = 2;
 const DEFAULT_RETRY_ATTEMPTS = 2;
 const DEFAULT_RETRY_BACKOFF_MS = 250;
@@ -66,9 +69,18 @@ const PERSONA_LIBRARY = {
     },
 };
 
+const BrainToolCallSchema = z.object({
+    id: z.string().min(1).optional(),
+    name: z.string().min(1),
+    arguments: z.record(z.string(), z.unknown()).optional(),
+});
+
 const BrainMessageSchema = z.object({
-    role: z.enum(['system', 'user', 'assistant']),
+    role: z.enum(['system', 'user', 'assistant', 'tool']),
     content: z.string().min(1),
+    name: z.string().min(1).optional(),
+    toolCallId: z.string().min(1).optional(),
+    toolCalls: z.array(BrainToolCallSchema).optional(),
 });
 
 const BrainInputSchema = z.object({
@@ -88,6 +100,7 @@ const BrainInputSchema = z.object({
     }).optional(),
     persistSummary: z.boolean().optional(),
     memoryLimit: z.number().int().min(0).max(20).optional(),
+    enableTools: z.boolean().optional(),
 });
 
 function estimateTokens(text) {
@@ -143,10 +156,10 @@ function isTransientProviderError(error) {
 
     const message = String(error?.message || '').toLowerCase();
     if (
-        message.includes('timeout') ||
-        message.includes('temporar') ||
-        message.includes('rate limit') ||
-        message.includes('too many requests')
+        message.includes('timeout')
+        || message.includes('temporar')
+        || message.includes('rate limit')
+        || message.includes('too many requests')
     ) {
         return true;
     }
@@ -158,9 +171,18 @@ function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function safeJsonText(value) {
+    try {
+        return JSON.stringify(value);
+    } catch (_error) {
+        return String(value);
+    }
+}
+
 class ChatBrainService {
     constructor({
         provider,
+        toolExecutor,
         chatSummaryModel = ChatSummary,
         config = {},
         hooks = {},
@@ -168,6 +190,7 @@ class ChatBrainService {
         this.provider = provider
             ? assertChatProvider(provider)
             : createChatProvider();
+        this.toolExecutor = toolExecutor || createToolExecutor();
         this.ChatSummaryModel = chatSummaryModel;
         this.config = {
             defaultMemoryLimit: config.defaultMemoryLimit || DEFAULT_MEMORY_LIMIT,
@@ -175,6 +198,13 @@ class ChatBrainService {
             maxMessageChars: config.maxMessageChars || DEFAULT_MAX_MESSAGE_CHARS,
             maxSystemChars: config.maxSystemChars || DEFAULT_MAX_SYSTEM_CHARS,
             maxInputTokens: config.maxInputTokens || DEFAULT_MAX_INPUT_TOKENS,
+            maxToolCallsPerResponse: config.maxToolCallsPerResponse
+                || Number.parseInt(process.env.CHAT_MAX_TOOL_CALLS_PER_RESPONSE || '', 10)
+                || DEFAULT_MAX_TOOL_CALLS_PER_RESPONSE,
+            maxToolIterations: config.maxToolIterations
+                || Number.parseInt(process.env.CHAT_MAX_TOOL_ITERATIONS || '', 10)
+                || DEFAULT_MAX_TOOL_ITERATIONS,
+            toolsEnabled: config.toolsEnabled ?? process.env.CHAT_TOOLS_ENABLED !== 'false',
             retryAttempts: config.retryAttempts
                 || Number.parseInt(process.env.CHAT_PROVIDER_RETRY_ATTEMPTS || '', 10)
                 || DEFAULT_RETRY_ATTEMPTS,
@@ -202,6 +232,9 @@ class ChatBrainService {
             return input.messages.map((message) => ({
                 role: message.role,
                 content: truncateText(message.content.trim(), this.config.maxMessageChars),
+                name: message.name,
+                toolCallId: message.toolCallId,
+                toolCalls: message.toolCalls,
             }));
         }
 
@@ -219,10 +252,9 @@ class ChatBrainService {
         const maxMessages = this.config.maxMessages;
         let pruned = messages.slice(-maxMessages);
 
-        // Keep the latest messages within the approximate token budget.
         while (
-            pruned.length > MIN_MESSAGES_TO_KEEP &&
-            this.estimateMessageTokens(pruned) > this.config.maxInputTokens
+            pruned.length > MIN_MESSAGES_TO_KEEP
+            && this.estimateMessageTokens(pruned) > this.config.maxInputTokens
         ) {
             pruned.shift();
         }
@@ -263,6 +295,8 @@ class ChatBrainService {
             ...personaProfile.directives,
             `Current context: ${contextLabel}`,
             'If injury or pain is mentioned, recommend safe alternatives and reducing intensity.',
+            'When user-specific workout, nutrition, meal, or profile data is needed, use tools instead of guessing.',
+            'For updates to user data, prefer calling edit tools before replying with confirmation.',
         ];
 
         if (input.system) {
@@ -335,6 +369,86 @@ class ChatBrainService {
         throw lastError;
     }
 
+    async runToolLoop({ providerPayload, input }) {
+        const toolsEnabled = this.config.toolsEnabled && input.enableTools !== false;
+        const toolDefinitions = toolsEnabled ? this.toolExecutor.listToolsForModel() : [];
+
+        let providerResult;
+        let workingMessages = providerPayload.messages;
+        const toolTrace = [];
+        let totalToolCalls = 0;
+
+        for (let round = 1; round <= this.config.maxToolIterations; round += 1) {
+            providerResult = await this.generateWithRetry({
+                ...providerPayload,
+                messages: workingMessages,
+                tools: toolDefinitions,
+            });
+
+            if (!toolsEnabled || !toolDefinitions.length) {
+                break;
+            }
+
+            const requestedCalls = Array.isArray(providerResult.toolCalls)
+                ? providerResult.toolCalls
+                : [];
+
+            if (!requestedCalls.length) {
+                break;
+            }
+
+            const remainingCalls = this.config.maxToolCallsPerResponse - totalToolCalls;
+            if (remainingCalls <= 0) {
+                break;
+            }
+
+            // Keep one provider round available for a final natural-language answer.
+            if (round >= this.config.maxToolIterations) {
+                break;
+            }
+
+            const callsToExecute = requestedCalls
+                .slice(0, remainingCalls)
+                .map((call, index) => ({
+                    ...call,
+                    id: call.id || `tool_call_${round}_${index}`,
+                }));
+
+            const executionResults = await this.toolExecutor.executeToolCalls({
+                toolCalls: callsToExecute,
+                maxCalls: remainingCalls,
+                context: {
+                    userId: input.userId,
+                    requestId: input.metadata?.requestId,
+                    provider: providerResult.provider,
+                    model: providerResult.model,
+                },
+            });
+
+            totalToolCalls += executionResults.length;
+            toolTrace.push(...executionResults);
+
+            const assistantToolMessage = {
+                role: 'assistant',
+                content: providerResult.text || '',
+                toolCalls: callsToExecute,
+            };
+            const toolMessages = executionResults.map((result, index) => ({
+                role: 'tool',
+                name: result.toolName,
+                toolCallId: result.toolCallId || callsToExecute[index]?.id,
+                content: safeJsonText(result.ok ? result.data : result.error),
+            }));
+
+            workingMessages = [...workingMessages, assistantToolMessage, ...toolMessages];
+        }
+
+        return {
+            providerResult,
+            toolTrace,
+        };
+    }
+
     async generateResponse(rawInput) {
         const input = BrainInputSchema.parse(rawInput || {});
         const normalizedMessages = this.pruneMessages(this.normalizeMessages(input));
@@ -375,7 +489,10 @@ class ChatBrainService {
             await this.hooks.beforeGenerate(providerPayload);
         }
 
-        const providerResult = await this.generateWithRetry(providerPayload);
+        const { providerResult, toolTrace } = await this.runToolLoop({
+            providerPayload,
+            input,
+        });
 
         if (typeof this.hooks.afterGenerate === 'function') {
             await this.hooks.afterGenerate({
@@ -384,27 +501,31 @@ class ChatBrainService {
             });
         }
 
+        const responseText = String(providerResult?.text || '').trim() || 'Done.';
+
         const shouldPersist = input.persistSummary !== false;
         if (shouldPersist) {
             await this.persistSummary({
                 userId: input.userId,
                 contextLabel,
                 userMessage: this.getLastUserMessage(normalizedMessages),
-                assistantMessage: providerResult.text,
+                assistantMessage: responseText,
             });
         }
 
         return {
-            response: providerResult.text,
+            response: responseText,
             provider: providerResult.provider,
             model: providerResult.model,
             finishReason: providerResult.finishReason,
             usage: providerResult.usage,
+            toolTrace,
             meta: {
                 persona: personaKey,
                 context: contextLabel,
                 memoryUsed: memories.length,
                 messageCount: normalizedMessages.length,
+                toolCallsExecuted: toolTrace.length,
             },
         };
     }

@@ -50,6 +50,24 @@ function registerBuiltInProviders() {
         const OpenAIChatProvider = require('./openaiChatProvider');
         return new OpenAIChatProvider(config);
     });
+
+    registerChatProvider('gemini', (config) => {
+        const GeminiChatProvider = require('./geminiChatProvider');
+        return new GeminiChatProvider(config);
+    });
+    registerChatProvider('google', (config) => {
+        const GeminiChatProvider = require('./geminiChatProvider');
+        return new GeminiChatProvider(config);
+    });
+    registerChatProvider('gimini', (config) => {
+        const GeminiChatProvider = require('./geminiChatProvider');
+        return new GeminiChatProvider(config);
+    });
+
+    registerChatProvider('anthropic', (config) => {
+        const AnthropicChatProvider = require('./anthropicChatProvider');
+        return new AnthropicChatProvider(config);
+    });
 }
 
 registerBuiltInProviders();

@@ -1,11 +1,25 @@
 const { z } = require('zod');
 
-const ChatRoleSchema = z.enum(['system', 'user', 'assistant']);
+const ChatRoleSchema = z.enum(['system', 'user', 'assistant', 'tool']);
+
+const ChatToolCallSchema = z.object({
+    id: z.string().min(1).optional(),
+    name: z.string().min(1),
+    arguments: z.record(z.string(), z.unknown()).optional(),
+});
+
+const ChatToolDefinitionSchema = z.object({
+    name: z.string().min(1),
+    description: z.string().min(1).optional(),
+    inputSchema: z.record(z.string(), z.unknown()),
+});
 
 const ChatMessageSchema = z.object({
     role: ChatRoleSchema,
-    content: z.string().min(1),
+    content: z.string(),
     name: z.string().min(1).optional(),
+    toolCallId: z.string().min(1).optional(),
+    toolCalls: z.array(ChatToolCallSchema).optional(),
     metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
@@ -19,6 +33,7 @@ const ChatGenerateOptionsSchema = z.object({
 const ChatGenerateInputSchema = z.object({
     system: z.string().min(1).optional(),
     messages: z.array(ChatMessageSchema).min(1),
+    tools: z.array(ChatToolDefinitionSchema).optional(),
     context: z.record(z.string(), z.unknown()).optional(),
     userId: z.string().min(1).optional(),
     metadata: z.record(z.string(), z.unknown()).optional(),
@@ -33,6 +48,7 @@ const ChatUsageSchema = z.object({
 
 const ChatGenerateOutputSchema = z.object({
     text: z.string(),
+    toolCalls: z.array(ChatToolCallSchema).optional(),
     provider: z.string().min(1),
     model: z.string().min(1),
     finishReason: z.string().min(1).optional(),
@@ -50,6 +66,8 @@ function validateChatGenerateOutput(payload) {
 
 module.exports = {
     ChatRoleSchema,
+    ChatToolCallSchema,
+    ChatToolDefinitionSchema,
     ChatMessageSchema,
     ChatGenerateOptionsSchema,
     ChatGenerateInputSchema,

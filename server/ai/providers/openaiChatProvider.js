@@ -28,80 +28,42 @@ function toOptionalString(value) {
     return text.length ? text : undefined;
 }
 
-function toOpenAIMetadata(metadata) {
-    if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
-        return undefined;
+function parseJson(value, fallback = {}) {
+    if (value === undefined || value === null || value === '') return fallback;
+    if (typeof value === 'object') return value;
+    try {
+        return JSON.parse(value);
+    } catch (_error) {
+        return fallback;
     }
-
-    const entries = Object.entries(metadata).slice(0, 16);
-    if (!entries.length) return undefined;
-
-    const result = {};
-    for (const [rawKey, rawValue] of entries) {
-        const key = String(rawKey).slice(0, 64);
-        if (!key) continue;
-
-        let value;
-        if (rawValue === null || rawValue === undefined) {
-            value = '';
-        } else if (typeof rawValue === 'string') {
-            value = rawValue;
-        } else if (typeof rawValue === 'number' || typeof rawValue === 'boolean') {
-            value = String(rawValue);
-        } else {
-            value = JSON.stringify(rawValue);
-        }
-
-        result[key] = value.slice(0, 512);
-    }
-
-    return Object.keys(result).length ? result : undefined;
 }
 
-function extractOutputText(response) {
-    if (typeof response?.output_text === 'string' && response.output_text.trim()) {
-        return response.output_text;
-    }
+function extractTextFromContent(content) {
+    if (!content) return '';
+    if (typeof content === 'string') return content;
+    if (!Array.isArray(content)) return '';
 
-    if (!Array.isArray(response?.output)) {
-        return '';
-    }
-
-    const parts = [];
-    for (const item of response.output) {
-        if (item?.type !== 'message' || !Array.isArray(item.content)) continue;
-        for (const block of item.content) {
-            if (block?.type === 'output_text' && typeof block.text === 'string') {
-                parts.push(block.text);
-            }
+    const chunks = [];
+    for (const part of content) {
+        if (typeof part?.text === 'string') {
+            chunks.push(part.text);
         }
     }
-
-    return parts.join('\n').trim();
+    return chunks.join('\n').trim();
 }
 
 function extractUsage(usage) {
     if (!usage) return undefined;
     return {
-        inputTokens: usage.input_tokens,
-        outputTokens: usage.output_tokens,
+        inputTokens: usage.prompt_tokens,
+        outputTokens: usage.completion_tokens,
         totalTokens: usage.total_tokens,
     };
 }
 
-function deriveFinishReason(response) {
-    if (response?.incomplete_details?.reason) {
-        return response.incomplete_details.reason;
-    }
-    if (response?.status) {
-        return response.status;
-    }
-    return undefined;
-}
-
 class OpenAIChatProvider extends ChatProvider {
     constructor(config = {}) {
-        super({ providerName: 'openai' });
+        super({ providerName: config.providerName || 'openai' });
         this.config = this.resolveConfig(config);
         this.client = null;
         if (this.config.apiKey) {
@@ -142,7 +104,7 @@ class OpenAIChatProvider extends ChatProvider {
     assertConfigured() {
         if (!this.config.apiKey) {
             throw new Error(
-                'OpenAI provider is not configured. Set OPENAI_API_KEY or provide apiKey in provider config.'
+                `${this.providerName} provider is not configured. Set API key env vars or provide apiKey in provider config.`
             );
         }
         if (!this.client) {
@@ -150,77 +112,122 @@ class OpenAIChatProvider extends ChatProvider {
         }
     }
 
-    buildInstructions(input) {
-        const instructions = [];
+    buildTools(input) {
+        if (!Array.isArray(input.tools) || !input.tools.length) {
+            return undefined;
+        }
+
+        return input.tools.map((tool) => ({
+            type: 'function',
+            function: {
+                name: tool.name,
+                description: tool.description,
+                parameters: tool.inputSchema,
+            },
+        }));
+    }
+
+    buildMessages(input) {
+        const messages = [];
+
         if (input.system) {
-            instructions.push(input.system);
+            messages.push({ role: 'system', content: input.system });
         }
 
         for (const message of input.messages) {
             if (message.role === 'system') {
-                instructions.push(message.content);
+                messages.push({ role: 'system', content: message.content });
+                continue;
             }
-        }
 
-        return instructions.length ? instructions.join('\n\n') : undefined;
-    }
+            if (message.role === 'tool') {
+                messages.push({
+                    role: 'tool',
+                    tool_call_id: message.toolCallId,
+                    content: message.content,
+                    name: message.name,
+                });
+                continue;
+            }
 
-    buildInputMessages(input) {
-        return input.messages
-            .filter((message) => message.role !== 'system')
-            .map((message) => ({
-                type: 'message',
+            if (message.role === 'assistant' && Array.isArray(message.toolCalls) && message.toolCalls.length) {
+                messages.push({
+                    role: 'assistant',
+                    content: message.content || '',
+                    tool_calls: message.toolCalls.map((call) => ({
+                        id: call.id,
+                        type: 'function',
+                        function: {
+                            name: call.name,
+                            arguments: JSON.stringify(call.arguments || {}),
+                        },
+                    })),
+                });
+                continue;
+            }
+
+            messages.push({
                 role: message.role === 'assistant' ? 'assistant' : 'user',
                 content: message.content,
-            }));
+            });
+        }
+
+        if (!messages.length) {
+            messages.push({ role: 'user', content: 'Hello' });
+        }
+
+        return messages;
     }
 
     buildRequest(input) {
-        const instructions = this.buildInstructions(input);
-        const mappedMessages = this.buildInputMessages(input);
         const options = input.options || {};
+        const tools = this.buildTools(input);
 
-        const temperature = clampNumber(
-            toNumber(options.temperature, this.config.defaultTemperature),
-            0,
-            2
-        );
-        const maxOutputTokens = toInt(
-            options.maxTokens,
-            this.config.defaultMaxOutputTokens
-        );
-        const topP = options.topP !== undefined
-            ? clampNumber(toNumber(options.topP, 1), 0, 1)
-            : undefined;
-
-        const request = {
+        return {
             model: this.config.model,
-            instructions,
-            input: mappedMessages.length ? mappedMessages : undefined,
-            temperature,
-            max_output_tokens: maxOutputTokens,
-            top_p: topP,
-            metadata: toOpenAIMetadata(input.metadata),
-            safety_identifier: toOptionalString(input.userId)?.slice(0, 64),
+            messages: this.buildMessages(input),
+            tools,
+            tool_choice: tools?.length ? 'auto' : undefined,
+            temperature: clampNumber(
+                toNumber(options.temperature, this.config.defaultTemperature),
+                0,
+                2
+            ),
+            max_tokens: toInt(options.maxTokens, this.config.defaultMaxOutputTokens),
+            top_p: options.topP !== undefined
+                ? clampNumber(toNumber(options.topP, 1), 0, 1)
+                : undefined,
+            stop: Array.isArray(options.stop) ? options.stop : undefined,
+            user: toOptionalString(input.userId)?.slice(0, 64),
         };
-
-        return request;
     }
 
     async generate(input) {
         this.assertConfigured();
         const request = this.buildRequest(input);
-        const response = await this.client.responses.create(request, {
+
+        const completion = await this.client.chat.completions.create(request, {
             timeout: this.config.timeoutMs,
         });
 
+        const choice = completion?.choices?.[0] || {};
+        const message = choice?.message || {};
+        const toolCalls = Array.isArray(message.tool_calls)
+            ? message.tool_calls.map((call) => ({
+                id: call.id,
+                name: call.function?.name,
+                arguments: parseJson(call.function?.arguments, {}),
+            })).filter((call) => call.name)
+            : undefined;
+
         return {
-            text: extractOutputText(response),
-            provider: 'openai',
-            model: response.model || this.config.model,
-            finishReason: deriveFinishReason(response),
-            usage: extractUsage(response.usage),
-            raw: this.config.includeRaw ? response : undefined,
+            text: extractTextFromContent(message.content),
+            toolCalls,
+            provider: this.providerName,
+            model: completion?.model || this.config.model,
+            finishReason: choice?.finish_reason || undefined,
+            usage: extractUsage(completion?.usage),
+            raw: this.config.includeRaw ? completion : undefined,
         };
     }
 }
