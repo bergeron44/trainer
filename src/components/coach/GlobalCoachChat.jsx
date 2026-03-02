@@ -30,6 +30,7 @@ export default function GlobalCoachChat({
   context = 'General',
   coachStyle = 'motivational'
 }) {
+  const showToolTrace = Boolean(import.meta.env.DEV);
   const persona = getCoachPersona(coachStyle);
 
   const [messages, setMessages] = useState([
@@ -102,7 +103,11 @@ export default function GlobalCoachChat({
       });
 
       const aiResponse = data.response;
-      setMessages(prev => [...prev, { role: 'assistant', content: aiResponse }]);
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: aiResponse,
+        toolTrace: Array.isArray(data.toolTrace) ? data.toolTrace : []
+      }]);
       setIsTyping(false);
 
       // Update local memory indicator without additional write calls.
@@ -185,9 +190,16 @@ export default function GlobalCoachChat({
                       }`}
                   >
                     {message.role === 'assistant' ? (
-                      <ReactMarkdown className="prose prose-sm prose-invert max-w-none [&>p]:mb-2 [&>p:last-child]:mb-0">
-                        {message.content}
-                      </ReactMarkdown>
+                      <>
+                        <ReactMarkdown className="prose prose-sm prose-invert max-w-none [&>p]:mb-2 [&>p:last-child]:mb-0">
+                          {message.content}
+                        </ReactMarkdown>
+                        {showToolTrace && Array.isArray(message.toolTrace) && message.toolTrace.length > 0 && (
+                          <div className="mt-2 border-t border-white/10 pt-2 text-[10px] text-gray-400">
+                            Tools: {message.toolTrace.map((trace) => `${trace.toolName}:${trace.ok ? 'ok' : 'err'}`).join(', ')}
+                          </div>
+                        )}
+                      </>
                     ) : (
                       <p className="text-sm">{message.content}</p>
                     )}

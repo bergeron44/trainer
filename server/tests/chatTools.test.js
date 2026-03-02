@@ -19,10 +19,12 @@ function createChainResult(items) {
     };
 }
 
-test('createDefaultToolRegistry registers the 10 MVP tools', () => {
+test('createDefaultToolRegistry registers MVP + additional tools', () => {
     const registry = createDefaultToolRegistry({
         models: {
             Workout: {},
+            WorkoutLog: {},
+            Exercise: {},
             User: {},
             NutritionLog: {},
         },
@@ -30,16 +32,22 @@ test('createDefaultToolRegistry registers the 10 MVP tools', () => {
 
     const names = registry.list().map((tool) => tool.name).sort();
     assert.deepEqual(names, [
+        'meals_create_meal',
+        'meals_delete_meal',
         'meals_edit_meal',
         'meals_get_user_meals',
         'nutrition_edit_user_data',
         'nutrition_get_user_data',
+        'nutrition_log_intake',
+        'nutrition_set_daily_targets',
         'user_edit_profile',
         'user_get_profile',
         'workouts_edit_workout',
         'workouts_get_user_workouts',
         'workouts_get_workout_by_type',
         'workouts_get_workout_types',
+        'workouts_log_session_result',
+        'workouts_swap_exercise',
     ]);
 });
 
@@ -52,6 +60,8 @@ test('ToolExecutor runs workouts_get_workout_types and returns normalized envelo
                     { type: 'full-body', count: 2 },
                 ]),
             },
+            WorkoutLog: {},
+            Exercise: {},
             User: {},
             NutritionLog: {},
         },
@@ -187,6 +197,8 @@ test('workouts_get_workout_by_type filters by user + type and returns items', as
                     ]);
                 },
             },
+            WorkoutLog: {},
+            Exercise: {},
             User: {},
             NutritionLog: {},
         },
@@ -208,4 +220,143 @@ test('workouts_get_workout_by_type filters by user + type and returns items', as
     assert.equal(result.data.count, 1);
     assert.equal(capturedQuery.user, 'u1');
     assert.equal(capturedQuery.muscle_group.$options, 'i');
+});
+
+test('workouts_log_session_result writes set logs for owned workout', async () => {
+    const insertedDocs = [];
+    const registry = createDefaultToolRegistry({
+        models: {
+            Workout: {
+                findOne() {
+                    return {
+                        lean() {
+                            return Promise.resolve({ _id: 'w1', user: 'u1' });
+                        },
+                    };
+                },
+            },
+            WorkoutLog: {
+                async insertMany(docs) {
+                    insertedDocs.push(...docs.map((doc, idx) => ({
+                        _id: `l${idx + 1}`,
+                        ...doc,
+                        createdAt: new Date(),
+                    })));
+                    return insertedDocs;
+                },
+            },
+            Exercise: {},
+            User: {},
+            NutritionLog: {},
+        },
+    });
+
+    const executor = new ToolExecutor({ registry });
+    const result = await executor.executeToolCall({
+        toolCall: {
+            name: 'workouts_log_session_result',
+            arguments: {
+                workoutId: 'w1',
+                idempotencyKey: 'log-1',
+                entries: [{
+                    exercise_name: 'Back Squat',
+                    set_number: 1,
+                    reps_completed: 5,
+                    weight_used: 100,
+                    rpe: 8.5,
+                }],
+            },
+        },
+        context: { userId: 'u1', requestId: 'r1' },
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.data.count, 1);
+    assert.equal(insertedDocs.length, 1);
+    assert.equal(insertedDocs[0].user, 'u1');
+});
+
+test('nutrition_set_daily_targets updates allowlisted macro fields', async () => {
+    const saved = { count: 0 };
+    const userDoc = {
+        profile: { target_calories: 2000 },
+        async save() {
+            saved.count += 1;
+            return this;
+        },
+    };
+
+    const registry = createDefaultToolRegistry({
+        models: {
+            Workout: {},
+            WorkoutLog: {},
+            Exercise: {},
+            User: {
+                async findById() {
+                    return userDoc;
+                },
+            },
+            NutritionLog: {},
+        },
+    });
+
+    const executor = new ToolExecutor({ registry });
+    const result = await executor.executeToolCall({
+        toolCall: {
+            name: 'nutrition_set_daily_targets',
+            arguments: {
+                target_calories: 2300,
+                protein_goal: 170,
+                idempotencyKey: 'tgt-1',
+            },
+        },
+        context: { userId: 'u1', requestId: 'r2' },
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(saved.count, 1);
+    assert.equal(userDoc.profile.target_calories, 2300);
+    assert.equal(userDoc.profile.protein_goal, 170);
+});
+
+test('meals_delete_meal archives meal by default', async () => {
+    const meal = {
+        archived: false,
+        async save() {
+            return this;
+        },
+    };
+
+    const registry = createDefaultToolRegistry({
+        models: {
+            Workout: {},
+            WorkoutLog: {},
+            Exercise: {},
+            User: {},
+            NutritionLog: {
+                async findOne() {
+                    return meal;
+                },
+                async deleteOne() {
+                    throw new Error('deleteOne should not be called for soft delete');
+                },
+            },
+        },
+    });
+
+    const executor = new ToolExecutor({ registry });
+    const result = await executor.executeToolCall({
+        toolCall: {
+            name: 'meals_delete_meal',
+            arguments: {
+                mealId: 'm1',
+                idempotencyKey: 'del-1',
+            },
+        },
+        context: { userId: 'u1', requestId: 'r3' },
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.data.archived, true);
+    assert.equal(meal.archived, true);
 });

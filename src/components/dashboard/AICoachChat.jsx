@@ -34,6 +34,7 @@ export default function AICoachChat({
   isInSession = false
 }) {
   const { t } = useTranslation();
+  const showToolTrace = Boolean(import.meta.env.DEV);
   const personality = userProfile?.trainer_personality || 'drill_sergeant';
   const persona = getTrainerPersona(personality);
 
@@ -101,7 +102,11 @@ export default function AICoachChat({
       });
 
       const aiMessage = data.response;
-      setMessages(prev => [...prev, { role: 'assistant', content: aiMessage }]);
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: aiMessage,
+        toolTrace: Array.isArray(data.toolTrace) ? data.toolTrace : []
+      }]);
 
       // Note: Automatic workout updates via JSON schema are invalid in the simple chat controller.
       // If we want that feature, we'd need to enhance the backend to support structured output or parsing.
@@ -174,9 +179,16 @@ export default function AICoachChat({
                       }`}
                   >
                     {message.role === 'assistant' ? (
-                      <ReactMarkdown className="prose prose-sm prose-invert max-w-none [&>p]:mb-2 [&>p:last-child]:mb-0">
-                        {message.content}
-                      </ReactMarkdown>
+                      <>
+                        <ReactMarkdown className="prose prose-sm prose-invert max-w-none [&>p]:mb-2 [&>p:last-child]:mb-0">
+                          {message.content}
+                        </ReactMarkdown>
+                        {showToolTrace && Array.isArray(message.toolTrace) && message.toolTrace.length > 0 && (
+                          <div className="mt-2 border-t border-white/10 pt-2 text-[10px] text-gray-400">
+                            Tools: {message.toolTrace.map((trace) => `${trace.toolName}:${trace.ok ? 'ok' : 'err'}`).join(', ')}
+                          </div>
+                        )}
+                      </>
                     ) : (
                       <p className="text-sm">{message.content}</p>
                     )}

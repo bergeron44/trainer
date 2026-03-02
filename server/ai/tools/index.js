@@ -7,6 +7,8 @@ const { createMealsTools } = require('./handlers/mealsTools');
 const ToolExecutionAudit = require('../../models/ToolExecutionAudit');
 const ToolIdempotencyRecord = require('../../models/ToolIdempotencyRecord');
 const Workout = require('../../models/Workout');
+const WorkoutLog = require('../../models/WorkoutLog');
+const Exercise = require('../../models/Exercise');
 const User = require('../../models/User');
 const NutritionLog = require('../../models/NutritionLog');
 
@@ -14,6 +16,8 @@ function createDefaultToolRegistry({ models = {} } = {}) {
     const registry = new ToolRegistry();
     const resolvedModels = {
         Workout: models.Workout || Workout,
+        WorkoutLog: models.WorkoutLog || WorkoutLog,
+        Exercise: models.Exercise || Exercise,
         User: models.User || User,
         NutritionLog: models.NutritionLog || NutritionLog,
     };

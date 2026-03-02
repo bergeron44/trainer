@@ -1,6 +1,8 @@
 const mongoose = require('mongoose');
 const { z } = require('zod');
 const Workout = require('../../../models/Workout');
+const Exercise = require('../../../models/Exercise');
+const WorkoutLog = require('../../../models/WorkoutLog');
 const { ToolExecutionError } = require('../toolSchemas');
 
 const WORKOUT_SORT = Object.freeze({ date: -1, createdAt: -1 });
@@ -48,6 +50,40 @@ const editWorkoutInputSchema = z.object({
     idempotencyKey: z.string().min(1).max(128),
 }).strict();
 
+const logSessionEntrySchema = z.object({
+    exercise_name: z.string().min(1).max(200),
+    set_number: z.number().int().min(1).max(200),
+    reps_completed: z.number().int().min(0).max(1000),
+    weight_used: z.number().min(0).max(5000),
+    rpe: z.number().min(0).max(10).optional(),
+    date: z.string().datetime().optional(),
+}).strict();
+
+const logSessionInputSchema = z.object({
+    workoutId: z.string().min(1),
+    entries: z.array(logSessionEntrySchema).min(1).max(300),
+    idempotencyKey: z.string().min(1).max(128),
+}).strict();
+
+const swapExerciseInputSchema = z.object({
+    workoutId: z.string().min(1),
+    exerciseName: z.string().min(1).optional(),
+    exerciseId: z.string().min(1).optional(),
+    constraints: z.object({
+        avoidEquipment: z.array(z.string().min(1)).max(20).optional(),
+        availableEquipment: z.array(z.string().min(1)).max(20).optional(),
+        injuries: z.union([
+            z.string().min(1),
+            z.array(z.string().min(1)).max(20),
+        ]).optional(),
+        preferredMuscleGroup: z.string().min(1).max(120).optional(),
+    }).strict().optional(),
+    idempotencyKey: z.string().min(1).max(128),
+}).strict().refine(
+    (value) => Boolean(value.exerciseName || value.exerciseId),
+    'Either exerciseName or exerciseId is required.'
+);
+
 function escapeRegExp(text) {
     return String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -92,18 +128,166 @@ function sanitizeWorkout(workout) {
     };
 }
 
+function sanitizeWorkoutLog(log) {
+    if (!log) return null;
+    const source = typeof log.toObject === 'function' ? log.toObject() : log;
+    return {
+        id: String(source._id),
+        workout_id: String(source.workout_id),
+        exercise_name: source.exercise_name,
+        set_number: source.set_number,
+        reps_completed: source.reps_completed,
+        weight_used: source.weight_used,
+        rpe: source.rpe,
+        date: source.date,
+        createdAt: source.createdAt,
+    };
+}
+
 function applyArchiveFilter(query, includeArchived) {
     if (!includeArchived) {
         query.archived = { $ne: true };
     }
 }
 
+function extractInjuryKeywords(injuries) {
+    if (!injuries) return [];
+    const list = Array.isArray(injuries)
+        ? injuries
+        : String(injuries).split(/[\s,]+/);
+    return list
+        .map((item) => String(item || '').trim().toLowerCase())
+        .filter(Boolean);
+}
+
+function isExerciseAllowedByConstraints(exercise, constraints = {}) {
+    const equipment = String(exercise?.equipment || '').trim().toLowerCase();
+    const avoid = new Set((constraints.avoidEquipment || []).map((item) => String(item).toLowerCase()));
+    const allowed = new Set((constraints.availableEquipment || []).map((item) => String(item).toLowerCase()));
+
+    if (avoid.size && equipment && avoid.has(equipment)) {
+        return false;
+    }
+    if (allowed.size && equipment && !allowed.has(equipment)) {
+        return false;
+    }
+
+    const injuryKeywords = extractInjuryKeywords(constraints.injuries);
+    if (!injuryKeywords.length) return true;
+
+    const searchable = [
+        exercise?.muscle_group,
+        exercise?.body_part,
+        exercise?.target,
+        ...(exercise?.secondary_muscles || []),
+    ]
+        .map((value) => String(value || '').toLowerCase())
+        .join(' ');
+
+    return !injuryKeywords.some((keyword) => searchable.includes(keyword));
+}
+
+function normalizePreferredMuscleGroup(value) {
+    const raw = String(value || '').trim().toLowerCase();
+    if (!raw) return '';
+
+    const map = new Map([
+        ['full-body', 'full_body'],
+        ['full body', 'full_body'],
+        ['full_body', 'full_body'],
+        ['abs', 'core'],
+    ]);
+    return map.get(raw) || raw;
+}
+
+async function findReplacementExercise({
+    currentExercise,
+    workout,
+    constraints,
+    ExerciseModel,
+}) {
+    const normalizedPreferred = normalizePreferredMuscleGroup(
+        constraints?.preferredMuscleGroup || workout?.muscle_group
+    );
+
+    const currentDoc = await ExerciseModel.findOne({ name: currentExercise.name }).lean();
+    const candidateByAlternatives = Array.isArray(currentDoc?.alternatives) && currentDoc.alternatives.length
+        ? await ExerciseModel.find({
+            name: { $in: currentDoc.alternatives },
+        }).limit(30).lean()
+        : [];
+
+    let candidatePool = candidateByAlternatives;
+    if (!candidatePool.length) {
+        const query = {
+            name: { $ne: currentExercise.name },
+        };
+
+        const effectiveMuscleGroup = normalizePreferredMuscleGroup(
+            normalizedPreferred || currentDoc?.muscle_group
+        );
+        if (effectiveMuscleGroup) {
+            query.muscle_group = effectiveMuscleGroup;
+        }
+
+        candidatePool = await ExerciseModel.find(query)
+            .sort({ updatedAt: -1 })
+            .limit(80)
+            .lean();
+    }
+
+    const filtered = candidatePool
+        .filter((candidate) => candidate?.name && candidate.name !== currentExercise.name)
+        .filter((candidate) => isExerciseAllowedByConstraints(candidate, constraints));
+
+    if (!filtered.length) {
+        throw new ToolExecutionError({
+            code: 'TOOL_NO_REPLACEMENT_FOUND',
+            message: 'No suitable replacement exercise found with current constraints.',
+            status: 422,
+        });
+    }
+
+    return filtered[0];
+}
+
+function resolveExerciseIndex(workout, { exerciseId, exerciseName }) {
+    if (!Array.isArray(workout.exercises) || !workout.exercises.length) {
+        return -1;
+    }
+
+    if (exerciseId) {
+        const byId = workout.exercises.findIndex((item) => String(item.id || '') === String(exerciseId));
+        if (byId >= 0) return byId;
+    }
+
+    if (exerciseName) {
+        const normalized = String(exerciseName).trim().toLowerCase();
+        const byName = workout.exercises.findIndex(
+            (item) => String(item.name || '').trim().toLowerCase() === normalized
+        );
+        if (byName >= 0) return byName;
+    }
+
+    return -1;
+}
+
 function getWorkoutModel(models = {}) {
     return models.Workout || Workout;
 }
 
+function getExerciseModel(models = {}) {
+    return models.Exercise || Exercise;
+}
+
+function getWorkoutLogModel(models = {}) {
+    return models.WorkoutLog || WorkoutLog;
+}
+
 function createWorkoutTools({ models = {} } = {}) {
     const WorkoutModel = getWorkoutModel(models);
+    const ExerciseModel = getExerciseModel(models);
+    const WorkoutLogModel = getWorkoutLogModel(models);
 
     return [
         {
@@ -347,6 +531,181 @@ function createWorkoutTools({ models = {} } = {}) {
                     changedFields,
                     data: {
                         updated: sanitizeWorkout(workout),
+                    },
+                };
+            },
+        },
+        {
+            name: 'workouts_log_session_result',
+            description: 'Log workout set results (sets/reps/load/RPE) for the authenticated user.',
+            readWriteMode: 'write',
+            idempotent: true,
+            timeoutMs: 7000,
+            inputSchema: logSessionInputSchema,
+            jsonSchema: {
+                type: 'object',
+                additionalProperties: false,
+                required: ['workoutId', 'entries', 'idempotencyKey'],
+                properties: {
+                    workoutId: { type: 'string', minLength: 1 },
+                    idempotencyKey: { type: 'string', minLength: 1, maxLength: 128 },
+                    entries: {
+                        type: 'array',
+                        minItems: 1,
+                        maxItems: 300,
+                        items: {
+                            type: 'object',
+                            additionalProperties: false,
+                            required: ['exercise_name', 'set_number', 'reps_completed', 'weight_used'],
+                            properties: {
+                                exercise_name: { type: 'string', minLength: 1, maxLength: 200 },
+                                set_number: { type: 'integer', minimum: 1, maximum: 200 },
+                                reps_completed: { type: 'integer', minimum: 0, maximum: 1000 },
+                                weight_used: { type: 'number', minimum: 0, maximum: 5000 },
+                                rpe: { type: 'number', minimum: 0, maximum: 10 },
+                                date: { type: 'string', format: 'date-time' },
+                            },
+                        },
+                    },
+                },
+            },
+            async handler({ args, context }) {
+                ensureUserId(context.userId);
+
+                const workout = await WorkoutModel.findOne({
+                    _id: args.workoutId,
+                    user: context.userId,
+                }).lean();
+
+                if (!workout) {
+                    throw new ToolExecutionError({
+                        code: 'TOOL_NOT_FOUND',
+                        message: 'Workout not found for this user.',
+                        status: 404,
+                    });
+                }
+
+                const docs = args.entries.map((entry) => ({
+                    user: context.userId,
+                    workout_id: args.workoutId,
+                    exercise_name: entry.exercise_name,
+                    set_number: entry.set_number,
+                    reps_completed: entry.reps_completed,
+                    weight_used: entry.weight_used,
+                    rpe: entry.rpe,
+                    date: entry.date ? toDateOrThrow(entry.date, 'date') : new Date(),
+                }));
+
+                const inserted = await WorkoutLogModel.insertMany(docs);
+
+                return {
+                    changedFields: ['workout_logs'],
+                    data: {
+                        workoutId: args.workoutId,
+                        count: inserted.length,
+                        logs: inserted.map(sanitizeWorkoutLog),
+                    },
+                };
+            },
+        },
+        {
+            name: 'workouts_swap_exercise',
+            description: 'Replace an exercise in a workout using safety constraints (equipment/injuries).',
+            readWriteMode: 'write',
+            idempotent: true,
+            timeoutMs: 7000,
+            inputSchema: swapExerciseInputSchema,
+            jsonSchema: {
+                type: 'object',
+                additionalProperties: false,
+                required: ['workoutId', 'idempotencyKey'],
+                properties: {
+                    workoutId: { type: 'string', minLength: 1 },
+                    exerciseName: { type: 'string', minLength: 1 },
+                    exerciseId: { type: 'string', minLength: 1 },
+                    idempotencyKey: { type: 'string', minLength: 1, maxLength: 128 },
+                    constraints: {
+                        type: 'object',
+                        additionalProperties: false,
+                        properties: {
+                            avoidEquipment: {
+                                type: 'array',
+                                maxItems: 20,
+                                items: { type: 'string', minLength: 1 },
+                            },
+                            availableEquipment: {
+                                type: 'array',
+                                maxItems: 20,
+                                items: { type: 'string', minLength: 1 },
+                            },
+                            injuries: {
+                                oneOf: [
+                                    { type: 'string', minLength: 1 },
+                                    {
+                                        type: 'array',
+                                        maxItems: 20,
+                                        items: { type: 'string', minLength: 1 },
+                                    },
+                                ],
+                            },
+                            preferredMuscleGroup: { type: 'string', minLength: 1, maxLength: 120 },
+                        },
+                    },
+                },
+                anyOf: [
+                    { required: ['exerciseName'] },
+                    { required: ['exerciseId'] },
+                ],
+            },
+            async handler({ args, context }) {
+                ensureUserId(context.userId);
+
+                const workout = await WorkoutModel.findOne({
+                    _id: args.workoutId,
+                    user: context.userId,
+                });
+
+                if (!workout) {
+                    throw new ToolExecutionError({
+                        code: 'TOOL_NOT_FOUND',
+                        message: 'Workout not found for this user.',
+                        status: 404,
+                    });
+                }
+
+                const idx = resolveExerciseIndex(workout, args);
+                if (idx < 0) {
+                    throw new ToolExecutionError({
+                        code: 'TOOL_NOT_FOUND',
+                        message: 'Exercise to swap was not found in this workout.',
+                        status: 404,
+                    });
+                }
+
+                const currentExercise = workout.exercises[idx];
+                const replacement = await findReplacementExercise({
+                    currentExercise,
+                    workout,
+                    constraints: args.constraints || {},
+                    ExerciseModel,
+                });
+
+                workout.exercises[idx] = {
+                    ...currentExercise,
+                    name: replacement.name,
+                    notes: `Swapped from ${currentExercise.name}${currentExercise.notes ? ` | ${currentExercise.notes}` : ''}`,
+                    rest_seconds: currentExercise.rest_seconds ?? replacement.rest_seconds,
+                };
+
+                await workout.save();
+
+                return {
+                    changedFields: ['exercises'],
+                    data: {
+                        workoutId: String(workout._id),
+                        previousExercise: currentExercise.name,
+                        replacementExercise: replacement.name,
+                        updatedWorkout: sanitizeWorkout(workout),
                     },
                 };
             },

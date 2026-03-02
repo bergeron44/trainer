@@ -31,6 +31,23 @@ const editMealInputSchema = z.object({
     idempotencyKey: z.string().min(1).max(128),
 }).strict();
 
+const createMealInputSchema = z.object({
+    date: z.string().datetime().optional(),
+    meal_name: z.string().min(1).max(200),
+    calories: z.number().nonnegative().max(20000),
+    protein: z.number().nonnegative().max(2000).optional(),
+    carbs: z.number().nonnegative().max(2000).optional(),
+    fat: z.number().nonnegative().max(2000).optional(),
+    foods: z.array(foodSchema).max(100).optional(),
+    idempotencyKey: z.string().min(1).max(128),
+}).strict();
+
+const deleteMealInputSchema = z.object({
+    mealId: z.string().min(1),
+    hardDelete: z.boolean().optional(),
+    idempotencyKey: z.string().min(1).max(128),
+}).strict();
+
 function ensureUserId(userId) {
     if (!userId) {
         throw new ToolExecutionError({
@@ -41,15 +58,20 @@ function ensureUserId(userId) {
     }
 }
 
-function toDayRange(dateString) {
-    const start = new Date(dateString);
-    if (Number.isNaN(start.getTime())) {
+function toDateOrThrow(value, fieldName) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
         throw new ToolExecutionError({
             code: 'TOOL_VALIDATION_ERROR',
-            message: 'Invalid date.',
+            message: `Invalid ${fieldName}.`,
             status: 400,
         });
     }
+    return date;
+}
+
+function toDayRange(dateString) {
+    const start = toDateOrThrow(dateString, 'date');
     const end = new Date(start);
     start.setHours(0, 0, 0, 0);
     end.setHours(23, 59, 59, 999);
@@ -186,7 +208,7 @@ function createMealsTools({ models = {} } = {}) {
                 const patch = args.patch;
 
                 if (patch.date !== undefined) {
-                    meal.date = new Date(patch.date);
+                    meal.date = toDateOrThrow(patch.date, 'date');
                     changedFields.push('date');
                 }
                 if (patch.meal_name !== undefined) {
@@ -224,6 +246,122 @@ function createMealsTools({ models = {} } = {}) {
                     changedFields,
                     data: {
                         updated: sanitizeMeal(meal),
+                    },
+                };
+            },
+        },
+        {
+            name: 'meals_create_meal',
+            description: 'Create a new meal entry for the authenticated user.',
+            readWriteMode: 'write',
+            idempotent: true,
+            timeoutMs: 7000,
+            inputSchema: createMealInputSchema,
+            jsonSchema: {
+                type: 'object',
+                additionalProperties: false,
+                required: ['meal_name', 'calories', 'idempotencyKey'],
+                properties: {
+                    idempotencyKey: { type: 'string', minLength: 1, maxLength: 128 },
+                    date: { type: 'string', format: 'date-time' },
+                    meal_name: { type: 'string', minLength: 1, maxLength: 200 },
+                    calories: { type: 'number', minimum: 0, maximum: 20000 },
+                    protein: { type: 'number', minimum: 0, maximum: 2000 },
+                    carbs: { type: 'number', minimum: 0, maximum: 2000 },
+                    fat: { type: 'number', minimum: 0, maximum: 2000 },
+                    foods: {
+                        type: 'array',
+                        maxItems: 100,
+                        items: {
+                            type: 'object',
+                            additionalProperties: false,
+                            required: ['name'],
+                            properties: {
+                                name: { type: 'string', minLength: 1 },
+                                portion: { type: 'string', minLength: 1 },
+                                calories: { type: 'number', minimum: 0 },
+                            },
+                        },
+                    },
+                },
+            },
+            async handler({ args, context }) {
+                ensureUserId(context.userId);
+
+                const meal = await NutritionLogModel.create({
+                    user: context.userId,
+                    date: args.date ? toDateOrThrow(args.date, 'date') : new Date(),
+                    meal_name: args.meal_name,
+                    calories: args.calories,
+                    protein: args.protein,
+                    carbs: args.carbs,
+                    fat: args.fat,
+                    foods: args.foods || [],
+                    archived: false,
+                });
+
+                return {
+                    changedFields: ['meal'],
+                    data: {
+                        created: sanitizeMeal(meal),
+                    },
+                };
+            },
+        },
+        {
+            name: 'meals_delete_meal',
+            description: 'Delete (or archive) one meal entry belonging to the authenticated user.',
+            readWriteMode: 'write',
+            idempotent: true,
+            timeoutMs: 7000,
+            inputSchema: deleteMealInputSchema,
+            jsonSchema: {
+                type: 'object',
+                additionalProperties: false,
+                required: ['mealId', 'idempotencyKey'],
+                properties: {
+                    mealId: { type: 'string', minLength: 1 },
+                    idempotencyKey: { type: 'string', minLength: 1, maxLength: 128 },
+                    hardDelete: { type: 'boolean' },
+                },
+            },
+            async handler({ args, context }) {
+                ensureUserId(context.userId);
+
+                const meal = await NutritionLogModel.findOne({
+                    _id: args.mealId,
+                    user: context.userId,
+                });
+
+                if (!meal) {
+                    throw new ToolExecutionError({
+                        code: 'TOOL_NOT_FOUND',
+                        message: 'Meal not found for this user.',
+                        status: 404,
+                    });
+                }
+
+                if (args.hardDelete) {
+                    await NutritionLogModel.deleteOne({
+                        _id: args.mealId,
+                        user: context.userId,
+                    });
+                    return {
+                        changedFields: ['deleted'],
+                        data: {
+                            mealId: args.mealId,
+                            deleted: true,
+                        },
+                    };
+                }
+
+                meal.archived = true;
+                await meal.save();
+                return {
+                    changedFields: ['archived'],
+                    data: {
+                        mealId: args.mealId,
+                        archived: true,
                     },
                 };
             },
