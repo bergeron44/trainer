@@ -58,8 +58,18 @@ class ToolRegistry {
         return Array.from(this.tools.values());
     }
 
-    listForModel() {
-        return this.list().map((tool) => ({
+    listForModel({ names } = {}) {
+        let tools = this.list();
+        if (Array.isArray(names) && names.length) {
+            const allowed = new Set(
+                names
+                    .map((item) => String(item || '').trim())
+                    .filter(Boolean)
+            );
+            tools = tools.filter((tool) => allowed.has(tool.name));
+        }
+
+        return tools.map((tool) => ({
             name: tool.name,
             description: tool.description,
             inputSchema: tool.jsonSchema,

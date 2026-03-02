@@ -131,3 +131,42 @@ test('ChatBrainService executes tool calls and performs a follow-up provider res
     assert.equal(secondRoundMessages[2].role, 'tool');
     assert.equal(secondRoundMessages[2].name, 'user_get_profile');
 });
+
+test('ChatBrainService passes tool allowlist to tool executor', async () => {
+    let capturedAllowlist;
+    const service = new ChatBrainService({
+        provider: {
+            async generateSafe() {
+                return {
+                    text: 'Planner completed.',
+                    provider: 'mock',
+                    model: 'mock-model',
+                    finishReason: 'stop',
+                };
+            },
+        },
+        toolExecutor: {
+            listToolsForModel({ names } = {}) {
+                capturedAllowlist = names;
+                return [];
+            },
+            async executeToolCalls() {
+                return [];
+            },
+        },
+        chatSummaryModel: buildSummaryModel(),
+        config: {
+            retryAttempts: 1,
+        },
+    });
+
+    const result = await service.generateResponse({
+        userId: 'u1',
+        prompt: 'create my onboarding plan',
+        toolAllowlist: ['user_get_profile', 'workouts_create_workout'],
+        persistSummary: false,
+    });
+
+    assert.equal(result.response, 'Planner completed.');
+    assert.deepEqual(capturedAllowlist, ['user_get_profile', 'workouts_create_workout']);
+});

@@ -101,6 +101,7 @@ const BrainInputSchema = z.object({
     persistSummary: z.boolean().optional(),
     memoryLimit: z.number().int().min(0).max(20).optional(),
     enableTools: z.boolean().optional(),
+    toolAllowlist: z.array(z.string().min(1)).max(100).optional(),
 });
 
 function estimateTokens(text) {
@@ -371,7 +372,9 @@ class ChatBrainService {
 
     async runToolLoop({ providerPayload, input }) {
         const toolsEnabled = this.config.toolsEnabled && input.enableTools !== false;
-        const toolDefinitions = toolsEnabled ? this.toolExecutor.listToolsForModel() : [];
+        const toolDefinitions = toolsEnabled
+            ? this.toolExecutor.listToolsForModel({ names: input.toolAllowlist })
+            : [];
 
         let providerResult;
         let workingMessages = providerPayload.messages;

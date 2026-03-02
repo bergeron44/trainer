@@ -42,6 +42,7 @@ test('createDefaultToolRegistry registers MVP + additional tools', () => {
         'nutrition_set_daily_targets',
         'user_edit_profile',
         'user_get_profile',
+        'workouts_create_workout',
         'workouts_edit_workout',
         'workouts_get_user_workouts',
         'workouts_get_workout_by_type',
@@ -274,6 +275,60 @@ test('workouts_log_session_result writes set logs for owned workout', async () =
     assert.equal(result.data.count, 1);
     assert.equal(insertedDocs.length, 1);
     assert.equal(insertedDocs[0].user, 'u1');
+});
+
+test('workouts_create_workout persists a new workout for the authenticated user', async () => {
+    let createdPayload;
+    const createdDoc = {
+        _id: 'w-new',
+        date: new Date('2026-03-03T00:00:00.000Z'),
+        muscle_group: 'Full Body',
+        exercises: [{ name: 'Goblet Squat', sets: 3, reps: '10' }],
+        status: 'planned',
+        archived: false,
+        createdAt: new Date('2026-03-02T00:00:00.000Z'),
+        updatedAt: new Date('2026-03-02T00:00:00.000Z'),
+        toObject() {
+            return this;
+        },
+    };
+
+    const registry = createDefaultToolRegistry({
+        models: {
+            Workout: {
+                async create(payload) {
+                    createdPayload = payload;
+                    return {
+                        ...createdDoc,
+                        ...payload,
+                    };
+                },
+            },
+            WorkoutLog: {},
+            Exercise: {},
+            User: {},
+            NutritionLog: {},
+        },
+    });
+
+    const executor = new ToolExecutor({ registry });
+    const result = await executor.executeToolCall({
+        toolCall: {
+            name: 'workouts_create_workout',
+            arguments: {
+                date: '2026-03-03T00:00:00.000Z',
+                muscle_group: 'Full Body',
+                exercises: [{ name: 'Goblet Squat', sets: 3, reps: '10' }],
+                idempotencyKey: 'create-1',
+            },
+        },
+        context: { userId: 'u1', requestId: 'r-create' },
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(createdPayload.user, 'u1');
+    assert.equal(createdPayload.muscle_group, 'Full Body');
+    assert.equal(result.data.created.muscle_group, 'Full Body');
 });
 
 test('nutrition_set_daily_targets updates allowlisted macro fields', async () => {

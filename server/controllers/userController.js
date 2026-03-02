@@ -2,12 +2,49 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const asyncHandler = require('express-async-handler');
 const User = require('../models/User');
+const OnboardingWorkoutPlannerService = require('../services/onboardingWorkoutPlannerService');
+
+const onboardingWorkoutPlannerService = new OnboardingWorkoutPlannerService();
 
 const generateToken = (id) => {
     return jwt.sign({ id }, process.env.JWT_SECRET, {
         expiresIn: '30d',
     });
 };
+
+function normalizeIncomingProfile(profile = {}) {
+    const normalized = { ...(profile || {}) };
+    const planChoice = String(normalized.plan_choice || '').trim().toLowerCase();
+    if (planChoice === 'existing') {
+        normalized.workout_plan_status = 'skipped';
+        normalized.workout_plan_error = undefined;
+    }
+    if (planChoice === 'ai' && normalized.onboarding_completed === true) {
+        normalized.workout_plan_status = normalized.workout_plan_status || 'pending';
+    }
+    return normalized;
+}
+
+async function runOnboardingPlannerSafely({ userId, requestId, trigger }) {
+    try {
+        return await onboardingWorkoutPlannerService.ensurePlanForUser({
+            userId,
+            requestId,
+            trigger,
+        });
+    } catch (error) {
+        console.error('userController.onboardingPlanner error:', {
+            userId,
+            requestId,
+            trigger,
+            message: error?.message,
+        });
+        return {
+            triggered: false,
+            status: 'failed_to_start',
+        };
+    }
+}
 
 // @desc    Register new user
 // @route   POST /api/users
@@ -31,15 +68,22 @@ const registerUser = asyncHandler(async (req, res) => {
         name,
         email,
         password,
-        profile
+        profile: normalizeIncomingProfile(profile),
     });
 
     if (user) {
+        await runOnboardingPlannerSafely({
+            userId: user.id,
+            requestId: req.requestId,
+            trigger: 'register',
+        });
+
+        const latestUser = await User.findById(user.id);
         res.status(201).json({
             _id: user.id,
-            name: user.name,
-            email: user.email,
-            profile: user.profile,
+            name: latestUser?.name || user.name,
+            email: latestUser?.email || user.email,
+            profile: latestUser?.profile || user.profile,
             token: generateToken(user.id),
         });
     } else {
@@ -101,9 +145,16 @@ const updateProfile = asyncHandler(async (req, res) => {
     }
 
     // Update profile fields
-    user.profile = { ...user.profile, ...req.body };
+    user.profile = normalizeIncomingProfile({ ...user.profile, ...req.body });
 
-    const updatedUser = await user.save();
+    await user.save();
+    await runOnboardingPlannerSafely({
+        userId: user.id,
+        requestId: req.requestId,
+        trigger: 'update_profile',
+    });
+
+    const updatedUser = await User.findById(user.id);
 
     res.status(200).json({
         id: updatedUser._id,

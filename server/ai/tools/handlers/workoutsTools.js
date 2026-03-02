@@ -44,6 +44,18 @@ const getWorkoutTypesInputSchema = z.object({
     includeArchived: z.boolean().optional(),
 }).strict();
 
+const createWorkoutInputSchema = z.object({
+    date: z.string().datetime(),
+    muscle_group: z.string().min(1).max(120),
+    exercises: z.array(exerciseSchema).min(1).max(60),
+    status: z.enum(['planned', 'in_progress', 'completed']).optional(),
+    duration_minutes: z.number().int().nonnegative().max(1200).optional(),
+    total_volume: z.number().nonnegative().max(1_000_000).optional(),
+    notes: z.string().max(2000).optional(),
+    archived: z.boolean().optional(),
+    idempotencyKey: z.string().min(1).max(128),
+}).strict();
+
 const editWorkoutInputSchema = z.object({
     workoutId: z.string().min(1),
     patch: editWorkoutPatchSchema,
@@ -423,6 +435,79 @@ function createWorkoutTools({ models = {} } = {}) {
                     data: {
                         items: rows,
                         count: rows.length,
+                    },
+                };
+            },
+        },
+        {
+            name: 'workouts_create_workout',
+            description: 'Create a new workout for the authenticated user.',
+            readWriteMode: 'write',
+            idempotent: true,
+            timeoutMs: 7000,
+            inputSchema: createWorkoutInputSchema,
+            jsonSchema: {
+                type: 'object',
+                additionalProperties: false,
+                required: ['date', 'muscle_group', 'exercises', 'idempotencyKey'],
+                properties: {
+                    date: { type: 'string', format: 'date-time' },
+                    muscle_group: { type: 'string', minLength: 1, maxLength: 120 },
+                    exercises: {
+                        type: 'array',
+                        minItems: 1,
+                        maxItems: 60,
+                        items: {
+                            type: 'object',
+                            additionalProperties: false,
+                            required: ['name'],
+                            properties: {
+                                id: { type: 'string' },
+                                name: { type: 'string', minLength: 1 },
+                                sets: { type: 'integer', minimum: 0 },
+                                reps: { type: 'string', minLength: 1 },
+                                weight: { type: 'number', minimum: 0 },
+                                rest_seconds: { type: 'integer', minimum: 0 },
+                                notes: { type: 'string', maxLength: 1000 },
+                            },
+                        },
+                    },
+                    status: { type: 'string', enum: ['planned', 'in_progress', 'completed'] },
+                    duration_minutes: { type: 'integer', minimum: 0, maximum: 1200 },
+                    total_volume: { type: 'number', minimum: 0, maximum: 1000000 },
+                    notes: { type: 'string', maxLength: 2000 },
+                    archived: { type: 'boolean' },
+                    idempotencyKey: { type: 'string', minLength: 1, maxLength: 128 },
+                },
+            },
+            async handler({ args, context }) {
+                ensureUserId(context.userId);
+
+                const created = await WorkoutModel.create({
+                    user: context.userId,
+                    date: toDateOrThrow(args.date, 'date'),
+                    muscle_group: args.muscle_group,
+                    exercises: args.exercises,
+                    status: args.status || 'planned',
+                    duration_minutes: args.duration_minutes,
+                    total_volume: args.total_volume,
+                    notes: args.notes,
+                    archived: args.archived,
+                });
+
+                return {
+                    changedFields: [
+                        'date',
+                        'muscle_group',
+                        'exercises',
+                        'status',
+                        'duration_minutes',
+                        'total_volume',
+                        'notes',
+                        'archived',
+                    ],
+                    data: {
+                        created: sanitizeWorkout(created),
                     },
                 };
             },

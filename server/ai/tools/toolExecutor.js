@@ -47,9 +47,9 @@ class ToolExecutor {
         this.defaultTimeoutMs = defaultTimeoutMs;
     }
 
-    listToolsForModel() {
+    listToolsForModel({ names } = {}) {
         if (!this.registry) return [];
-        return this.registry.listForModel();
+        return this.registry.listForModel({ names });
     }
 
     async executeToolCalls({ toolCalls, context = {}, maxCalls = 3 }) {

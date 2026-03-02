@@ -1,369 +1,160 @@
 {
-  "plan_id": "trainer_agent_tools_impl_v1",
-  "status": "completed",
-  "date": "2026-03-01",
-  "goals": [
-    "Add provider-agnostic agent tools for workout, user, nutrition, and meal data.",
-    "Support safe read + edit operations with strict validation and user scoping.",
-    "Persist all edit operations to database collections.",
-    "Keep one internal tool interface across OpenAI, Gemini, and Anthropic."
+  "plan_id": "onboarding_ai_workout_agent_integration_v1",
+  "status": "in_progress",
+  "date": "2026-03-02",
+  "objective": "When onboarding finishes with AI-plan choice, generate the user's initial workout plan through the agent tool loop (workout tools + user_get_profile for personalization), replacing the current legacy /api/workouts/generate dashboard trigger.",
+  "current_state_findings": [
+    "Onboarding sends profile payload including plan_choice/custom_plan in src/pages/Onboarding.jsx.",
+    "User profile schema currently does not define plan_choice/custom_plan, so these are not reliably persisted in server/models/User.js.",
+    "Workout generation is currently legacy and dashboard-triggered via POST /api/workouts/generate in src/pages/Dashboard.jsx.",
+    "Agent/tool loop exists and is production-wired via ChatBrainService + ToolExecutor.",
+    "Workout tools currently have read/edit/log/swap, but no create tool for initial plan creation."
   ],
-  "assumptions": [
-    "Read tools are read-only for domain data, but can write audit logs.",
-    "Edit tools mutate primary domain collections and write audit logs.",
-    "All tool execution is server-side only and scoped to authenticated user."
+  "hard_requirements": [
+    "Planner execution must happen server-side only.",
+    "Planner must execute via workout tools (not direct model writes inside planner prompt path).",
+    "Planner may use user_get_profile (read-only) to retrieve user profile details for personalization.",
+    "User scope must remain enforced via tool context userId.",
+    "Mutations must keep idempotency + audit behavior."
   ],
-  "tooling_architecture": {
-    "internal_contract": {
-      "fields": [
-        "name",
-        "description",
-        "inputSchema (Zod)",
-        "handler",
-        "readWriteMode (read|write)",
-        "idempotent (boolean)",
-        "timeoutMs"
-      ]
-    },
-    "execution_pipeline": [
-      "Model requests tool call(s)",
-      "Backend validates tool name + input schema",
-      "Backend enforces auth scope + field allowlist",
-      "Handler executes DB read/write",
-      "Backend records audit event",
-      "Backend returns normalized tool result",
-      "Model receives tool result and composes final response"
-    ],
-    "result_envelope": {
-      "ok": "boolean",
-      "toolName": "string",
-      "requestId": "string",
-      "data": "object|null",
-      "error": {
-        "code": "string",
-        "message": "string",
-        "details": "object|null"
-      }
-    }
-  },
-  "tool_catalog": {
-    "mvp": [
-      {
-        "name": "workouts_get_user_workouts",
-        "category": "workouts",
-        "mode": "read",
-        "db_actions": [
-          "find user workouts"
-        ],
-        "input": {
-          "limit": "number(optional)",
-          "cursor": "string(optional)",
-          "includeArchived": "boolean(optional)"
-        }
-      },
-      {
-        "name": "workouts_get_workout_by_type",
-        "category": "workouts",
-        "mode": "read",
-        "db_actions": [
-          "find workouts filtered by type"
-        ],
-        "input": {
-          "type": "string(required, examples: A, B, C, full-body, push, pull, legs)",
-          "limit": "number(optional)",
-          "includeArchived": "boolean(optional)"
-        }
-      },
-      {
-        "name": "workouts_get_workout_types",
-        "category": "workouts",
-        "mode": "read",
-        "db_actions": [
-          "aggregate distinct workout types + counts"
-        ],
-        "input": {
-          "includeArchived": "boolean(optional)"
-        }
-      },
-      {
-        "name": "workouts_edit_workout",
-        "category": "workouts",
-        "mode": "write",
-        "idempotent": true,
-        "db_actions": [
-          "update workout fields/exercises"
-        ],
-        "input": {
-          "workoutId": "string(required)",
-          "patch": "object(required, allowlist enforced)",
-          "idempotencyKey": "string(required)"
-        }
-      },
-      {
-        "name": "user_get_profile",
-        "category": "user",
-        "mode": "read",
-        "db_actions": [
-          "find user profile"
-        ],
-        "input": {}
-      },
-      {
-        "name": "user_edit_profile",
-        "category": "user",
-        "mode": "write",
-        "idempotent": true,
-        "db_actions": [
-          "update user profile allowlisted fields"
-        ],
-        "input": {
-          "patch": "object(required)",
-          "idempotencyKey": "string(required)"
-        }
-      },
-      {
-        "name": "nutrition_get_user_data",
-        "category": "nutrition",
-        "mode": "read",
-        "db_actions": [
-          "find nutrition profile/targets/log summaries"
-        ],
-        "input": {
-          "date": "string(optional)",
-          "range": "object(optional)"
-        }
-      },
-      {
-        "name": "nutrition_edit_user_data",
-        "category": "nutrition",
-        "mode": "write",
-        "idempotent": true,
-        "db_actions": [
-          "update nutrition targets/preferences"
-        ],
-        "input": {
-          "patch": "object(required)",
-          "idempotencyKey": "string(required)"
-        }
-      },
-      {
-        "name": "meals_get_user_meals",
-        "category": "meals",
-        "mode": "read",
-        "db_actions": [
-          "find meals/templates/logged meals"
-        ],
-        "input": {
-          "date": "string(optional)",
-          "limit": "number(optional)"
-        }
-      },
-      {
-        "name": "meals_edit_meal",
-        "category": "meals",
-        "mode": "write",
-        "idempotent": true,
-        "db_actions": [
-          "update meal entry/template"
-        ],
-        "input": {
-          "mealId": "string(required)",
-          "patch": "object(required)",
-          "idempotencyKey": "string(required)"
-        }
-      }
-    ],
-    "recommended_phase_2": [
-      {
-        "name": "workouts_log_session_result",
-        "mode": "write",
-        "value": "Save sets/reps/weight/RPE per exercise set."
-      },
-      {
-        "name": "workouts_swap_exercise",
-        "mode": "write",
-        "value": "Replace exercise by constraints (equipment, injury, goal)."
-      },
-      {
-        "name": "workouts_create_workout",
-        "mode": "write",
-        "value": "Create new workout from structured fields."
-      },
-      {
-        "name": "workouts_delete_workout",
-        "mode": "write",
-        "value": "Hard delete or archive workout safely."
-      },
-      {
-        "name": "nutrition_set_daily_targets",
-        "mode": "write",
-        "value": "Set calories and macro targets."
-      },
-      {
-        "name": "nutrition_log_intake",
-        "mode": "write",
-        "value": "Record daily macro/calorie intake quickly."
-      },
-      {
-        "name": "meals_create_meal",
-        "mode": "write",
-        "value": "Create meal/template with macro breakdown."
-      },
-      {
-        "name": "meals_delete_meal",
-        "mode": "write",
-        "value": "Delete or archive a meal entry safely."
-      }
-    ]
-  },
-  "safety_rules": {
-    "auth_scope": [
-      "Every query/update filtered by authenticated userId.",
-      "Reject cross-user IDs."
-    ],
-    "validation": [
-      "Strict Zod validation for every tool input.",
-      "Reject unknown keys where appropriate."
-    ],
-    "write_guards": [
-      "Allowlist patchable fields by tool.",
-      "Idempotency key required for all write tools.",
-      "Optional optimistic concurrency via updatedAt/version match."
-    ],
-    "execution_limits": [
-      "Max tool calls per response cycle: 3",
-      "Max tool loop iterations: 3",
-      "Per-tool timeout and global response timeout"
-    ],
-    "audit": [
-      "Store tool call events with userId, requestId, toolName, mode, changedFields, status, latencyMs."
-    ]
-  },
-  "provider_mapping_plan": {
-    "openai": "Map internal tool schema to OpenAI tool/function format and parse tool outputs.",
-    "gemini": "Map internal tool schema to Gemini chat.completions tool format.",
-    "anthropic": "Map internal schema to Anthropic tool_use/tool_result message blocks.",
-    "fallback": "If provider tool-calling unavailable, run safe no-tool response path."
-  },
-  "implementation_phases": [
+  "design_decisions": [
+    "Add a workout creation tool (workouts_create_workout) so onboarding agent can create plan records through the same governed tool pipeline.",
+    "Add planner-specific tool allowlist support so onboarding planner can run workout tools plus user_get_profile.",
+    "Keep user tool access read-only in onboarding planner scope (no user_edit_profile).",
+    "Move trigger from dashboard auto-generation to backend onboarding completion path (register/update profile).",
+    "Keep a controlled fallback path if AI planning fails (status + retry endpoint)."
+  ],
+  "phases": [
     {
       "phase": 1,
-      "name": "Tool Core",
+      "name": "Profile/Onboarding Contract Fix",
       "status": "completed",
-      "deliverables": [
-        "Create tool registry and execution engine.",
-        "Add shared input/output schemas and error codes.",
-        "Add audit event model/service."
+      "changes": [
+        "Extend User.profile schema with onboarding planning fields: plan_choice, custom_plan, workout_plan_status, workout_plan_error, workout_plan_generated_at, workout_plan_source.",
+        "Persist plan_choice from onboarding payload so backend can decide AI vs existing plan path."
       ],
-      "files_expected": [
-        "trainer/server/ai/tools/index.js",
-        "trainer/server/ai/tools/toolRegistry.js",
-        "trainer/server/ai/tools/toolExecutor.js",
-        "trainer/server/ai/tools/toolSchemas.js",
-        "trainer/server/ai/core/chatSchemas.js"
+      "files": [
+        "trainer/server/models/User.js",
+        "trainer/server/controllers/userController.js"
       ]
     },
     {
       "phase": 2,
-      "name": "MVP Tool Handlers",
+      "name": "Workout Creation Tool",
       "status": "completed",
-      "deliverables": [
-        "Implement 10 MVP tools including get_workout_by_type and get_workout_types.",
-        "Enforce field allowlists + user scope for all handlers."
+      "changes": [
+        "Implement workouts_create_workout in workouts tool handler with strict zod/json schema.",
+        "Require idempotencyKey for write calls.",
+        "Return sanitized workout object.",
+        "Rely on existing ToolExecutor idempotency + audit pipeline."
       ],
-      "files_expected": [
+      "files": [
         "trainer/server/ai/tools/handlers/workoutsTools.js",
-        "trainer/server/ai/tools/handlers/userTools.js",
-        "trainer/server/ai/tools/handlers/nutritionTools.js",
-        "trainer/server/ai/tools/handlers/mealsTools.js"
+        "trainer/server/tests/chatTools.test.js"
       ]
     },
     {
       "phase": 3,
-      "name": "Chat Orchestration Loop",
+      "name": "Planner Tool-Scoping Support",
       "status": "completed",
-      "deliverables": [
-        "Add multi-step tool-calling loop in ChatBrainService.",
-        "Return final assistant response after tool result integration."
+      "changes": [
+        "Add optional tool allowlist to ChatBrainService request input.",
+        "Thread allowlist through ToolExecutor.listToolsForModel and ToolRegistry.listForModel.",
+        "Use this to expose only workout tools + user_get_profile during onboarding planning."
       ],
-      "files_expected": [
-        "trainer/server/services/chatBrainService.js"
+      "files": [
+        "trainer/server/services/chatBrainService.js",
+        "trainer/server/ai/tools/toolExecutor.js",
+        "trainer/server/ai/tools/toolRegistry.js",
+        "trainer/server/ai/core/chatSchemas.js",
+        "trainer/server/tests/chatBrainService.toolLoop.test.js"
       ]
     },
     {
       "phase": 4,
-      "name": "Provider Adapters",
+      "name": "Onboarding Workout Planner Service",
       "status": "completed",
-      "deliverables": [
-        "Add tool schema injection and tool-call parsing in all provider adapters."
+      "changes": [
+        "Create a dedicated service to call ChatBrainService with onboarding context and planner system prompt.",
+        "Planner should fetch user profile via user_get_profile before plan generation when profile context is incomplete.",
+        "Prompt constraints: must create workouts via workouts_create_workout, respect frequency/session_duration/environment/injuries/goal/experience.",
+        "Planner call config: higher tool-call budget than chat default, persistSummary=false."
       ],
-      "files_expected": [
-        "trainer/server/ai/providers/openaiChatProvider.js",
-        "trainer/server/ai/providers/geminiChatProvider.js",
-        "trainer/server/ai/providers/anthropicChatProvider.js"
+      "files": [
+        "trainer/server/services/onboardingWorkoutPlannerService.js"
       ]
     },
     {
       "phase": 5,
-      "name": "Controller + API Response",
+      "name": "Backend Trigger Integration",
       "status": "completed",
-      "deliverables": [
-        "Add optional toolTrace in response payload.",
-        "Map tool errors to stable API error shape."
+      "changes": [
+        "In registerUser and updateProfile, when onboarding_completed=true and plan_choice='ai' and no existing plan, invoke onboarding planner service.",
+        "Set profile.workout_plan_status transitions: pending -> generating -> ready/failed.",
+        "Set profile.has_existing_plan=true only after successful tool-created plan.",
+        "Store profile.workout_plan_error on failure for UI retry messaging."
       ],
-      "files_expected": [
-        "trainer/server/controllers/chatController.js"
+      "files": [
+        "trainer/server/controllers/userController.js"
       ]
     },
     {
       "phase": 6,
-      "name": "Tests",
+      "name": "Frontend Flow Switch",
       "status": "completed",
-      "deliverables": [
-        "Unit tests for each tool handler.",
-        "Integration tests for tool loop and provider mappings.",
-        "Regression tests for existing non-tool chat behavior."
+      "changes": [
+        "Remove legacy dashboard auto-call to POST /api/workouts/generate.",
+        "Read workout_plan_status from user profile to show generating/failure states.",
+        "Keep dashboard workout fetch behavior unchanged once plan is ready."
       ],
-      "files_expected": [
-        "trainer/server/tests/chatTools.test.js",
-        "trainer/server/tests/chatBrainService.toolLoop.test.js",
-        "trainer/server/tests/chatProvider.toolsMapping.test.js",
-        "trainer/server/tests/chatController.test.js"
+      "files": [
+        "trainer/src/pages/Dashboard.jsx",
+        "trainer/src/pages/Onboarding.jsx"
       ]
     },
     {
       "phase": 7,
-      "name": "Docs + Env",
+      "name": "Retry and Operations",
       "status": "completed",
-      "deliverables": [
-        "Document tool catalog and safety model.",
-        "Add any feature flags/env vars for tool loop controls."
+      "changes": [
+        "Add protected endpoint to retry onboarding plan generation for failed/pending edge cases.",
+        "Use requestId-based idempotency key prefixing in planner tool calls.",
+        "Add logs around planner start/end/failure with requestId/userId/provider."
       ],
-      "files_expected": [
-        "trainer/docs/provider_agnostic_chat_agent_plan.json",
-        "trainer/server/.env.example",
-        "trainer/README.md"
+      "files": [
+        "trainer/server/routes/workoutRoutes.js",
+        "trainer/server/controllers/workoutController.js"
+      ]
+    },
+    {
+      "phase": 8,
+      "name": "Test Coverage",
+      "status": "in_progress",
+      "changes": [
+        "Unit tests: workouts_create_workout validation, auth scoping, idempotency replay.",
+        "Integration tests: onboarding planner tool scope includes user_get_profile and excludes user_edit_profile.",
+        "Integration tests: registration/updateProfile with plan_choice='ai' triggers planner and persists workouts.",
+        "Regression tests: non-AI path and existing-routine path do not trigger planner."
+      ],
+      "files": [
+        "trainer/server/tests/chatTools.test.js",
+        "trainer/server/tests/chatBrainService.toolLoop.test.js",
+        "trainer/server/tests/userController.onboardingPlanner.test.js",
+        "trainer/server/tests/workoutController.test.js"
       ]
     }
   ],
-  "test_plan": {
-    "unit": [
-      "Validation pass/fail for each tool input schema.",
-      "Handler behavior for success, not found, forbidden scope, invalid patch."
-    ],
-    "integration": [
-      "Tool-calling round trip: model requests tool -> handler executes -> model finalizes response.",
-      "Idempotency behavior for repeated mutation requests."
-    ],
-    "regression": [
-      "Existing chat without tool calls remains unchanged."
-    ]
-  },
-  "done_criteria": [
-    "All MVP tools callable through agent across providers.",
-    "All write tools persist updates correctly in DB.",
-    "Tool loop has retries/timeouts/limits and passes tests.",
-    "No cross-user data access in any test path."
+  "acceptance_criteria": [
+    "New user finishing onboarding with AI option gets workouts created via tool execution (audited), without dashboard /generate call.",
+    "Generated workouts are correctly scoped to that user and visible in dashboard.",
+    "No duplicate plans on retries due to idempotency keys.",
+    "Planner failures are visible in profile status and can be retried.",
+    "Existing chat agent behavior remains unchanged for normal coach chat."
   ],
-  "next_action": "If you approve, I will start Phase 1 implementation and commit in small verified increments."
+  "env_additions": [
+    "ONBOARDING_AI_PLANNER_ENABLED=true",
+    "ONBOARDING_AI_PLANNER_MAX_TOOL_CALLS=30",
+    "ONBOARDING_AI_PLANNER_MAX_ITERATIONS=8",
+    "ONBOARDING_AI_PLANNER_RETRY_ATTEMPTS=1"
+  ]
 }
