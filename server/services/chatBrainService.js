@@ -3,8 +3,12 @@ const ChatSummary = require('../models/ChatSummary');
 const { createChatProvider } = require('../ai/providers');
 const { assertChatProvider } = require('../ai/core/chatProvider');
 const { createToolExecutor } = require('../ai/tools');
+const {
+    AGENT_TYPE,
+    normalizeAgentType,
+    createAgentRegistry,
+} = require('./agents');
 
-const DEFAULT_PERSONA = 'default';
 const DEFAULT_MEMORY_LIMIT = 5;
 const DEFAULT_MAX_MESSAGES = 20;
 const DEFAULT_MAX_MESSAGE_CHARS = 2000;
@@ -15,59 +19,6 @@ const DEFAULT_MAX_TOOL_ITERATIONS = 4;
 const MIN_MESSAGES_TO_KEEP = 2;
 const DEFAULT_RETRY_ATTEMPTS = 2;
 const DEFAULT_RETRY_BACKOFF_MS = 250;
-
-const PERSONA_LIBRARY = {
-    default: {
-        style: 'Balanced, practical fitness coach. Supportive and direct.',
-        directives: [
-            'Give clear, actionable coaching.',
-            'Use short responses by default (2-4 sentences).',
-            'Prioritize user safety and sustainable progress.',
-        ],
-    },
-    motivational: {
-        style: 'Positive and energetic coach.',
-        directives: [
-            'Encourage the user and celebrate progress.',
-            'Keep tone warm and motivating.',
-        ],
-    },
-    spicy: {
-        style: 'Direct, tough-love coach.',
-        directives: [
-            'Be blunt but constructive.',
-            'Push for accountability without being insulting.',
-        ],
-    },
-    hardcore: {
-        style: 'High-intensity no-excuses coach.',
-        directives: [
-            'Use punchy, disciplined language.',
-            'Demand consistency and effort.',
-        ],
-    },
-    drill_sergeant: {
-        style: 'Aggressive but caring performance coach.',
-        directives: [
-            'Short, high-energy instructions.',
-            'Drive intensity and commitment.',
-        ],
-    },
-    scientist: {
-        style: 'Evidence-based and analytical coach.',
-        directives: [
-            'Explain decisions briefly with training rationale.',
-            'Reference recovery, workload, and progression clearly.',
-        ],
-    },
-    zen_coach: {
-        style: 'Calm and mindful long-term coach.',
-        directives: [
-            'Promote consistency and body awareness.',
-            'Use a supportive, steady tone.',
-        ],
-    },
-};
 
 const BrainToolCallSchema = z.object({
     id: z.string().min(1).optional(),
@@ -90,6 +41,7 @@ const BrainInputSchema = z.object({
     context: z.union([z.string(), z.record(z.string(), z.unknown())]).optional(),
     personaId: z.string().min(1).optional(),
     coachStyle: z.string().min(1).optional(),
+    agentType: z.enum([AGENT_TYPE.COACH, AGENT_TYPE.NUTRITIONIST]).optional(),
     userId: z.string().min(1).optional(),
     metadata: z.record(z.string(), z.unknown()).optional(),
     options: z.object({
@@ -134,6 +86,40 @@ function safeContextLabel(context) {
         return 'General';
     }
     return 'General';
+}
+
+function normalizePersonaId(value) {
+    return String(value || '').trim().toLowerCase();
+}
+
+function looksLikeNutritionContext(context, contextLabel) {
+    const candidates = [];
+
+    if (typeof contextLabel === 'string' && contextLabel.trim()) {
+        candidates.push(contextLabel);
+    }
+
+    if (typeof context === 'string' && context.trim()) {
+        candidates.push(context);
+    }
+
+    if (context && typeof context === 'object') {
+        const contextFields = [context.label, context.name, context.page, context.mode, context.type];
+        contextFields.forEach((field) => {
+            if (typeof field === 'string' && field.trim()) {
+                candidates.push(field);
+            }
+        });
+    }
+
+    const haystack = candidates.join(' ').toLowerCase();
+    return (
+        haystack.includes('nutrition')
+        || haystack.includes('meal')
+        || haystack.includes('macro')
+        || haystack.includes('calorie')
+        || haystack.includes('diet')
+    );
 }
 
 function isTransientProviderError(error) {
@@ -192,6 +178,7 @@ class ChatBrainService {
             ? assertChatProvider(provider)
             : createChatProvider();
         this.toolExecutor = toolExecutor || createToolExecutor();
+        this.agentRegistry = createAgentRegistry();
         this.ChatSummaryModel = chatSummaryModel;
         this.config = {
             defaultMemoryLimit: config.defaultMemoryLimit || DEFAULT_MEMORY_LIMIT,
@@ -220,11 +207,32 @@ class ChatBrainService {
         };
     }
 
-    resolvePersona(personaId) {
-        const key = String(personaId || DEFAULT_PERSONA).trim().toLowerCase();
+    resolveAgentProfile({ input, contextLabel }) {
+        const normalizedPersonaId = normalizePersonaId(input.personaId || input.coachStyle);
+        const explicitAgentType = normalizeAgentType(input.agentType);
+        let resolvedAgentType = explicitAgentType;
+
+        if (!resolvedAgentType) {
+            if (normalizedPersonaId === 'nutritionist') {
+                resolvedAgentType = AGENT_TYPE.NUTRITIONIST;
+            } else if (normalizedPersonaId.endsWith('_coach')) {
+                resolvedAgentType = AGENT_TYPE.COACH;
+            } else if (looksLikeNutritionContext(input.context, contextLabel)) {
+                resolvedAgentType = AGENT_TYPE.NUTRITIONIST;
+            } else {
+                resolvedAgentType = this.agentRegistry.inferUniqueTypeByPersona(normalizedPersonaId)
+                    || AGENT_TYPE.COACH;
+            }
+        }
+
+        const agent = this.agentRegistry.resolveByType(resolvedAgentType);
+        const { key, profile } = agent.resolvePersona(normalizedPersonaId);
+
         return {
-            key,
-            profile: PERSONA_LIBRARY[key] || PERSONA_LIBRARY[DEFAULT_PERSONA],
+            agentType: agent.type,
+            agentDirectives: agent.getSystemDirectives(),
+            personaKey: key,
+            personaProfile: profile,
         };
     }
 
@@ -267,10 +275,15 @@ class ChatBrainService {
         return messages.reduce((sum, message) => sum + estimateTokens(message.content), 0);
     }
 
-    async loadMemories({ userId, limit }) {
+    async loadMemories({ userId, limit, agentType }) {
         if (!userId || !limit) return [];
 
-        const memories = await this.ChatSummaryModel.find({ user: userId })
+        const query = { user: userId };
+        if (agentType) {
+            query.agent_type = agentType;
+        }
+
+        const memories = await this.ChatSummaryModel.find(query)
             .sort({ createdAt: -1 })
             .limit(limit)
             .lean();
@@ -290,9 +303,18 @@ class ChatBrainService {
         return `Recent relevant memory:\n${lines.join('\n')}`;
     }
 
-    buildSystemPrompt({ input, personaProfile, contextLabel, memoryBlock }) {
+    buildSystemPrompt({
+        input,
+        agentType,
+        agentDirectives,
+        personaProfile,
+        contextLabel,
+        memoryBlock,
+    }) {
         const directives = [
+            `Agent type: ${agentType}`,
             `Coach persona: ${personaProfile.style}`,
+            ...(agentDirectives || []),
             ...personaProfile.directives,
             `Current context: ${contextLabel}`,
             'If injury or pain is mentioned, recommend safe alternatives and reducing intensity.',
@@ -314,6 +336,7 @@ class ChatBrainService {
 
     async persistSummary({
         userId,
+        agentType,
         contextLabel,
         userMessage,
         assistantMessage,
@@ -323,6 +346,7 @@ class ChatBrainService {
         try {
             await this.ChatSummaryModel.create({
                 user: userId,
+                agent_type: agentType || AGENT_TYPE.COACH,
                 user_request: truncateText(userMessage, 1200),
                 ai_response: truncateText(assistantMessage, 4000),
                 context: contextLabel,
@@ -455,18 +479,27 @@ class ChatBrainService {
     async generateResponse(rawInput) {
         const input = BrainInputSchema.parse(rawInput || {});
         const normalizedMessages = this.pruneMessages(this.normalizeMessages(input));
-        const { key: personaKey, profile: personaProfile } = this.resolvePersona(
-            input.personaId || input.coachStyle
-        );
         const contextLabel = safeContextLabel(input.context);
+        const {
+            agentType,
+            agentDirectives,
+            personaKey,
+            personaProfile,
+        } = this.resolveAgentProfile({
+            input,
+            contextLabel,
+        });
         const memoryLimit = input.memoryLimit ?? this.config.defaultMemoryLimit;
         const memories = await this.loadMemories({
             userId: input.userId,
             limit: memoryLimit,
+            agentType,
         });
         const memoryBlock = this.formatMemoryBlock(memories);
         const systemPrompt = this.buildSystemPrompt({
             input,
+            agentType,
+            agentDirectives,
             personaProfile,
             contextLabel,
             memoryBlock,
@@ -483,6 +516,7 @@ class ChatBrainService {
                 ...(input.metadata || {}),
                 context_label: contextLabel,
                 persona: personaKey,
+                agent_type: agentType,
                 memory_count: memories.length,
             },
             options: input.options,
@@ -510,6 +544,7 @@ class ChatBrainService {
         if (shouldPersist) {
             await this.persistSummary({
                 userId: input.userId,
+                agentType,
                 contextLabel,
                 userMessage: this.getLastUserMessage(normalizedMessages),
                 assistantMessage: responseText,
@@ -525,6 +560,7 @@ class ChatBrainService {
             toolTrace,
             meta: {
                 persona: personaKey,
+                agentType,
                 context: contextLabel,
                 memoryUsed: memories.length,
                 messageCount: normalizedMessages.length,

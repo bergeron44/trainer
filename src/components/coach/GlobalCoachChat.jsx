@@ -3,8 +3,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Send, Sparkles, Brain } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import ReactMarkdown from 'react-markdown';
 import api from '@/api/axios';
+
+const THREAD_STORAGE_KEY = 'nexus_global_chat_threads_v1';
 
 const getCoachPersona = (style) => {
   const personas = {
@@ -24,6 +27,54 @@ const getCoachPersona = (style) => {
   return personas[style] || personas.motivational;
 };
 
+const getDefaultAgentType = (context) => {
+  const label = String(context || '').toLowerCase();
+  return label.includes('nutrition') ? 'nutritionist' : 'coach';
+};
+
+const getAgentGreeting = (agentType, coachStyle) => {
+  if (agentType === 'nutritionist') {
+    return "Hey, I'm your nutritionist. I'll help with meals, macros, and daily nutrition targets. Tell me what you've eaten today. 🥗";
+  }
+  return getCoachPersona(coachStyle).greeting;
+};
+
+const getPersonaIdForAgent = (agentType, coachStyle) => (
+  agentType === 'nutritionist' ? 'nutritionist' : coachStyle
+);
+
+const buildInitialThread = (agentType, coachStyle) => ([
+  { role: 'assistant', content: getAgentGreeting(agentType, coachStyle) }
+]);
+
+const sanitizeMessages = (messages) => {
+  if (!Array.isArray(messages)) return [];
+  return messages
+    .filter((message) => message && typeof message.role === 'string' && typeof message.content === 'string')
+    .map((message) => ({
+      role: message.role,
+      content: message.content,
+      toolTrace: Array.isArray(message.toolTrace) ? message.toolTrace : undefined,
+    }));
+};
+
+const loadStoredThreads = () => {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = window.sessionStorage.getItem(THREAD_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return {};
+
+    return {
+      coach: sanitizeMessages(parsed.coach),
+      nutritionist: sanitizeMessages(parsed.nutritionist),
+    };
+  } catch (_error) {
+    return {};
+  }
+};
+
 export default function GlobalCoachChat({
   isOpen,
   onClose,
@@ -31,38 +82,59 @@ export default function GlobalCoachChat({
   coachStyle = 'motivational'
 }) {
   const showToolTrace = Boolean(import.meta.env.DEV);
-  const persona = getCoachPersona(coachStyle);
-
-  const [messages, setMessages] = useState([
-    { role: 'assistant', content: persona.greeting }
-  ]);
+  const [selectedAgentType, setSelectedAgentType] = useState(() => getDefaultAgentType(context));
+  const [threadsByAgent, setThreadsByAgent] = useState(() => loadStoredThreads());
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [pastMemories, setPastMemories] = useState([]);
-  const [memoriesLoaded, setMemoriesLoaded] = useState(false);
   const messagesEndRef = useRef(null);
 
-  // Load past memories on mount
-  useEffect(() => {
-    const loadMemories = async () => {
-      try {
-        const { data } = await api.get('/chat/summaries');
-        setPastMemories(data);
-      } catch (error) {
-        console.error('Failed to load memories:', error);
-      } finally {
-        setMemoriesLoaded(true);
-      }
-    };
-    if (isOpen && !memoriesLoaded) {
-      loadMemories();
-    }
-  }, [isOpen, memoriesLoaded]);
+  const messages = (threadsByAgent[selectedAgentType] && threadsByAgent[selectedAgentType].length)
+    ? threadsByAgent[selectedAgentType]
+    : buildInitialThread(selectedAgentType, coachStyle);
 
   useEffect(() => {
-    // Reset messages when coach style changes
-    setMessages([{ role: 'assistant', content: persona.greeting }]);
-  }, [coachStyle]);
+    setThreadsByAgent((prev) => {
+      if (prev[selectedAgentType] && prev[selectedAgentType].length) {
+        return prev;
+      }
+      return {
+        ...prev,
+        [selectedAgentType]: buildInitialThread(selectedAgentType, coachStyle),
+      };
+    });
+  }, [selectedAgentType, coachStyle]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.sessionStorage.setItem(THREAD_STORAGE_KEY, JSON.stringify(threadsByAgent));
+  }, [threadsByAgent]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    let cancelled = false;
+    const loadMemories = async () => {
+      try {
+        const { data } = await api.get('/chat/summaries', {
+          params: { agentType: selectedAgentType },
+        });
+        if (!cancelled) {
+          setPastMemories(Array.isArray(data) ? data : []);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error('Failed to load memories:', error);
+        }
+      }
+    };
+
+    loadMemories();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, selectedAgentType]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -76,6 +148,9 @@ export default function GlobalCoachChat({
     if (!input.trim() || isTyping) return;
 
     const userMessage = input.trim();
+    const agentType = selectedAgentType;
+    const personaId = getPersonaIdForAgent(agentType, coachStyle);
+
     const outgoingMessages = [...messages, { role: 'user', content: userMessage }]
       .filter((message, index) => !(index === 0 && message.role === 'assistant'))
       .slice(-12)
@@ -84,48 +159,77 @@ export default function GlobalCoachChat({
     const structuredContext = {
       label: context,
       page: 'GlobalCoachChat',
-      memoryCount: pastMemories.length
+      memoryCount: pastMemories.length,
+      agentType,
     };
 
     setInput('');
-    setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+    setThreadsByAgent((prev) => {
+      const currentMessages = (prev[agentType] && prev[agentType].length)
+        ? prev[agentType]
+        : buildInitialThread(agentType, coachStyle);
+      return {
+        ...prev,
+        [agentType]: [...currentMessages, { role: 'user', content: userMessage }],
+      };
+    });
     setIsTyping(true);
 
     try {
       const { data } = await api.post('/chat/response', {
         messages: outgoingMessages,
         context: structuredContext,
-        personaId: coachStyle,
+        personaId,
+        agentType,
         metadata: {
           surface: 'GlobalCoachChat'
         },
-        coachStyle
+        coachStyle: personaId
       });
 
       const aiResponse = data.response;
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: aiResponse,
-        toolTrace: Array.isArray(data.toolTrace) ? data.toolTrace : []
-      }]);
+      setThreadsByAgent((prev) => {
+        const currentMessages = (prev[agentType] && prev[agentType].length)
+          ? prev[agentType]
+          : buildInitialThread(agentType, coachStyle);
+        return {
+          ...prev,
+          [agentType]: [...currentMessages, {
+            role: 'assistant',
+            content: aiResponse,
+            toolTrace: Array.isArray(data.toolTrace) ? data.toolTrace : []
+          }],
+        };
+      });
       setIsTyping(false);
 
       // Update local memory indicator without additional write calls.
-      setPastMemories(prev => [{
+      setPastMemories((prev) => [{
         user_request: userMessage,
         ai_response: aiResponse,
-        context: context
+        context,
       }, ...prev].slice(0, 5));
     } catch (error) {
-      console.error("Chat error:", error);
-      setMessages(prev => [...prev, { role: 'assistant', content: "I'm having trouble connecting right now. Let's try again in a moment!" }]);
+      console.error('Chat error:', error);
+      setThreadsByAgent((prev) => {
+        const currentMessages = (prev[agentType] && prev[agentType].length)
+          ? prev[agentType]
+          : buildInitialThread(agentType, coachStyle);
+        return {
+          ...prev,
+          [agentType]: [...currentMessages, {
+            role: 'assistant',
+            content: "I'm having trouble connecting right now. Let's try again in a moment!"
+          }],
+        };
+      });
       setIsTyping(false);
     }
   };
 
-  const quickReplies = context.includes('Nutrition')
-    ? ["What should I eat?", "Am I eating enough protein?", "Best post-workout meal?"]
-    : ["I'm short on time", "Feeling tired today", "Make it harder"];
+  const quickReplies = selectedAgentType === 'nutritionist'
+    ? ['What should I eat?', 'Am I eating enough protein?', 'Best post-workout meal?']
+    : ["I'm short on time", 'Feeling tired today', 'Make it harder'];
 
   return (
     <AnimatePresence>
@@ -134,7 +238,7 @@ export default function GlobalCoachChat({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60]"
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[120]"
           onClick={onClose}
         >
           <motion.div
@@ -161,6 +265,17 @@ export default function GlobalCoachChat({
                         {pastMemories.length} memories
                       </span>
                     )}
+                  </div>
+                  <div className="mt-2">
+                    <Select value={selectedAgentType} onValueChange={setSelectedAgentType}>
+                      <SelectTrigger className="h-8 w-[150px] border-[#2A2A2A] bg-[#1A1A1A] px-2 text-xs text-white">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="z-[220] border-[#2A2A2A] bg-[#121212] text-white">
+                        <SelectItem value="coach" className="text-xs focus:bg-[#1F1F1F]">Coach</SelectItem>
+                        <SelectItem value="nutritionist" className="text-xs focus:bg-[#1F1F1F]">Nutritionist</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
               </div>

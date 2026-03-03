@@ -87,7 +87,7 @@ test('ChatBrainService executes tool calls and performs a follow-up provider res
                         data: {
                             profile: {
                                 goal: 'muscle_gain',
-                                trainer_personality: 'scientist',
+                                trainer_personality: 'scientist_coach',
                             },
                         },
                         error: null,
@@ -109,7 +109,7 @@ test('ChatBrainService executes tool calls and performs a follow-up provider res
 
     const result = await service.generateResponse({
         userId: 'u1',
-        personaId: 'scientist',
+        personaId: 'scientist_coach',
         metadata: { requestId: 'req-1' },
         messages: [
             {
@@ -121,9 +121,11 @@ test('ChatBrainService executes tool calls and performs a follow-up provider res
 
     assert.equal(providerInputs.length, 2);
     assert.equal(result.response, 'Updated your plan using your profile and current targets.');
+    assert.equal(result.meta.agentType, 'coach');
     assert.equal(result.meta.toolCallsExecuted, 1);
     assert.equal(result.toolTrace.length, 1);
     assert.equal(persistedSummary.user, 'u1');
+    assert.equal(persistedSummary.agent_type, 'coach');
 
     const secondRoundMessages = providerInputs[1].messages;
     assert.equal(secondRoundMessages[1].role, 'assistant');

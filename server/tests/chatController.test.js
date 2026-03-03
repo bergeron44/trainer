@@ -120,6 +120,32 @@ test('getSummaries scopes by authenticated user', async () => {
     assert.equal(Array.isArray(res.body), true);
 });
 
+test('getSummaries filters by agent type when provided', async () => {
+    let findQuery;
+    ChatSummary.find = (query) => {
+        findQuery = query;
+        return {
+            sort() {
+                return this;
+            },
+            limit() {
+                return Promise.resolve([]);
+            },
+        };
+    };
+
+    const req = {
+        query: { agentType: 'nutritionist' },
+        user: { id: 'user-42' },
+    };
+    const res = createRes();
+
+    await getSummaries(req, res, () => {});
+
+    assert.deepEqual(findQuery, { user: 'user-42', agent_type: 'nutritionist' });
+    assert.equal(res.statusCode, 200);
+});
+
 test('createSummary writes authenticated user id', async () => {
     let createdPayload;
     ChatSummary.create = async (payload) => {
@@ -142,4 +168,28 @@ test('createSummary writes authenticated user id', async () => {
     assert.equal(res.statusCode, 201);
     assert.equal(createdPayload.user, 'user-99');
     assert.equal(typeof createdPayload.context, 'string');
+});
+
+test('createSummary accepts agentType', async () => {
+    let createdPayload;
+    ChatSummary.create = async (payload) => {
+        createdPayload = payload;
+        return { _id: 'sum-2', ...payload };
+    };
+
+    const req = {
+        body: {
+            user_request: 'Need meal ideas',
+            ai_response: 'Try a high-protein dinner bowl.',
+            context: 'Nutrition',
+            agentType: 'nutritionist',
+        },
+        user: { id: 'user-99' },
+    };
+    const res = createRes();
+
+    await createSummary(req, res, () => {});
+
+    assert.equal(res.statusCode, 201);
+    assert.equal(createdPayload.agent_type, 'nutritionist');
 });

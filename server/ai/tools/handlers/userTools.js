@@ -38,7 +38,7 @@ const profilePatchSchema = z.object({
         }).strict()).max(60).optional(),
     }).strict()).max(14).optional(),
     onboarding_date: z.string().datetime().optional(),
-    trainer_personality: z.enum(['drill_sergeant', 'scientist', 'zen_coach']).optional(),
+    trainer_personality: z.enum(['drill_sergeant_coach', 'scientist_coach', 'nutritionist', 'zen_coach']).optional(),
     onboarding_completed: z.boolean().optional(),
     has_existing_plan: z.boolean().optional(),
     workout_plan_status: z.enum(['pending', 'generating', 'ready', 'failed', 'skipped']).optional(),

@@ -599,6 +599,14 @@ export default function Onboarding() {
     );
   }
 
+  const translatedUnit = currentQuestion.unit
+    ? t(`common.${currentQuestion.unit}`, currentQuestion.unit)
+    : undefined;
+
+  const translatedPlaceholder = currentQuestion.placeholder
+    ? t(`onboarding.options.${currentQuestion.key}Placeholder`, currentQuestion.placeholder)
+    : undefined;
+
   return (
     <AnimatePresence mode="wait">
       <OnboardingStep
@@ -619,8 +627,8 @@ export default function Onboarding() {
         onBack={handleBack}
         stepNumber={currentStep + 1}
         totalSteps={QUESTIONS.length}
-        unit={t(`common.${currentQuestion.unit}`) || currentQuestion.unit}
-        placeholder={t(`onboarding.options.${currentQuestion.key}Placeholder`)}
+        unit={translatedUnit}
+        placeholder={translatedPlaceholder}
       />
     </AnimatePresence>
   );

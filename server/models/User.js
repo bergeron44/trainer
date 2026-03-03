@@ -62,8 +62,8 @@ const userSchema = mongoose.Schema({
         onboarding_date: Date,
         trainer_personality: {
             type: String,
-            enum: ['drill_sergeant', 'scientist', 'zen_coach'],
-            default: 'drill_sergeant'
+            enum: ['drill_sergeant_coach', 'scientist_coach', 'nutritionist', 'zen_coach'],
+            default: 'drill_sergeant_coach'
         },
         onboarding_completed: { type: Boolean, default: false },
         has_existing_plan: { type: Boolean, default: false },

@@ -1,6 +1,7 @@
 const ChatSummary = require('../models/ChatSummary');
 const asyncHandler = require('express-async-handler');
 const ChatBrainService = require('../services/chatBrainService');
+const { normalizeAgentType } = require('../services/agents');
 
 let chatBrainService = new ChatBrainService();
 
@@ -81,6 +82,7 @@ const generateResponse = asyncHandler(async (req, res) => {
             context,
             coachStyle,
             personaId,
+            agentType,
             system,
             metadata,
             options,
@@ -94,6 +96,7 @@ const generateResponse = asyncHandler(async (req, res) => {
             context,
             coachStyle,
             personaId,
+            agentType,
             system,
             metadata: {
                 ...(metadata || {}),
@@ -155,8 +158,13 @@ const getSummaries = asyncHandler(async (req, res) => {
         max: 20,
         fallback: 5,
     });
+    const agentType = normalizeAgentType(req.query.agentType);
+    const query = { user: req.user.id };
+    if (agentType) {
+        query.agent_type = agentType;
+    }
 
-    const summaries = await ChatSummary.find({ user: req.user.id })
+    const summaries = await ChatSummary.find(query)
         .sort({ createdAt: -1 })
         .limit(limit);
 
@@ -168,6 +176,7 @@ const getSummaries = asyncHandler(async (req, res) => {
 // @access  Private
 const createSummary = asyncHandler(async (req, res) => {
     const { user_request, ai_response, context } = req.body;
+    const agentType = normalizeAgentType(req.body?.agentType);
     if (!user_request || !ai_response) {
         return res.status(400).json({
             error: 'CHAT_SUMMARY_VALIDATION_ERROR',
@@ -175,12 +184,17 @@ const createSummary = asyncHandler(async (req, res) => {
         });
     }
 
-    const summary = await ChatSummary.create({
+    const payload = {
         user: req.user.id,
         user_request,
         ai_response,
         context: sanitizeContext(context),
-    });
+    };
+    if (agentType) {
+        payload.agent_type = agentType;
+    }
+
+    const summary = await ChatSummary.create(payload);
 
     res.status(201).json(summary);
 });

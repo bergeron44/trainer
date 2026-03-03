@@ -5,9 +5,11 @@ const ChatBrainService = require('../services/chatBrainService');
 function buildSummaryModel({
     memories = [],
     onCreate,
+    onFind,
 } = {}) {
     return {
-        find() {
+        find(query) {
+            if (onFind) onFind(query);
             return {
                 sort() {
                     return this;
@@ -58,18 +60,56 @@ test('ChatBrainService composes persona + memory context and persists summaries'
 
     const result = await service.generateResponse({
         userId: 'u1',
-        personaId: 'scientist',
+        personaId: 'scientist_coach',
         context: { page: 'Workout Session' },
         messages: [{ role: 'user', content: 'RPE was too high on set 2' }],
     });
 
     assert.equal(result.provider, 'mock');
-    assert.equal(result.meta.persona, 'scientist');
+    assert.equal(result.meta.persona, 'scientist_coach');
+    assert.equal(result.meta.agentType, 'coach');
     assert.equal(result.meta.memoryUsed, 1);
     assert.match(capturedInput.system, /Coach persona:/);
     assert.match(capturedInput.system, /Recent relevant memory:/);
     assert.equal(persisted.user, 'u1');
+    assert.equal(persisted.agent_type, 'coach');
     assert.equal(persisted.context, 'Workout Session');
+});
+
+test('ChatBrainService uses nutritionist agent for nutrition context', async () => {
+    let capturedInput;
+    let memoryFindQuery;
+    const service = new ChatBrainService({
+        provider: {
+            async generateSafe(input) {
+                capturedInput = input;
+                return {
+                    text: 'Aim for 35g protein in dinner and stay near your calorie target.',
+                    provider: 'mock',
+                    model: 'mock-model',
+                    finishReason: 'completed',
+                };
+            },
+        },
+        chatSummaryModel: buildSummaryModel({
+            onFind(query) {
+                memoryFindQuery = query;
+            },
+        }),
+    });
+
+    const result = await service.generateResponse({
+        userId: 'u1',
+        personaId: 'motivational',
+        context: 'Nutrition',
+        prompt: 'What should I eat for dinner?',
+        persistSummary: false,
+    });
+
+    assert.equal(result.meta.agentType, 'nutritionist');
+    assert.equal(result.meta.persona, 'nutritionist');
+    assert.match(capturedInput.system, /Primary focus: nutrition strategy/i);
+    assert.equal(memoryFindQuery.agent_type, 'nutritionist');
 });
 
 test('ChatBrainService retries transient provider failures', async () => {
