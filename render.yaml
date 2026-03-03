@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: nexus-ai-service
+    runtime: node
+    rootDir: ai-service
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: LLMAPI_BASE_URL
+        value: https://api.llmapi.ai/v1
+      # Set these in the Render dashboard (Environment tab):
+      - key: MONGO_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: LLM_API_KEY
+        sync: false
