@@ -4,42 +4,50 @@
 
 ---
 
-## 📊 סטטיסטיקות נוכחיות
+## 📊 סטטיסטיקות נוכחיות (עודכן 2026-03-03)
 
 | מדד | ערך |
 |-----|-----|
-| **סה"כ documents** | 173 |
-| **עם וידאו גברים** | 173 (100%) |
-| **עם וידאו נשים** | 45 (26%) |
-| **עם שם בעברית** | 85 (49%) |
-| **עם movement_type** | 84 (49%) — שאר: null |
+| **סה"כ documents** | 319 |
+| **עם וידאו גברים** | 115 (36%) |
+| **עם וידאו נשים** | 116 (36%) — סימטריה ✅ |
+| **עם שם בעברית** | ~230+ |
+| **עם movement_type** | 319 (100%) ✅ |
+
+> ✅ **תוקן:** כל 89 התרגילים שהיו עם movement_type=null עודכנו
+> ✅ **תוקן:** סימטריה גברים/נשים — video_url_women = video_url כברירת מחדל
+> ✅ **הורחב:** נוספו 146 תרגילים חדשים (מ-173 ל-319)
 
 ### פיזור לפי `muscle_group`
 
 | קבוצת שריר | כמות |
 |-----------|------|
-| legs | 34 |
-| arms | 28 |
-| chest | 25 |
-| back | 25 |
-| shoulders | 19 |
-| core | 19 |
-| cardio | 18 |
-| full_body | 5 |
+| legs | 61 |
+| arms | 55 |
+| back | 45 |
+| chest | 42 |
+| core | 35 |
+| shoulders | 34 |
+| cardio | 32 |
+| full_body | 15 |
 
-### פיזור לפי `movement_type`
+### תרגילים שנוספו
 
-| movement_type | כמות | הערה |
-|--------------|------|-------|
-| **null** | 89 | ❗ חסר — חשוב לעדכן |
-| push | 27 | תרגילי לחיצה |
-| pull | 19 | תרגילי משיכה |
-| legs | 14 | תרגילי רגליים |
-| cardio | 10 | תרגילי קרדיו |
-| core | 9 | תרגילי ליבה |
-| full_body | 5 | תרגילי גוף שלם |
+**חזה:** Wide/Diamond/Decline/Incline/Clap/Archer Push-Up, Incline/Decline Bench (Barbell+Dumbbell), Dumbbell Flyes, Cable Crossover, Low/High Cable Fly, Pec Deck, Machine Press, Chest Dip, Svend Press, Smith Machine, Landmine Press
 
-> ⚠️ **89 תרגילים עם movement_type=null** — אלו לא ייבחרו בגנרציית תוכנית אימונים!
+**גב:** Wide/Close/Neutral/Weighted Pull-Up, Chin-Up, Wide/Close/Reverse Grip Lat Pulldown, Single Arm Pulldown, Bent Over Row, Pendlay Row, T-Bar Row, Chest Supported Row, Meadows Row, Machine Row, Face Pull, Rack Pull, Good Morning, Hyperextension, Superman, Band Pull-Apart, Straight Arm Pulldown
+
+**רגליים:** Front Squat, Hack Squat, Leg Press, Romanian/Stiff Leg Deadlift, Bulgarian Split Squat, Walking/Reverse/Lateral Lunge, Box Step-Up, Box Jump, Jump Squat, Goblet/Sumo Squat, Sumo Deadlift, Leg Extension/Curl Machine, Hip Thrust, Glute Bridge, Donkey Kick, Fire Hydrant, Abductor/Adductor Machine, Calf Raises, Nordic Curl, Sissy/Pistol Squat, Wall Sit, Single Leg RDL, Smith Squat, Cable Pull Through
+
+**כתפיים:** Standing/Seated Barbell Press, Arnold Press, Push Press, Cable/Front/Bent-Over Lateral Raise, Reverse Pec Deck, Upright Row, Barbell/Dumbbell Shrug, Machine Press, Plate Front Raise, Cable Rear Delt Fly, Pike Push-Up
+
+**ידיים (ביספס+טריספס):** Barbell/EZ/Hammer/Incline/Concentration/Preacher/Spider/Reverse/Zottman Curl, Cable Curls, Machine Curl, Close Grip Bench Press, Skull Crushers, Tricep Dips, Cable Pushdowns, Overhead Extensions, Kickbacks, Machine Extension
+
+**ליבה:** Crunch, Bicycle, Russian Twist, Side Plank, Hollow Hold, Ab Wheel, Hanging Leg Raise, Cable Crunch, Reverse Crunch, Dead Bug, Bird Dog, V-Up, Toes to Bar, Woodchopper, Mountain Climber, Flutter Kick, L-Sit, Dragon Flag, Windshield Wiper, Pallof Press
+
+**קרדיו:** Treadmill, Stationary Bike, Elliptical, Rowing Machine, Jump Rope, Burpee, High Knees, Jumping Jacks, Battle Rope, Stair Climber, Sprint Intervals, Sled Push/Pull, Assault Bike, Shuttle Run, Incline Walk, Bear Crawl
+
+**גוף שלם:** Power Clean, Clean & Press, Thruster, Kettlebell Swing, Turkish Get-Up, Man Maker, Power Snatch, Farmers Walk, Dumbbell Snatch, Kettlebell Goblet Squat, Barbell Complex, Sandbag Clean
 
 ---
 
@@ -144,8 +152,8 @@ generateWorkoutPlan()
 CDN:  https://res.cloudinary.com/dgmgsqam5/video/upload/
 Format: MP4 (ממוטב לנייד)
 
-גברים:  video_url        — 173/173 תרגילים
-נשים:   video_url_women  — 45/173 תרגילים
+גברים:  video_url        — 115/319 תרגילים (שאר null — ממתינים להעלאה)
+נשים:   video_url_women  — 116/319 תרגילים (סימטרי לגברים ✅)
 
 בחירת וידאו לפי gender:
   user.profile.gender === 'female' && exercise.video_url_women
@@ -175,12 +183,12 @@ Format: MP4 (ממוטב לנייד)
 
 ---
 
-## 🚧 בעיות ידועות / שיפורים נדרשים
+## 🚧 שיפורים נדרשים
 
 | בעיה | כמות | פתרון |
 |------|------|--------|
-| `movement_type = null` | 89 תרגילים | הרצת seed script לסיווג |
-| `name_he` חסר | 88 תרגילים | תרגום ידני / GPT batch |
-| `video_url_women` חסר | 128 תרגילים | הוספת וידאו נשים |
+| `video_url` חסר | 204 תרגילים (64%) | העלאת וידאו ל-Cloudinary |
+| `video_url_women` חסר | 203 תרגילים | העלאת וידאו נשים |
+| `name_he` חסר | ~89 תרגילים חדשים | תרגום ידני / GPT batch |
 | `difficulty` ריק | ~50 תרגילים | מילוי ידני |
-| `default_reps` אחיד | רוב התרגילים | כיול לפי difficulty |
+| `instructions` חסר | רוב התרגילים החדשים | הוספת הוראות ביצוע |
