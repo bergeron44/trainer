@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import GlobalCoachFAB from '@/components/coach/GlobalCoachFAB';
 import GlobalCoachChat from '@/components/coach/GlobalCoachChat';
 import LanguageToggle from '@/components/LanguageToggle';
+import PwaInstallPrompt from '@/components/PwaInstallPrompt';
 
 export default function Layout({ children, currentPageName }) {
   const { t } = useTranslation();
@@ -112,6 +113,9 @@ export default function Layout({ children, currentPageName }) {
           {children}
         </motion.main>
       </AnimatePresence>
+
+      {/* PWA Install Prompt */}
+      <PwaInstallPrompt />
 
       {/* Language Toggle */}
       <LanguageToggle />
