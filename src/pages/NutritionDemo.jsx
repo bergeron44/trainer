@@ -10,6 +10,7 @@ import FoodSwipeGame from '@/components/nutrition/FoodSwipeGame';
 import MealPlanCard from '@/components/nutrition/MealPlanCard';
 import { useAuth } from '@/lib/AuthContext';
 import api from '@/api/axios';
+import aiApi from '@/api/aiAxios';
 
 // --- Coach Logic: Dynamic Meal Periods ---
 const generateCoachPeriods = (goal, dietType, t = null) => {
@@ -166,24 +167,15 @@ export default function NutritionDemo() {
     const mealsEaten = Object.values(loggedFoods).filter(arr => arr.length > 0).length;
 
     try {
-      const res = await api.post('/nutrition/meal-plan', {
-        liked_foods: likedFoods,
-        disliked_foods: dislikedFoods.map(f => f.name),
+      const res = await aiApi.post('/meal/next', {
         current_calories_consumed: currentMacros.cals,
-        target_calories: tdee,
-        remaining_calories: Math.max(0, tdee - currentMacros.cals),
-        protein_goal: p_goal,
         protein_consumed: currentMacros.pro,
-        carbs_goal: c_goal,
         carbs_consumed: currentMacros.carb,
-        fat_goal: f_goal,
         fat_consumed: currentMacros.fat,
         time_of_day: format(now, 'HH:mm'),
         meal_period: getCurrentMealPeriod(now),
         meals_eaten_today: mealsEaten,
         total_meals_planned: periods.length,
-        diet_type: dietType,
-        goal: goal,
       });
       setCurrentMeal(res.data);
     } catch (err) {
