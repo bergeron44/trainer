@@ -14,7 +14,7 @@ import aiApi from '@/api/aiAxios';
 
 // --- Coach Logic: Dynamic Meal Periods ---
 const generateCoachPeriods = (goal, dietType, t = null) => {
-  let numMeals = 4;
+  let numMeals = 5;
   if (goal === 'muscle_gain') numMeals = 6;
   if (goal === 'weight_loss') numMeals = 3;
   if (dietType === 'keto') numMeals = Math.max(2, numMeals - 1);
@@ -78,6 +78,15 @@ const GOAL_LABELS = {
   athletic_performance: 'Athletic Performance'
 };
 
+// Map hour → period ID (matches 5-meal layout: m1-m5)
+const getPeriodId = (hour) => {
+  if (hour < 10) return 'm1';
+  if (hour < 13) return 'm2';
+  if (hour < 16) return 'm3';
+  if (hour < 19) return 'm4';
+  return 'm5';
+};
+
 export default function NutritionDemo() {
   const { user } = useAuth();
   const { t } = useTranslation();
@@ -104,9 +113,32 @@ export default function NutritionDemo() {
     setPeriods(generateCoachPeriods(goal, dietType, t));
   }, [goal, dietType, t]);
 
-  // Load food preferences on mount
+  // Load food preferences and today's saved meals on mount
   useEffect(() => {
     loadFoodPreferences();
+    const todayStr = format(new Date(), 'yyyy-MM-dd');
+    api.get(`/nutrition/date/${todayStr}`)
+      .then(res => {
+        const logs = res.data || [];
+        if (logs.length === 0) return;
+        // Map each saved log into the correct period slot by its save time
+        setLoggedFoods(prev => {
+          const updated = { ...prev };
+          logs.forEach(log => {
+            const hour = new Date(log.createdAt || log.date).getHours();
+            const pid = getPeriodId(hour);
+            updated[pid] = [...(updated[pid] || []), {
+              name: log.meal_name,
+              cals: log.calories,
+              protein: log.protein || 0,
+              carbs: log.carbs || 0,
+              fat: log.fat || 0,
+            }];
+          });
+          return updated;
+        });
+      })
+      .catch(() => {});
   }, []);
 
   const loadFoodPreferences = async () => {
@@ -196,26 +228,35 @@ export default function NutritionDemo() {
     return 'Evening Snack';
   };
 
-  const handleLogMeal = (meal) => {
-    // Add meal foods to the appropriate period
-    const hour = new Date().getHours();
-    let periodId = 'm2'; // default lunch
-    if (hour < 10) periodId = 'm1';
-    else if (hour < 14) periodId = 'm2';
-    else if (hour < 17) periodId = 'm3';
-    else periodId = 'm4';
+  const handleLogMeal = async (meal) => {
+    const now = new Date();
+    const periodId = getPeriodId(now.getHours());
 
-    const foods = meal.foods.map(f => ({
-      name: f.name,
-      cals: f.calories,
-      protein: f.protein,
-      carbs: f.carbs,
-      fat: f.fat,
-    }));
+    // Save to DB
+    try {
+      await api.post('/nutrition', {
+        meal_name: meal.meal_name,
+        calories: meal.total_calories,
+        protein: meal.total_protein,
+        carbs: meal.total_carbs,
+        fat: meal.total_fat,
+        date: now,
+        foods: meal.foods.map(f => ({ name: f.name, portion: f.portion, calories: f.calories })),
+      });
+    } catch (err) {
+      console.error('Failed to save meal to DB:', err);
+    }
 
+    // Add to the correct period slot in the daily log
     setLoggedFoods(prev => ({
       ...prev,
-      [periodId]: [...(prev[periodId] || []), ...foods]
+      [periodId]: [...(prev[periodId] || []), {
+        name: meal.meal_name,
+        cals: meal.total_calories,
+        protein: meal.total_protein,
+        carbs: meal.total_carbs,
+        fat: meal.total_fat,
+      }]
     }));
 
     setShowMealPlan(false);

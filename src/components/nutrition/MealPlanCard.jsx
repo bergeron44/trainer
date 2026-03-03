@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, RefreshCw, Plus, Flame, Beef, Wheat, Droplet, Sparkles } from 'lucide-react';
+import { X, Check, Flame, Beef, Wheat, Droplet, Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 export default function MealPlanCard({ meal, onClose, onRefresh, onLogMeal, isLoading }) {
@@ -49,9 +49,8 @@ export default function MealPlanCard({ meal, onClose, onRefresh, onLogMeal, isLo
                             <p className="text-gray-400 text-sm">{t('nutrition.noMealGenerated', 'Could not reach AI service. Try again!')}</p>
                             <button
                                 onClick={onRefresh}
-                                className="px-5 py-1.5 rounded-xl border border-[#2A2A2A] text-gray-400 text-sm hover:text-white hover:border-[#00F2FF]/40 transition-colors inline-flex items-center gap-2"
+                                className="px-5 py-1.5 rounded-xl border border-[#2A2A2A] text-gray-400 text-sm hover:text-white hover:border-[#00F2FF]/40 transition-colors"
                             >
-                                <RefreshCw className="w-3.5 h-3.5" />
                                 {t('common.tryAgain', 'Try Again')}
                             </button>
                         </div>
@@ -99,22 +98,22 @@ export default function MealPlanCard({ meal, onClose, onRefresh, onLogMeal, isLo
                     ) : null}
                 </div>
 
-                {/* Action Buttons — sticky at bottom, only when meal loaded */}
+                {/* Action Buttons — ✗ dismiss / ✓ save */}
                 {!isLoading && meal && !meal._error && (
                     <div className="px-4 py-3 border-t border-[#2A2A2A] flex gap-3 shrink-0">
                         <button
-                            onClick={onRefresh}
-                            className="flex-1 py-2.5 rounded-xl border border-[#3A3A3A] text-gray-300 text-sm font-semibold flex items-center justify-center gap-2 hover:bg-[#2A2A2A] transition-colors"
+                            onClick={onClose}
+                            className="flex-1 py-2.5 rounded-xl border border-[#3A3A3A] text-gray-400 text-sm font-semibold flex items-center justify-center gap-2 hover:bg-[#2A2A2A] transition-colors"
                         >
-                            <RefreshCw className="w-3.5 h-3.5" />
-                            {t('nutrition.anotherOne', 'Another One')}
+                            <X className="w-4 h-4" />
+                            {t('common.no', 'No')}
                         </button>
                         <button
                             onClick={() => onLogMeal(meal)}
                             className="flex-1 py-2.5 rounded-xl gradient-cyan text-black text-sm font-semibold flex items-center justify-center gap-2"
                         >
-                            <Plus className="w-3.5 h-3.5" />
-                            {t('nutrition.logThis', 'Log This!')}
+                            <Check className="w-4 h-4" />
+                            {t('common.save', 'Save')}
                         </button>
                     </div>
                 )}
