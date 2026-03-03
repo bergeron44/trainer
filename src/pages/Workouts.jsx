@@ -104,35 +104,35 @@ export default function Workouts() {
     <div className="min-h-screen px-4 py-6">
       {/* Header */}
       <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
-        <div className="flex items-center justify-between">
+        {/* Row 1: title + view toggle */}
+        <div className="flex items-center justify-between mb-3">
           <div>
             <h1 className="text-2xl font-bold">{t('workouts.title', 'Workouts')}</h1>
             <p className="text-gray-500 text-sm">{t('workouts.history', 'Your training history & schedule')}</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 bg-[#1A1A1A] rounded-xl p-1 border border-[#2A2A2A]">
             <button
-              onClick={() => { setShowAiWorkout(true); setAiWorkout(null); }}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-[#CCFF00]/20 to-[#00F2FF]/20 border border-[#CCFF00]/30 text-[#CCFF00] text-sm font-medium hover:border-[#CCFF00]/60 transition-colors"
+              onClick={() => setViewMode('list')}
+              className={`p-2 rounded-lg transition-colors ${viewMode === 'list' ? 'bg-[#00F2FF] text-black' : 'text-gray-400 hover:text-white'}`}
             >
-              <Sparkles className="w-4 h-4" />
-              {t('workouts.specialToday', 'Special')}
+              <List className="w-4 h-4" />
             </button>
-            <div className="flex items-center gap-1 bg-[#1A1A1A] rounded-xl p-1 border border-[#2A2A2A]">
-              <button
-                onClick={() => setViewMode('list')}
-                className={`p-2 rounded-lg transition-colors ${viewMode === 'list' ? 'bg-[#00F2FF] text-black' : 'text-gray-400 hover:text-white'}`}
-              >
-                <List className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setViewMode('calendar')}
-                className={`p-2 rounded-lg transition-colors ${viewMode === 'calendar' ? 'bg-[#00F2FF] text-black' : 'text-gray-400 hover:text-white'}`}
-              >
-                <CalendarDays className="w-4 h-4" />
-              </button>
-            </div>
+            <button
+              onClick={() => setViewMode('calendar')}
+              className={`p-2 rounded-lg transition-colors ${viewMode === 'calendar' ? 'bg-[#00F2FF] text-black' : 'text-gray-400 hover:text-white'}`}
+            >
+              <CalendarDays className="w-4 h-4" />
+            </button>
           </div>
         </div>
+        {/* Row 2: Special Workout button — full width on mobile */}
+        <button
+          onClick={() => { setShowAiWorkout(true); setAiWorkout(null); }}
+          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#CCFF00]/10 to-[#00F2FF]/10 border border-[#CCFF00]/30 text-[#CCFF00] text-sm font-medium hover:border-[#CCFF00]/60 hover:from-[#CCFF00]/20 hover:to-[#00F2FF]/20 transition-all"
+        >
+          <Sparkles className="w-4 h-4" />
+          {t('workouts.specialToday', '✦ Special Workout Today — Let AI Build My Session')}
+        </button>
       </motion.div>
 
       {isLoading ? (

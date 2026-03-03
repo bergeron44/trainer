@@ -45,6 +45,18 @@ export default function MealPlanCard({ meal, onClose, onRefresh, onLogMeal, isLo
                             <Sparkles className="w-8 h-8 text-[#00F2FF]" />
                         </motion.div>
                         <p className="text-gray-400 text-sm">{t('nutrition.planningMeal', 'Planning your perfect meal...')}</p>
+                        <p className="text-gray-600 text-xs text-center">{t('nutrition.wakeUp', 'First request may take ~30s while AI service wakes up')}</p>
+                    </div>
+                ) : meal?._error ? (
+                    <div className="p-8 text-center space-y-4">
+                        <p className="text-gray-400">{t('nutrition.noMealGenerated', 'Could not reach AI service. Try again!')}</p>
+                        <button
+                            onClick={onRefresh}
+                            className="px-6 py-2 rounded-xl border border-[#2A2A2A] text-gray-400 text-sm hover:text-white hover:border-[#00F2FF]/40 transition-colors flex items-center gap-2 mx-auto"
+                        >
+                            <RefreshCw className="w-4 h-4" />
+                            {t('common.tryAgain', 'Try Again')}
+                        </button>
                     </div>
                 ) : meal ? (
                     <>
@@ -118,11 +130,7 @@ export default function MealPlanCard({ meal, onClose, onRefresh, onLogMeal, isLo
                             </button>
                         </div>
                     </>
-                ) : (
-                    <div className="p-8 text-center">
-                        <p className="text-gray-400">{t('nutrition.noMealGenerated', 'Could not generate a meal plan. Try again!')}</p>
-                    </div>
-                )}
+                ) : null}
             </motion.div>
         </motion.div>
     );

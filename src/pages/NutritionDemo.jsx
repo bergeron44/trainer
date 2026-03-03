@@ -179,8 +179,9 @@ export default function NutritionDemo() {
       });
       setCurrentMeal(res.data);
     } catch (err) {
-      console.error('Failed to generate meal plan:', err);
-      setCurrentMeal(null);
+      console.error('Failed to generate meal plan:', err.response?.data || err.message);
+      // Signal error state so MealPlanCard can show retry
+      setCurrentMeal({ _error: true });
     } finally {
       setIsMealLoading(false);
     }
@@ -240,8 +241,8 @@ export default function NutritionDemo() {
           <p className="text-gray-500 text-sm">{format(new Date(), 'EEEE, MMMM d')}</p>
         </div>
         <div className="text-right">
-          <p className="text-[#00F2FF] font-semibold text-sm capitalize">{t(`nutrition.dietTypes.${dietType}`, `${dietType} Diet`)}</p>
-          <p className="text-gray-400 text-xs">{t(`nutrition.goals.${goal}`, GOAL_LABELS[goal])}</p>
+          <p className="text-[#00F2FF] font-semibold text-sm capitalize">{String(t(`nutrition.dietTypes.${dietType}`, `${dietType} Diet`))}</p>
+          <p className="text-gray-400 text-xs">{String(t(`nutrition.goals.${goal}`, GOAL_LABELS[goal]))}</p>
         </div>
       </motion.div>
 
@@ -346,7 +347,7 @@ export default function NutritionDemo() {
           <Target className="w-5 h-5 text-[#00F2FF]" />
         </div>
         <p className="text-sm text-gray-300">
-          <span className="font-semibold text-white">{t('nutrition.coachTip', 'Coach tip:')} </span> {t(`nutrition.dietTips.${dietType}`, DIET_TIPS[dietType])}
+          <span className="font-semibold text-white">{t('nutrition.coachTip', 'Coach tip:')} </span> {String(t(`nutrition.dietTips.${dietType}`, DIET_TIPS[dietType]))}
         </p>
       </motion.div>
 
@@ -389,7 +390,7 @@ export default function NutritionDemo() {
                     {periodFoods.map((food, fIdx) => (
                       <div key={fIdx} className="flex justify-between items-center bg-[#2A2A2A] rounded-lg p-2 text-sm">
                         <div className="flex-1 truncate pr-2">
-                          <span className="text-white block truncate">{t(`nutrition.foods.${food.name}`, food.name)}</span>
+                          <span className="text-white block truncate">{String(t(`nutrition.foods.${food.name}`, food.name))}</span>
                           <span className="text-xs text-gray-500">{food.cals} {t('common.kcal', 'kcal')} • P:{food.protein} C:{food.carbs} F:{food.fat}</span>
                         </div>
                         <button
@@ -410,7 +411,7 @@ export default function NutritionDemo() {
                     <div className="flex overflow-x-auto snap-x gap-2 pb-2 scrollbar-none">
                       {inspirations.map((insp, i) => (
                         <div key={i} className="snap-start shrink-0 w-48 bg-[#2A2A2A] rounded-lg p-2 text-xs border border-transparent hover:border-[#00F2FF]/30 transition-all cursor-pointer">
-                          <p className="text-gray-300 font-medium truncate">{t(`nutrition.inspirations.${insp.name}`, insp.name)}</p>
+                          <p className="text-gray-300 font-medium truncate">{String(t(`nutrition.inspirations.${insp.name}`, insp.name))}</p>
                           <p className="text-gray-500 mt-1">{insp.cals} {t('common.kcal', 'kcal')} • {insp.protein}g {t('common.protein', 'Protein')}</p>
                         </div>
                       ))}

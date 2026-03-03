@@ -1,15 +1,13 @@
 import axios from 'axios';
 
-// Dev: Vite proxies /ai → localhost:5002
-// Prod: points to Render service (override with VITE_AI_URL env var)
-const AI_BASE = import.meta.env.VITE_AI_URL
-    || (import.meta.env.PROD
-        ? 'https://nexus-ai-service-ks3v.onrender.com/ai'
-        : '/ai');
+// Always point to the deployed AI service.
+// Override with VITE_AI_URL in .env.local for local dev if needed.
+const AI_BASE = import.meta.env.VITE_AI_URL || 'https://nexus-ai-service-ks3v.onrender.com/ai';
 
 const aiApi = axios.create({
     baseURL: AI_BASE,
     headers: { 'Content-Type': 'application/json' },
+    timeout: 90000, // 90s — allows Render free tier to wake up from sleep
 });
 
 aiApi.interceptors.request.use((config) => {
