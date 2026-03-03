@@ -8,7 +8,7 @@ export default function MealPlanCard({ meal, onClose, onRefresh, onLogMeal, isLo
 
     return (
         <motion.div
-            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end"
+            className="fixed inset-0 z-[90] bg-black/60 backdrop-blur-sm flex items-end pb-20"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
