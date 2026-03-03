@@ -21,6 +21,7 @@ export default function Workouts() {
   const [showAiWorkout, setShowAiWorkout] = useState(false);
   const [aiWorkout, setAiWorkout] = useState(null);
   const [isAiLoading, setIsAiLoading] = useState(false);
+  const [aiNotes, setAiNotes] = useState('');
 
   useEffect(() => {
     const fetchWorkouts = async () => {
@@ -36,13 +37,25 @@ export default function Workouts() {
     fetchWorkouts();
   }, []);
 
-  const generateAiWorkout = async () => {
+  const generateAiWorkout = async (userNotes = '') => {
     setShowAiWorkout(true);
     setIsAiLoading(true);
     setAiWorkout(null);
     try {
-      const { data } = await aiApi.post('/workout/daily');
+      const { data } = await aiApi.post('/workout/daily', { user_notes: userNotes });
       setAiWorkout(data);
+      // Update the workout in the local list so the page reflects the change immediately
+      const todayStr = new Date().toISOString().split('T')[0];
+      setWorkouts(prev => {
+        const idx = prev.findIndex(w => w.date?.startsWith(todayStr) || w._id === data._id);
+        if (idx >= 0) {
+          const updated = [...prev];
+          updated[idx] = { ...updated[idx], ...data };
+          return updated;
+        }
+        // No today's workout existed before → add it
+        return [data, ...prev];
+      });
     } catch (err) {
       console.error('AI workout failed:', err);
       setAiWorkout({ error: true });
@@ -98,7 +111,7 @@ export default function Workouts() {
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={generateAiWorkout}
+              onClick={() => { setShowAiWorkout(true); setAiWorkout(null); }}
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-[#CCFF00]/20 to-[#00F2FF]/20 border border-[#CCFF00]/30 text-[#CCFF00] text-sm font-medium hover:border-[#CCFF00]/60 transition-colors"
             >
               <Sparkles className="w-4 h-4" />
@@ -263,6 +276,29 @@ export default function Workouts() {
                   </button>
                 </div>
 
+                {/* Step 1 — notes input + generate button */}
+                {!isAiLoading && !aiWorkout && (
+                  <div className="space-y-4">
+                    <p className="text-sm text-gray-400">
+                      {t('workouts.aiSubtitle', 'NEXUS will replace today\'s workout with exercises from our database, tailored to you.')}
+                    </p>
+                    <textarea
+                      value={aiNotes}
+                      onChange={e => setAiNotes(e.target.value)}
+                      placeholder={t('workouts.aiNotesPlaceholder', 'Optional: any notes for today? (e.g. "skip legs", "prefer machines")')}
+                      className="w-full bg-[#1A1A1A] border border-[#2A2A2A] rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 resize-none focus:outline-none focus:border-[#CCFF00]/40 h-20"
+                    />
+                    <button
+                      onClick={() => generateAiWorkout(aiNotes)}
+                      className="w-full py-3 rounded-xl bg-[#CCFF00] text-black font-bold text-sm flex items-center justify-center gap-2 hover:bg-[#CCFF00]/90 transition-colors"
+                    >
+                      <Sparkles className="w-4 h-4" />
+                      {t('workouts.generateBtn', 'Generate My Workout')}
+                    </button>
+                  </div>
+                )}
+
+                {/* Step 2 — loading */}
                 {isAiLoading && (
                   <div className="flex flex-col items-center justify-center py-12 gap-4">
                     <div className="w-10 h-10 border-2 border-[#CCFF00] border-t-transparent rounded-full animate-spin" />
@@ -270,6 +306,7 @@ export default function Workouts() {
                   </div>
                 )}
 
+                {/* Step 3 — result */}
                 {!isAiLoading && aiWorkout && !aiWorkout.error && (
                   <div className="space-y-4">
                     <div className="bg-[#1A1A1A] rounded-xl p-4 border border-[#CCFF00]/20">
@@ -299,12 +336,27 @@ export default function Workouts() {
                         <p className="text-sm text-[#CCFF00]/80 leading-relaxed">{aiWorkout.coach_note}</p>
                       </div>
                     )}
+
+                    {/* Regenerate with notes */}
+                    <button
+                      onClick={() => { setAiWorkout(null); }}
+                      className="w-full py-2.5 rounded-xl border border-[#2A2A2A] text-gray-400 text-sm hover:border-[#CCFF00]/30 hover:text-[#CCFF00] transition-colors"
+                    >
+                      {t('workouts.regenerateBtn', 'Regenerate with different notes')}
+                    </button>
                   </div>
                 )}
 
+                {/* Error */}
                 {!isAiLoading && aiWorkout?.error && (
-                  <div className="text-center py-10 text-gray-500">
-                    <p>{t('workouts.aiError', 'Could not generate workout. Try again later.')}</p>
+                  <div className="text-center py-10 space-y-4">
+                    <p className="text-gray-500">{t('workouts.aiError', 'Could not generate workout. Try again later.')}</p>
+                    <button
+                      onClick={() => setAiWorkout(null)}
+                      className="px-6 py-2 rounded-xl border border-[#2A2A2A] text-gray-400 text-sm hover:text-white transition-colors"
+                    >
+                      {t('common.tryAgain', 'Try Again')}
+                    </button>
                   </div>
                 )}
               </div>

@@ -12,14 +12,29 @@ const ENVIRONMENT_DESC = {
 
 const FOCUS_ROTATION = ['push', 'pull', 'legs', 'full_body', 'push', 'pull', 'legs'];
 
+// Map from focus type → muscle groups in the exercises collection
+const FOCUS_TO_MUSCLES = {
+    push:      ['chest', 'shoulders'],
+    pull:      ['back'],
+    legs:      ['legs'],
+    full_body: ['full_body', 'core'],
+    chest: ['chest'], back: ['back'], shoulders: ['shoulders'],
+    arms: ['arms'], legs: ['legs'], core: ['core'],
+    cardio: ['cardio'],
+};
+
 /**
  * Determine today's suggested focus based on recent workout muscle groups
  */
 function suggestTodayFocus(recentWorkouts) {
     const recentGroups = recentWorkouts.slice(0, 3).map(w => w.muscle_group);
-    // Find the first focus type not done recently
     for (const focus of FOCUS_ROTATION) {
-        const muscleMap = { push: ['chest', 'shoulders', 'arms'], pull: ['back', 'arms'], legs: ['legs'], full_body: ['full_body', 'core'] };
+        const muscleMap = {
+            push: ['chest', 'shoulders', 'arms'],
+            pull: ['back', 'arms'],
+            legs: ['legs'],
+            full_body: ['full_body', 'core'],
+        };
         const isDoneRecently = recentGroups.some(g => muscleMap[focus]?.includes(g));
         if (!isDoneRecently) return focus;
     }
@@ -27,7 +42,29 @@ function suggestTodayFocus(recentWorkouts) {
 }
 
 /**
- * Build system prompt for daily workout
+ * Returns the muscle groups to query given a focus/muscle_group string
+ */
+function getMuscleGroupsForFocus(focus) {
+    return FOCUS_TO_MUSCLES[focus] || [focus];
+}
+
+/**
+ * Build the exercise catalogue section of the prompt grouped by muscle
+ */
+function buildExerciseCatalogue(exercises) {
+    const groups = {};
+    for (const ex of exercises) {
+        const g = ex.muscle_group;
+        if (!groups[g]) groups[g] = [];
+        groups[g].push(ex.name);
+    }
+    return Object.entries(groups)
+        .map(([group, names]) => `=== ${group.toUpperCase()} ===\n${names.join(', ')}`)
+        .join('\n\n');
+}
+
+/**
+ * Build system prompt
  */
 function buildWorkoutSystem(user) {
     const p = user.profile || {};
@@ -43,37 +80,48 @@ User profile:
 - Equipment: ${equipment}
 - Injuries/limitations: ${p.injuries || 'none'}
 
-Rules:
+CRITICAL RULES:
+- You MUST choose exercise names ONLY from the provided catalogue — never invent names
 - Respond ONLY with valid JSON — no markdown, no extra text
-- Exercise names in English
+- Exercise names must match exactly as listed in the catalogue
 - coach_note in Hebrew (1-2 motivational sentences)
-- Use only equipment available in the user's environment
-- Set volume appropriate for experience level
 - Include 4-6 exercises`;
 }
 
 /**
- * Build user message for daily workout
+ * Build user message
  */
-function buildWorkoutUserMessage({ recentWorkouts, todayFocus, user }) {
+function buildWorkoutUserMessage({ recentWorkouts, todayFocus, todayWorkout, availableExercises, userNotes, user }) {
     const p = user.profile || {};
+
     const recentSummary = recentWorkouts.slice(0, 5)
         .map(w => `  - ${new Date(w.date).toLocaleDateString('he-IL')}: ${w.muscle_group} (${w.exercises?.length || 0} exercises, ${w.status})`)
         .join('\n') || '  (no recent workouts)';
 
-    return `Generate a special one-time workout for TODAY.
+    const currentWorkoutSection = todayWorkout
+        ? `Current workout for today (REPLACE these exercises with better ones):
+  Focus: ${todayWorkout.muscle_group}
+  Current exercises: ${(todayWorkout.exercises || []).map(e => e.name).join(', ') || '(none)'}${todayWorkout.notes ? `\n  Notes: ${todayWorkout.notes}` : ''}`
+        : `No workout scheduled for today — create one.`;
 
-Today's suggested focus: ${todayFocus}
-Session duration: ${p.session_duration || 60} minutes
+    const catalogue = buildExerciseCatalogue(availableExercises);
+    const userNotesSection = userNotes ? `\nAthlete note: "${userNotes}"` : '';
 
-My recent workouts:
+    return `${currentWorkoutSection}${userNotesSection}
+
+Recent workouts:
 ${recentSummary}
 
-Generate a workout that:
-1. Targets the suggested focus muscle group
-2. Fits within the session duration
-3. Avoids repeating the same muscles from the last 1-2 days
-4. Is appropriate for my experience level and equipment
+TODAY'S FOCUS: ${todayFocus}
+SESSION: ${p.session_duration || 60} minutes
+
+AVAILABLE EXERCISES — choose ONLY from this list:
+${catalogue}
+
+Pick 4-6 exercises from the catalogue that:
+1. Match today's focus muscle group
+2. Avoid repeating muscles from the last 1-2 days
+3. Suit experience level: ${p.experience_level || 'intermediate'}
 
 Respond with this exact JSON structure:
 {
@@ -83,8 +131,8 @@ Respond with this exact JSON structure:
   "duration_minutes": ${p.session_duration || 60},
   "exercises": [
     {
-      "name": "Exercise Name",
-      "sets": 3,
+      "name": "Exact Name From Catalogue",
+      "sets": 4,
       "reps": "8-12",
       "rest_seconds": 90,
       "notes": "Quick form tip"
@@ -94,4 +142,4 @@ Respond with this exact JSON structure:
 }`;
 }
 
-module.exports = { buildWorkoutSystem, buildWorkoutUserMessage, suggestTodayFocus };
+module.exports = { buildWorkoutSystem, buildWorkoutUserMessage, suggestTodayFocus, getMuscleGroupsForFocus };
