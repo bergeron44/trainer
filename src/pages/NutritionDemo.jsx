@@ -230,7 +230,9 @@ export default function NutritionDemo() {
 
   const handleLogMeal = async (meal) => {
     const now = new Date();
-    const periodId = getPeriodId(now.getHours());
+    const hour = now.getHours();
+    const periodId = getPeriodId(hour);
+    console.log(`[LogMeal] time=${now.toLocaleTimeString()} hour=${hour} → periodId=${periodId}`);
 
     // Save to DB
     try {
@@ -256,6 +258,7 @@ export default function NutritionDemo() {
         protein: meal.total_protein,
         carbs: meal.total_carbs,
         fat: meal.total_fat,
+        _aiTime: now.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }),
       }]
     }));
 
@@ -431,7 +434,12 @@ export default function NutritionDemo() {
                     {periodFoods.map((food, fIdx) => (
                       <div key={fIdx} className="flex justify-between items-center bg-[#2A2A2A] rounded-lg p-2 text-sm">
                         <div className="flex-1 truncate pr-2">
-                          <span className="text-white block truncate">{String(t(`nutrition.foods.${food.name}`, food.name))}</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-white block truncate">{String(t(`nutrition.foods.${food.name}`, food.name))}</span>
+                            {food._aiTime && (
+                              <span className="text-[#CCFF00]/60 text-xs shrink-0">✦ {food._aiTime}</span>
+                            )}
+                          </div>
                           <span className="text-xs text-gray-500">{food.cals} {t('common.kcal', 'kcal')} • P:{food.protein} C:{food.carbs} F:{food.fat}</span>
                         </div>
                         <button
