@@ -2,12 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
 import { Flame, Beef, Wheat, Droplet, Target, MessageCircle, ChevronRight, Plus, X, Heart, Utensils } from 'lucide-react';
-import * as Dialog from '@radix-ui/react-dialog';
 import { useTranslation } from 'react-i18next';
 import GlobalCoachChat from '@/components/coach/GlobalCoachChat';
-import FoodSearch from '@/components/nutrition/FoodSearch';
 import FoodSwipeGame from '@/components/nutrition/FoodSwipeGame';
 import MealPlanCard from '@/components/nutrition/MealPlanCard';
+import ManualFoodEntry from '@/components/nutrition/ManualFoodEntry';
 import { useAuth } from '@/lib/AuthContext';
 import api from '@/api/axios';
 import aiApi from '@/api/aiAxios';
@@ -172,8 +171,23 @@ export default function NutritionDemo() {
     { key: 'fat', label: t('common.fat', 'Fat'), icon: Droplet, value: currentMacros.fat, target: f_goal, color: '#FFD93D', unit: 'g' }
   ];
 
-  const handleAddFood = (food) => {
+  const handleAddFood = async (food) => {
     if (!activeSearchPeriod) return;
+    // Save to DB as a single-food log entry
+    try {
+      const now = new Date();
+      await api.post('/nutrition', {
+        meal_name: food.name,
+        calories: food.cals,
+        protein: food.protein || 0,
+        carbs: food.carbs || 0,
+        fat: food.fat || 0,
+        date: now,
+        foods: [{ name: food.name, portion: food.portion || '', calories: food.cals }],
+      });
+    } catch (err) {
+      console.error('Failed to save food to DB:', err);
+    }
     setLoggedFoods(prev => ({
       ...prev,
       [activeSearchPeriod]: [...(prev[activeSearchPeriod] || []), food]
@@ -518,26 +532,16 @@ export default function NutritionDemo() {
         coachStyle={coachStyle}
       />
 
-      {/* Food Search Modal / Drawer */}
-      <Dialog.Root open={!!activeSearchPeriod} onOpenChange={(open) => !open && setActiveSearchPeriod(null)}>
-        <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 bg-black/80 z-50 backdrop-blur-sm" />
-          <Dialog.Content className="fixed bottom-0 left-0 right-0 top-16 sm:inset-x-4 sm:top-[10%] sm:bottom-[10%] max-w-2xl mx-auto z-50 focus:outline-none">
-            <motion.div
-              initial={{ y: '100%' }}
-              animate={{ y: 0 }}
-              exit={{ y: '100%' }}
-              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="h-full w-full"
-            >
-              <FoodSearch
-                onAddFood={handleAddFood}
-                onClose={() => setActiveSearchPeriod(null)}
-              />
-            </motion.div>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
+      {/* Manual Food Entry Sheet */}
+      <AnimatePresence>
+        {activeSearchPeriod && (
+          <ManualFoodEntry
+            periodLabel={periods.find(p => p.id === activeSearchPeriod)?.label || ''}
+            onAdd={handleAddFood}
+            onClose={() => setActiveSearchPeriod(null)}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Food Swipe Game Overlay */}
       <AnimatePresence>
