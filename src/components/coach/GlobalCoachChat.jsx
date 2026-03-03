@@ -105,6 +105,13 @@ export default function GlobalCoachChat({
     });
   }, [selectedAgentType, coachStyle]);
 
+  // Default agent on open based on current tab context:
+  // Nutrition tab -> nutritionist, all other tabs -> coach.
+  useEffect(() => {
+    if (!isOpen) return;
+    setSelectedAgentType(getDefaultAgentType(context));
+  }, [isOpen, context]);
+
   useEffect(() => {
     if (typeof window === 'undefined') return;
     window.sessionStorage.setItem(THREAD_STORAGE_KEY, JSON.stringify(threadsByAgent));
