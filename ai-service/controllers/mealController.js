@@ -64,4 +64,54 @@ const generateNextMeal = asyncHandler(async (req, res) => {
     res.json({ ...meal, _provider: provider });
 });
 
-module.exports = { generateNextMeal };
+/**
+ * @desc    Parse user's free-text meal description into structured meal data
+ * @route   POST /ai/meal/from-text
+ * @access  Private
+ */
+const generateMealFromText = asyncHandler(async (req, res) => {
+    const user = req.user;
+    const p = user.profile || {};
+    const { meal_description } = req.body;
+
+    if (!meal_description || !meal_description.trim()) {
+        res.status(400);
+        throw new Error('meal_description is required');
+    }
+
+    const systemPrompt = buildMealSystem(user);
+
+    const userMessage = `The user described a meal they ate or plan to eat:
+"${meal_description.trim()}"
+
+Parse this description and estimate nutritional values for each component.
+User diet: ${p.diet_type || 'everything'}.
+
+Respond ONLY with this exact JSON structure (no markdown, no extra text):
+{
+  "meal_name": "Short name describing the meal",
+  "foods": [
+    { "name": "Food name", "portion": "Xg or X units", "calories": 0, "protein": 0, "carbs": 0, "fat": 0 }
+  ],
+  "total_calories": 0,
+  "total_protein": 0,
+  "total_carbs": 0,
+  "total_fat": 0,
+  "coach_note": "משפט קצר בעברית על הארוחה"
+}`;
+
+    const { text, provider } = await callWithFallback(systemPrompt, userMessage, 800);
+
+    let meal;
+    try {
+        const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+        meal = JSON.parse(cleaned);
+    } catch (err) {
+        res.status(500);
+        throw new Error(`LLM returned invalid JSON: ${text.slice(0, 200)}`);
+    }
+
+    res.json({ ...meal, _provider: provider });
+});
+
+module.exports = { generateNextMeal, generateMealFromText };

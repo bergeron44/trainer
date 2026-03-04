@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { X, Plus, Sparkles, Search } from 'lucide-react';
+import { X, Plus, Sparkles, Search, PenLine } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import aiApi from '@/api/aiAxios';
 
@@ -20,15 +20,31 @@ const QUICK_FOODS = [
     { name: 'Tuna (canned)', portion: '120g', calories: 132, protein: 29, carbs: 0, fat: 1 },
 ];
 
-export default function ManualFoodEntry({ periodLabel, onAdd, onClose }) {
+const MacroPill = ({ label, value, color }) => (
+    <div className="rounded-lg py-1.5 text-center" style={{ backgroundColor: `${color}10` }}>
+        <p className="text-xs font-bold" style={{ color }}>{value}g</p>
+        <p className="text-[10px] text-gray-600">{label}</p>
+    </div>
+);
+
+export default function ManualFoodEntry({ periodLabel, onAdd, onAddMeal, onClose }) {
     const { t } = useTranslation();
-    const [tab, setTab] = useState('list'); // 'list' | 'manual'
+    const [tab, setTab] = useState('list'); // 'list' | 'single' | 'describe'
+
+    // Single food estimate state
     const [foodName, setFoodName] = useState('');
     const [portion, setPortion] = useState('');
     const [estimated, setEstimated] = useState(null);
     const [isEstimating, setIsEstimating] = useState(false);
     const [estimateError, setEstimateError] = useState(false);
 
+    // Describe-meal state
+    const [mealText, setMealText] = useState('');
+    const [generatedMeal, setGeneratedMeal] = useState(null);
+    const [isGenerating, setIsGenerating] = useState(false);
+    const [generateError, setGenerateError] = useState(false);
+
+    // --- Single food estimate ---
     const handleEstimate = async () => {
         if (!foodName.trim()) return;
         setIsEstimating(true);
@@ -59,6 +75,7 @@ export default function ManualFoodEntry({ periodLabel, onAdd, onClose }) {
         });
     };
 
+    // --- Quick pick ---
     const handleAddQuick = (food) => {
         onAdd({
             name: food.name,
@@ -70,6 +87,41 @@ export default function ManualFoodEntry({ periodLabel, onAdd, onClose }) {
         });
     };
 
+    // --- Describe full meal ---
+    const handleGenerateMeal = async () => {
+        if (!mealText.trim()) return;
+        setIsGenerating(true);
+        setGeneratedMeal(null);
+        setGenerateError(false);
+        try {
+            const res = await aiApi.post('/meal/from-text', {
+                meal_description: mealText.trim(),
+            });
+            setGeneratedMeal(res.data);
+        } catch {
+            setGenerateError(true);
+        } finally {
+            setIsGenerating(false);
+        }
+    };
+
+    const handleAddGeneratedMeal = () => {
+        if (!generatedMeal) return;
+        if (onAddMeal) {
+            onAddMeal(generatedMeal);
+        } else {
+            // Fallback: add as single combined entry
+            onAdd({
+                name: generatedMeal.meal_name,
+                cals: generatedMeal.total_calories,
+                protein: generatedMeal.total_protein,
+                carbs: generatedMeal.total_carbs,
+                fat: generatedMeal.total_fat,
+                foods: generatedMeal.foods,
+            });
+        }
+    };
+
     return (
         <motion.div
             className="fixed inset-0 z-[90] bg-black/60 backdrop-blur-sm flex items-end pb-20"
@@ -79,7 +131,7 @@ export default function ManualFoodEntry({ periodLabel, onAdd, onClose }) {
             onClick={onClose}
         >
             <motion.div
-                className="w-full max-w-lg mx-auto bg-[#1A1A1A] rounded-t-2xl border-t border-x border-[#2A2A2A] flex flex-col max-h-[75vh]"
+                className="w-full max-w-lg mx-auto bg-[#1A1A1A] rounded-t-2xl border-t border-x border-[#2A2A2A] flex flex-col max-h-[78vh]"
                 initial={{ y: '100%' }}
                 animate={{ y: 0 }}
                 exit={{ y: '100%' }}
@@ -98,7 +150,7 @@ export default function ManualFoodEntry({ periodLabel, onAdd, onClose }) {
                 </div>
 
                 {/* Tabs */}
-                <div className="flex mx-4 mb-2 rounded-lg bg-[#111] p-0.5 shrink-0">
+                <div className="flex mx-4 mb-2 rounded-lg bg-[#111] p-0.5 shrink-0 gap-0.5">
                     <button
                         onClick={() => setTab('list')}
                         className={`flex-1 py-1.5 rounded-md text-xs font-semibold transition-colors ${tab === 'list' ? 'bg-[#2A2A2A] text-white' : 'text-gray-500'}`}
@@ -106,11 +158,18 @@ export default function ManualFoodEntry({ periodLabel, onAdd, onClose }) {
                         {t('nutrition.quickPick', 'Quick Pick')}
                     </button>
                     <button
-                        onClick={() => setTab('manual')}
-                        className={`flex-1 py-1.5 rounded-md text-xs font-semibold transition-colors flex items-center justify-center gap-1 ${tab === 'manual' ? 'bg-[#2A2A2A] text-white' : 'text-gray-500'}`}
+                        onClick={() => setTab('single')}
+                        className={`flex-1 py-1.5 rounded-md text-xs font-semibold transition-colors flex items-center justify-center gap-1 ${tab === 'single' ? 'bg-[#2A2A2A] text-white' : 'text-gray-500'}`}
                     >
                         <Sparkles className="w-3 h-3" />
-                        {t('nutrition.aiEstimate', 'AI Estimate')}
+                        {t('nutrition.aiEstimate', 'AI')}
+                    </button>
+                    <button
+                        onClick={() => setTab('describe')}
+                        className={`flex-1 py-1.5 rounded-md text-xs font-semibold transition-colors flex items-center justify-center gap-1 ${tab === 'describe' ? 'bg-[#CCFF00]/20 text-[#CCFF00]' : 'text-gray-500'}`}
+                    >
+                        <PenLine className="w-3 h-3" />
+                        {t('nutrition.describeMeal', 'Describe')}
                     </button>
                 </div>
 
@@ -118,7 +177,9 @@ export default function ManualFoodEntry({ periodLabel, onAdd, onClose }) {
 
                 {/* Body */}
                 <div className="flex-1 overflow-y-auto px-4 py-3">
-                    {tab === 'list' ? (
+
+                    {/* ── Quick Pick ── */}
+                    {tab === 'list' && (
                         <div className="space-y-1">
                             {QUICK_FOODS.map((food, i) => (
                                 <button
@@ -139,7 +200,10 @@ export default function ManualFoodEntry({ periodLabel, onAdd, onClose }) {
                                 </button>
                             ))}
                         </div>
-                    ) : (
+                    )}
+
+                    {/* ── Single Food AI Estimate ── */}
+                    {tab === 'single' && (
                         <div className="space-y-3">
                             <div>
                                 <label className="text-xs text-gray-500 mb-1 block">{t('nutrition.foodName', 'Food name')}</label>
@@ -162,7 +226,6 @@ export default function ManualFoodEntry({ periodLabel, onAdd, onClose }) {
                                     className="w-full bg-[#111] border border-[#2A2A2A] rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-[#00F2FF]/50"
                                 />
                             </div>
-
                             <button
                                 onClick={handleEstimate}
                                 disabled={!foodName.trim() || isEstimating}
@@ -182,11 +245,9 @@ export default function ManualFoodEntry({ periodLabel, onAdd, onClose }) {
                                     </>
                                 )}
                             </button>
-
                             {estimateError && (
                                 <p className="text-xs text-red-400 text-center">{t('nutrition.estimateError', 'Could not reach AI. Try again.')}</p>
                             )}
-
                             {estimated && (
                                 <motion.div
                                     initial={{ opacity: 0, y: 8 }}
@@ -200,17 +261,10 @@ export default function ManualFoodEntry({ periodLabel, onAdd, onClose }) {
                                         </div>
                                         <p className="text-base font-bold text-[#00F2FF]">{estimated.calories} kcal</p>
                                     </div>
-                                    <div className="grid grid-cols-3 gap-2 text-center">
-                                        {[
-                                            { label: 'Protein', value: estimated.protein, color: '#CCFF00' },
-                                            { label: 'Carbs', value: estimated.carbs, color: '#FF6B6B' },
-                                            { label: 'Fat', value: estimated.fat, color: '#FFD93D' },
-                                        ].map(m => (
-                                            <div key={m.label} className="rounded-lg py-1.5" style={{ backgroundColor: `${m.color}10` }}>
-                                                <p className="text-xs font-bold" style={{ color: m.color }}>{m.value}g</p>
-                                                <p className="text-[10px] text-gray-600">{m.label}</p>
-                                            </div>
-                                        ))}
+                                    <div className="grid grid-cols-3 gap-2">
+                                        <MacroPill label="Protein" value={estimated.protein} color="#CCFF00" />
+                                        <MacroPill label="Carbs" value={estimated.carbs} color="#FF6B6B" />
+                                        <MacroPill label="Fat" value={estimated.fat} color="#FFD93D" />
                                     </div>
                                     <button
                                         onClick={handleAddEstimated}
@@ -218,6 +272,84 @@ export default function ManualFoodEntry({ periodLabel, onAdd, onClose }) {
                                     >
                                         <Plus className="w-4 h-4" />
                                         {t('nutrition.addToMeal', 'Add to Meal')}
+                                    </button>
+                                </motion.div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* ── Describe Full Meal ── */}
+                    {tab === 'describe' && (
+                        <div className="space-y-3">
+                            <p className="text-xs text-gray-500">
+                                {t('nutrition.describeHint', 'Write your full meal — AI will calculate the macros and add it to this slot.')}
+                            </p>
+                            <textarea
+                                value={mealText}
+                                onChange={e => setMealText(e.target.value)}
+                                placeholder={t('nutrition.describeplaceholder', 'e.g. 200g chicken breast with brown rice, salad with olive oil')}
+                                rows={4}
+                                className="w-full bg-[#111] border border-[#2A2A2A] rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-[#CCFF00]/50 resize-none"
+                            />
+                            <button
+                                onClick={handleGenerateMeal}
+                                disabled={!mealText.trim() || isGenerating}
+                                className="w-full py-2.5 rounded-xl text-black text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                style={{ background: !mealText.trim() || isGenerating ? '#333' : 'linear-gradient(135deg, #CCFF00, #99CC00)' }}
+                            >
+                                {isGenerating ? (
+                                    <>
+                                        <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.2, repeat: Infinity, ease: 'linear' }}>
+                                            <Sparkles className="w-4 h-4" />
+                                        </motion.div>
+                                        {t('nutrition.analyzing', 'Analyzing...')}
+                                    </>
+                                ) : (
+                                    <>
+                                        <PenLine className="w-4 h-4" />
+                                        {t('nutrition.analyzeMeal', 'Analyze Meal')}
+                                    </>
+                                )}
+                            </button>
+
+                            {generateError && (
+                                <p className="text-xs text-red-400 text-center">{t('nutrition.estimateError', 'Could not reach AI. Try again.')}</p>
+                            )}
+
+                            {generatedMeal && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: 8 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    className="bg-[#111] border border-[#CCFF00]/20 rounded-xl p-3 space-y-2"
+                                >
+                                    <div className="flex items-center justify-between">
+                                        <p className="text-sm font-bold text-white">{generatedMeal.meal_name}</p>
+                                        <p className="text-base font-bold text-[#CCFF00]">{generatedMeal.total_calories} kcal</p>
+                                    </div>
+                                    {/* Foods breakdown */}
+                                    <div className="space-y-1">
+                                        {(generatedMeal.foods || []).map((f, i) => (
+                                            <div key={i} className="flex justify-between text-xs text-gray-400">
+                                                <span>{f.name} <span className="text-gray-600">({f.portion})</span></span>
+                                                <span>{f.calories} kcal</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        <MacroPill label="Protein" value={generatedMeal.total_protein} color="#CCFF00" />
+                                        <MacroPill label="Carbs" value={generatedMeal.total_carbs} color="#FF6B6B" />
+                                        <MacroPill label="Fat" value={generatedMeal.total_fat} color="#FFD93D" />
+                                    </div>
+                                    {generatedMeal.coach_note && (
+                                        <p className="text-xs text-gray-500 italic">{generatedMeal.coach_note}</p>
+                                    )}
+                                    <button
+                                        onClick={handleAddGeneratedMeal}
+                                        className="w-full py-2 rounded-xl text-black text-sm font-semibold flex items-center justify-center gap-2"
+                                        style={{ background: 'linear-gradient(135deg, #CCFF00, #99CC00)' }}
+                                    >
+                                        <Plus className="w-4 h-4" />
+                                        {t('nutrition.addMeal', 'Add Meal')}
                                     </button>
                                 </motion.div>
                             )}

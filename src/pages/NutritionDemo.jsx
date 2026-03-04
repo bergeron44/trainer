@@ -164,6 +164,10 @@ export default function NutritionDemo() {
     };
   }, { cals: 0, pro: 0, carb: 0, fat: 0 });
 
+  // Block AI meal generation if current period already has an AI meal
+  const currentPeriodId = getPeriodId(new Date().getHours());
+  const currentPeriodHasAIMeal = (loggedFoods[currentPeriodId] || []).some(f => f._aiTime);
+
   const macroCards = [
     { key: 'calories', label: t('common.calories', 'Calories'), icon: Flame, value: currentMacros.cals, target: tdee, color: '#00F2FF', unit: '' },
     { key: 'protein', label: t('common.protein', 'Protein'), icon: Beef, value: currentMacros.pro, target: p_goal, color: '#CCFF00', unit: 'g' },
@@ -191,6 +195,36 @@ export default function NutritionDemo() {
     setLoggedFoods(prev => ({
       ...prev,
       [activeSearchPeriod]: [...(prev[activeSearchPeriod] || []), food]
+    }));
+    setActiveSearchPeriod(null);
+  };
+
+  // Called from ManualFoodEntry "Describe" tab — saves full AI-parsed meal to DB + correct period
+  const handleAddMeal = async (meal) => {
+    if (!activeSearchPeriod) return;
+    try {
+      const now = new Date();
+      await api.post('/nutrition', {
+        meal_name: meal.meal_name,
+        calories: meal.total_calories,
+        protein: meal.total_protein || 0,
+        carbs: meal.total_carbs || 0,
+        fat: meal.total_fat || 0,
+        date: now,
+        foods: (meal.foods || []).map(f => ({ name: f.name, portion: f.portion || '', calories: f.calories })),
+      });
+    } catch (err) {
+      console.error('Failed to save meal to DB:', err);
+    }
+    setLoggedFoods(prev => ({
+      ...prev,
+      [activeSearchPeriod]: [...(prev[activeSearchPeriod] || []), {
+        name: meal.meal_name,
+        cals: meal.total_calories,
+        protein: meal.total_protein || 0,
+        carbs: meal.total_carbs || 0,
+        fat: meal.total_fat || 0,
+      }]
     }));
     setActiveSearchPeriod(null);
   };
@@ -328,8 +362,9 @@ export default function NutritionDemo() {
         </button>
 
         <button
-          onClick={requestMealPlan}
-          className="relative overflow-hidden rounded-xl p-4 border border-[#2A2A2A] bg-gradient-to-br from-[#1A1A1A] to-[#0D0D0D] hover:border-[#00F2FF]/30 transition-all group"
+          onClick={currentPeriodHasAIMeal ? undefined : requestMealPlan}
+          disabled={currentPeriodHasAIMeal}
+          className={`relative overflow-hidden rounded-xl p-4 border bg-gradient-to-br from-[#1A1A1A] to-[#0D0D0D] transition-all group ${currentPeriodHasAIMeal ? 'border-[#2A2A2A] opacity-50 cursor-not-allowed' : 'border-[#2A2A2A] hover:border-[#00F2FF]/30'}`}
         >
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-[#00F2FF]/10 flex items-center justify-center group-hover:scale-110 transition-transform">
@@ -337,7 +372,11 @@ export default function NutritionDemo() {
             </div>
             <div className="text-left">
               <p className="text-sm font-semibold text-white">{t('nutrition.planMeal', 'Plan Meal')}</p>
-              <p className="text-xs text-gray-500">{t('nutrition.aiPowered', 'AI Powered')}</p>
+              <p className="text-xs text-gray-500">
+                {currentPeriodHasAIMeal
+                  ? t('nutrition.mealAlreadyGenerated', 'Already done for now')
+                  : t('nutrition.aiPowered', 'AI Powered')}
+              </p>
             </div>
           </div>
           <div className="absolute -bottom-2 -right-2 text-4xl opacity-10 group-hover:opacity-20 transition-opacity">🍽️</div>
@@ -538,6 +577,7 @@ export default function NutritionDemo() {
           <ManualFoodEntry
             periodLabel={periods.find(p => p.id === activeSearchPeriod)?.label || ''}
             onAdd={handleAddFood}
+            onAddMeal={handleAddMeal}
             onClose={() => setActiveSearchPeriod(null)}
           />
         )}
