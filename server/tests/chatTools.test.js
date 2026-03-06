@@ -374,6 +374,55 @@ test('nutrition_set_daily_targets updates allowlisted macro fields', async () =>
     assert.equal(userDoc.profile.protein_goal, 170);
 });
 
+test('user_edit_profile accepts onboarding nutrition plan fields', async () => {
+    const userDoc = {
+        _id: 'u1',
+        profile: {},
+        liked_foods: [],
+        disliked_foods: [],
+        async save() {
+            return this;
+        },
+    };
+
+    const registry = createDefaultToolRegistry({
+        models: {
+            Workout: {},
+            WorkoutLog: {},
+            Exercise: {},
+            User: {
+                async findById() {
+                    return userDoc;
+                },
+            },
+            NutritionLog: {},
+        },
+    });
+
+    const executor = new ToolExecutor({ registry });
+    const result = await executor.executeToolCall({
+        toolCall: {
+            name: 'user_edit_profile',
+            arguments: {
+                patch: {
+                    profile: {
+                        nutrition_plan_choice: 'tracking_only',
+                        nutrition_plan_status: 'skipped',
+                        nutrition_plan_source: 'none',
+                    },
+                },
+                idempotencyKey: 'profile-1',
+            },
+        },
+        context: { userId: 'u1', requestId: 'r-profile' },
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(userDoc.profile.nutrition_plan_choice, 'tracking_only');
+    assert.equal(userDoc.profile.nutrition_plan_status, 'skipped');
+    assert.equal(userDoc.profile.nutrition_plan_source, 'none');
+});
+
 test('meals_delete_meal archives meal by default', async () => {
     const meal = {
         archived: false,

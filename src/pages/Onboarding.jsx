@@ -8,6 +8,7 @@ import CoachStyleSelector from '@/components/coach/CoachStyleSelector';
 import CoachSummary from '@/components/onboarding/CoachSummary';
 import BodyFatSelector from '@/components/onboarding/BodyFatSelector';
 import PlanChoice from '@/components/onboarding/PlanChoice.jsx';
+import NutritionPlanChoice from '@/components/onboarding/NutritionPlanChoice.jsx';
 import { Loader2 } from 'lucide-react';
 
 const QUESTIONS = [
@@ -157,13 +158,15 @@ export default function Onboarding() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { register, user, updateProfile } = useAuth();
-  const [phase, setPhase] = useState('welcome'); // welcome, questions, plan_choice, plan_import, coach_selection, summary, account_setup
+  const [phase, setPhase] = useState('welcome'); // welcome, questions, plan_choice, plan_import, coach_selection, nutrition_plan_choice, summary, account_setup
   const [currentStep, setCurrentStep] = useState(0);
   const [answers, setAnswers] = useState({});
   const [coachStyle, setCoachStyle] = useState(null);
   const [planChoice, setPlanChoice] = useState(null); // 'ai' or 'existing'
+  const [nutritionPlanChoice, setNutritionPlanChoice] = useState(null); // 'ai' | 'existing' | 'tracking_only'
   const [customPlan, setCustomPlan] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const isExperiencedUser = answers.experience_level === 'intermediate' || answers.experience_level === 'advanced';
 
   // Load saved progress
   useEffect(() => {
@@ -238,7 +241,11 @@ export default function Onboarding() {
   const handleCoachSelect = (style) => {
     setCoachStyle(style);
     localStorage.setItem('nexus_coach_style', style);
-    setPhase('summary');
+    if (nutritionPlanChoice) {
+      setPhase('summary');
+      return;
+    }
+    setPhase('nutrition_plan_choice');
   };
 
   const handleNext = () => {
@@ -246,7 +253,7 @@ export default function Onboarding() {
       setCurrentStep(prev => prev + 1);
     } else {
       // Show plan choice for intermediate/advanced users
-      if (answers.experience_level === 'intermediate' || answers.experience_level === 'advanced') {
+      if (isExperiencedUser) {
         setPhase('plan_choice');
       } else {
         setPhase('coach_selection');
@@ -296,6 +303,7 @@ export default function Onboarding() {
       ...macros,
       coach_style: coachStyle,
       plan_choice: planChoice || 'ai',
+      nutrition_plan_choice: nutritionPlanChoice || 'ai',
       custom_plan: customPlan,
       onboarding_completed: true,
       onboarding_date: new Date().toISOString()
@@ -411,7 +419,7 @@ export default function Onboarding() {
           if (choice === 'existing') {
             setPhase('plan_import');
           } else {
-            setPhase('coach_selection');
+            setPhase('nutrition_plan_choice');
           }
         }}
         onBack={() => setPhase('questions')}
@@ -427,11 +435,37 @@ export default function Onboarding() {
         <PlanImportComponent
           onComplete={(plan) => {
             setCustomPlan(plan);
-            setPhase('coach_selection');
+            setPhase('nutrition_plan_choice');
           }}
           onBack={() => setPhase('plan_choice')}
         />
       </React.Suspense>
+    );
+  }
+
+  if (phase === 'nutrition_plan_choice') {
+    return (
+      <NutritionPlanChoice
+        onSelect={(choice) => {
+          setNutritionPlanChoice(choice);
+          if (isExperiencedUser) {
+            setPhase('coach_selection');
+          } else {
+            setPhase('summary');
+          }
+        }}
+        onBack={() => {
+          if (!isExperiencedUser) {
+            setPhase('coach_selection');
+            return;
+          }
+          if (planChoice === 'existing') {
+            setPhase('plan_import');
+            return;
+          }
+          setPhase('plan_choice');
+        }}
+      />
     );
   }
 

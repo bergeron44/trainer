@@ -90,7 +90,7 @@ export default function NutritionDemo() {
   const { user } = useAuth();
   const { t } = useTranslation();
   const [chatOpen, setChatOpen] = useState(false);
-  const [coachStyle, setCoachStyle] = useState('motivational');
+  const [coachStyle] = useState('motivational');
 
   // Swipe game & meal planner state
   const [showSwipeGame, setShowSwipeGame] = useState(false);
@@ -103,6 +103,8 @@ export default function NutritionDemo() {
   const profile = user?.profile || {};
   const dietType = profile.diet_type || 'everything';
   const goal = profile.goal || 'recomp';
+  const nutritionPlanChoice = profile.nutrition_plan_choice;
+  const isTrackingOnlyMode = nutritionPlanChoice === 'tracking_only';
 
   const [activeSearchPeriod, setActiveSearchPeriod] = useState(null);
   const [loggedFoods, setLoggedFoods] = useState({});
@@ -137,7 +139,7 @@ export default function NutritionDemo() {
           return updated;
         });
       })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   const loadFoodPreferences = async () => {
@@ -362,9 +364,12 @@ export default function NutritionDemo() {
         </button>
 
         <button
-          onClick={currentPeriodHasAIMeal ? undefined : requestMealPlan}
-          disabled={currentPeriodHasAIMeal}
-          className={`relative overflow-hidden rounded-xl p-4 border bg-gradient-to-br from-[#1A1A1A] to-[#0D0D0D] transition-all group ${currentPeriodHasAIMeal ? 'border-[#2A2A2A] opacity-50 cursor-not-allowed' : 'border-[#2A2A2A] hover:border-[#00F2FF]/30'}`}
+          onClick={requestMealPlan}
+          disabled={isTrackingOnlyMode}
+          className={`relative overflow-hidden rounded-xl p-4 border border-[#2A2A2A] bg-gradient-to-br from-[#1A1A1A] to-[#0D0D0D] transition-all group ${isTrackingOnlyMode
+            ? 'opacity-50 cursor-not-allowed'
+            : 'hover:border-[#00F2FF]/30'
+            }`}
         >
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-[#00F2FF]/10 flex items-center justify-center group-hover:scale-110 transition-transform">
@@ -373,8 +378,8 @@ export default function NutritionDemo() {
             <div className="text-left">
               <p className="text-sm font-semibold text-white">{t('nutrition.planMeal', 'Plan Meal')}</p>
               <p className="text-xs text-gray-500">
-                {currentPeriodHasAIMeal
-                  ? t('nutrition.mealAlreadyGenerated', 'Already done for now')
+                {isTrackingOnlyMode
+                  ? t('nutrition.trackingOnlyModeTitle', 'Tracking-only mode is active')
                   : t('nutrition.aiPowered', 'AI Powered')}
               </p>
             </div>
@@ -382,6 +387,21 @@ export default function NutritionDemo() {
           <div className="absolute -bottom-2 -right-2 text-4xl opacity-10 group-hover:opacity-20 transition-opacity">🍽️</div>
         </button>
       </motion.div>
+
+      {isTrackingOnlyMode && (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-6 rounded-xl border border-[#FF8A00]/30 bg-[#FF8A00]/5 px-4 py-3"
+        >
+          <p className="text-sm text-[#FFB55C] font-semibold">
+            {t('nutrition.trackingOnlyModeTitle', 'Tracking-only mode is active')}
+          </p>
+          <p className="text-xs text-gray-400 mt-1">
+            {t('nutrition.trackingOnlyModeDesc', 'AI meal planning is disabled for your account settings. You can still track all meals here.')}
+          </p>
+        </motion.div>
+      )}
 
       {/* Macro Overview */}
       <motion.div

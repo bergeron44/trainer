@@ -50,6 +50,11 @@ const userSchema = mongoose.Schema({
             enum: ['ai', 'existing'],
             default: 'ai'
         },
+        nutrition_plan_choice: {
+            type: String,
+            enum: ['ai', 'existing', 'tracking_only'],
+            default: 'ai',
+        },
         custom_plan: [{
             day: String,
             name: String,
@@ -78,7 +83,19 @@ const userSchema = mongoose.Schema({
             type: String,
             enum: ['agent', 'legacy', 'manual'],
             default: 'agent'
-        }
+        },
+        nutrition_plan_status: {
+            type: String,
+            enum: ['pending', 'generating', 'ready', 'failed', 'skipped'],
+            default: 'pending',
+        },
+        nutrition_plan_error: String,
+        nutrition_plan_generated_at: Date,
+        nutrition_plan_source: {
+            type: String,
+            enum: ['agent', 'legacy', 'manual', 'none'],
+            default: 'none',
+        },
     },
     liked_foods: [{
         name: String,

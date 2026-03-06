@@ -5,6 +5,10 @@ const User = require('../models/User');
 const OnboardingWorkoutPlannerService = require('../services/onboardingWorkoutPlannerService');
 
 const onboardingWorkoutPlannerService = new OnboardingWorkoutPlannerService();
+const ONBOARDING_AI_MENU_AUTOGEN_ENABLED = parseBoolean(
+    process.env.ONBOARDING_AI_MENU_AUTOGEN_ENABLED,
+    false
+);
 
 const generateToken = (id) => {
     return jwt.sign({ id }, process.env.JWT_SECRET, {
@@ -12,16 +16,51 @@ const generateToken = (id) => {
     });
 };
 
+function parseBoolean(value, fallback = false) {
+    if (value === undefined || value === null || value === '') return fallback;
+    return String(value).trim().toLowerCase() === 'true';
+}
+
 function normalizeIncomingProfile(profile = {}) {
     const normalized = { ...(profile || {}) };
-    const planChoice = String(normalized.plan_choice || '').trim().toLowerCase();
-    if (planChoice === 'existing') {
-        normalized.workout_plan_status = 'skipped';
-        normalized.workout_plan_error = undefined;
+    const hasWorkoutPlanChoice = typeof normalized.plan_choice === 'string';
+    const planChoice = hasWorkoutPlanChoice
+        ? String(normalized.plan_choice || '').trim().toLowerCase()
+        : '';
+
+    if (hasWorkoutPlanChoice) {
+        if (planChoice === 'existing') {
+            normalized.workout_plan_status = 'skipped';
+            normalized.workout_plan_error = undefined;
+        }
+        if (planChoice === 'ai' && normalized.onboarding_completed === true) {
+            normalized.workout_plan_status = normalized.workout_plan_status || 'pending';
+        }
     }
-    if (planChoice === 'ai' && normalized.onboarding_completed === true) {
-        normalized.workout_plan_status = normalized.workout_plan_status || 'pending';
+
+    const hasNutritionPlanChoice = typeof normalized.nutrition_plan_choice === 'string';
+    const nutritionPlanChoice = hasNutritionPlanChoice
+        ? String(normalized.nutrition_plan_choice || '').trim().toLowerCase()
+        : '';
+
+    if (hasNutritionPlanChoice) {
+        if (nutritionPlanChoice === 'existing') {
+            normalized.nutrition_plan_status = 'skipped';
+            normalized.nutrition_plan_error = undefined;
+            normalized.nutrition_plan_source = 'manual';
+        }
+        if (nutritionPlanChoice === 'tracking_only') {
+            normalized.nutrition_plan_status = 'skipped';
+            normalized.nutrition_plan_error = undefined;
+            normalized.nutrition_plan_source = 'none';
+        }
+        if (nutritionPlanChoice === 'ai' && normalized.onboarding_completed === true) {
+            normalized.nutrition_plan_status = normalized.nutrition_plan_status || 'pending';
+            normalized.nutrition_plan_error = undefined;
+            normalized.nutrition_plan_source = normalized.nutrition_plan_source || 'none';
+        }
     }
+
     return normalized;
 }
 
@@ -44,6 +83,36 @@ async function runOnboardingPlannerSafely({ userId, requestId, trigger }) {
             status: 'failed_to_start',
         };
     }
+}
+
+function shouldRunNutritionMenuAutogen(profile = {}) {
+    if (!ONBOARDING_AI_MENU_AUTOGEN_ENABLED) return false;
+    if (!profile || profile.onboarding_completed !== true) return false;
+    const nutritionPlanChoice = String(profile.nutrition_plan_choice || '').trim().toLowerCase();
+    return nutritionPlanChoice === 'ai';
+}
+
+async function runOnboardingNutritionPlannerSafely({ userId, requestId, trigger, profile }) {
+    if (!shouldRunNutritionMenuAutogen(profile)) {
+        return {
+            triggered: false,
+            status: 'skipped',
+            reason: 'menu_autogen_disabled_or_not_eligible',
+        };
+    }
+
+    // Hook point for future onboarding AI menu generation service integration.
+    console.info('userController.onboardingNutritionPlanner hook reached', {
+        userId,
+        requestId,
+        trigger,
+        status: 'not_implemented',
+    });
+
+    return {
+        triggered: false,
+        status: 'not_implemented',
+    };
 }
 
 // @desc    Register new user
@@ -76,6 +145,12 @@ const registerUser = asyncHandler(async (req, res) => {
             userId: user.id,
             requestId: req.requestId,
             trigger: 'register',
+        });
+        await runOnboardingNutritionPlannerSafely({
+            userId: user.id,
+            requestId: req.requestId,
+            trigger: 'register',
+            profile: user.profile,
         });
 
         const latestUser = await User.findById(user.id);
@@ -152,6 +227,12 @@ const updateProfile = asyncHandler(async (req, res) => {
         userId: user.id,
         requestId: req.requestId,
         trigger: 'update_profile',
+    });
+    await runOnboardingNutritionPlannerSafely({
+        userId: user.id,
+        requestId: req.requestId,
+        trigger: 'update_profile',
+        profile: user.profile,
     });
 
     const updatedUser = await User.findById(user.id);
@@ -240,4 +321,5 @@ module.exports = {
     updateProfile,
     addFoodPreference,
     getFoodPreferences,
+    normalizeIncomingProfile,
 };
