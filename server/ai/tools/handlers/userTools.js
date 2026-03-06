@@ -28,6 +28,7 @@ const profilePatchSchema = z.object({
     fat_goal: z.number().min(0).max(1000).optional(),
     coach_style: z.string().min(1).max(80).optional(),
     plan_choice: z.enum(['ai', 'existing']).optional(),
+    nutrition_plan_choice: z.enum(['ai', 'existing', 'tracking_only']).optional(),
     custom_plan: z.array(z.object({
         day: z.string().max(60).optional(),
         name: z.string().max(120).optional(),
@@ -45,6 +46,10 @@ const profilePatchSchema = z.object({
     workout_plan_error: z.string().max(400).optional(),
     workout_plan_generated_at: z.string().datetime().optional(),
     workout_plan_source: z.enum(['agent', 'legacy', 'manual']).optional(),
+    nutrition_plan_status: z.enum(['pending', 'generating', 'ready', 'failed', 'skipped']).optional(),
+    nutrition_plan_error: z.string().max(400).optional(),
+    nutrition_plan_generated_at: z.string().datetime().optional(),
+    nutrition_plan_source: z.enum(['agent', 'legacy', 'manual', 'none']).optional(),
 }).strict();
 
 const likedFoodSchema = z.object({

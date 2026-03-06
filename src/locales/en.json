@@ -74,6 +74,26 @@
         "email": "Email",
         "creatingPlan": "Creating your plan...",
         "analyzingData": "Analyzing your data and building your personalized program",
+        "planChoice": {
+            "title": "You're Experienced!",
+            "subtitle": "Would you like to build a new plan or import your existing routine?",
+            "aiPlan": "Build New AI Plan",
+            "aiPlanDesc": "Let Nexus AI create a personalized program based on your goals",
+            "existingRoutine": "Use My Current Routine",
+            "existingRoutineDesc": "Continue with your existing workout routine (you can adjust later)",
+            "changeLater": "You can always change this later in settings"
+        },
+        "nutritionPlanChoice": {
+            "title": "How do you want to handle nutrition?",
+            "subtitle": "Pick how you want to set up your menu in the app",
+            "aiMenu": "Generate AI Menu",
+            "aiMenuDesc": "Let Nexus AI suggest meals based on your goals and macros",
+            "existingMenu": "Use My Existing Menu",
+            "existingMenuDesc": "I already have a menu and only want to track it",
+            "trackingOnly": "Tracking Only",
+            "trackingOnlyDesc": "Skip meal planning and just use nutrition tracking tools",
+            "changeLater": "You can always change this later in settings"
+        },
         "questions": {
             "age": "How old are you?",
             "gender": "What's your gender?",
@@ -234,6 +254,8 @@
         "swipeHint": "Swipe what you love — so we know what to cook for you 🍽️",
         "allRatedTitle": "We already know your preferences!",
         "allRatedSub": "You can request a meal from the AI coach",
+        "trackingOnlyModeTitle": "Tracking-only mode is active",
+        "trackingOnlyModeDesc": "AI meal planning is disabled for your account settings. You can still track all meals here.",
         "requestMeal": "Request a Meal",
         "sessionDone": "Session Complete!",
         "savingPrefs": "Saving your preferences..."

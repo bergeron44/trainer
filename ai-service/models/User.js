@@ -29,8 +29,18 @@ const userSchema = mongoose.Schema({
         carbs_goal: Number,
         fat_goal: Number,
         trainer_personality: { type: String, enum: ['drill_sergeant', 'scientist', 'zen_coach'], default: 'drill_sergeant' },
+        plan_choice: { type: String, enum: ['ai', 'existing'], default: 'ai' },
+        nutrition_plan_choice: { type: String, enum: ['ai', 'existing', 'tracking_only'], default: 'ai' },
         onboarding_completed: { type: Boolean, default: false },
-        has_existing_plan: { type: Boolean, default: false }
+        has_existing_plan: { type: Boolean, default: false },
+        workout_plan_status: { type: String, enum: ['pending', 'generating', 'ready', 'failed', 'skipped'], default: 'pending' },
+        workout_plan_error: String,
+        workout_plan_generated_at: Date,
+        workout_plan_source: { type: String, enum: ['agent', 'legacy', 'manual'], default: 'agent' },
+        nutrition_plan_status: { type: String, enum: ['pending', 'generating', 'ready', 'failed', 'skipped'], default: 'pending' },
+        nutrition_plan_error: String,
+        nutrition_plan_generated_at: Date,
+        nutrition_plan_source: { type: String, enum: ['agent', 'legacy', 'manual', 'none'], default: 'none' }
     },
     liked_foods: [{
         name: String,
