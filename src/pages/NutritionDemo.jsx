@@ -2,19 +2,18 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
 import { Flame, Beef, Wheat, Droplet, Target, MessageCircle, ChevronRight, Plus, X, Heart, Utensils } from 'lucide-react';
-import * as Dialog from '@radix-ui/react-dialog';
 import { useTranslation } from 'react-i18next';
 import GlobalCoachChat from '@/components/coach/GlobalCoachChat';
-import FoodSearch from '@/components/nutrition/FoodSearch';
 import FoodSwipeGame from '@/components/nutrition/FoodSwipeGame';
 import MealPlanCard from '@/components/nutrition/MealPlanCard';
+import ManualFoodEntry from '@/components/nutrition/ManualFoodEntry';
 import { useAuth } from '@/lib/AuthContext';
 import api from '@/api/axios';
 import aiApi from '@/api/aiAxios';
 
 // --- Coach Logic: Dynamic Meal Periods ---
 const generateCoachPeriods = (goal, dietType, t = null) => {
-  let numMeals = 4;
+  let numMeals = 5;
   if (goal === 'muscle_gain') numMeals = 6;
   if (goal === 'weight_loss') numMeals = 3;
   if (dietType === 'keto') numMeals = Math.max(2, numMeals - 1);
@@ -78,6 +77,15 @@ const GOAL_LABELS = {
   athletic_performance: 'Athletic Performance'
 };
 
+// Map hour → period ID (matches 5-meal layout: m1-m5)
+const getPeriodId = (hour) => {
+  if (hour < 10) return 'm1';
+  if (hour < 13) return 'm2';
+  if (hour < 16) return 'm3';
+  if (hour < 19) return 'm4';
+  return 'm5';
+};
+
 export default function NutritionDemo() {
   const { user } = useAuth();
   const { t } = useTranslation();
@@ -106,9 +114,32 @@ export default function NutritionDemo() {
     setPeriods(generateCoachPeriods(goal, dietType, t));
   }, [goal, dietType, t]);
 
-  // Load food preferences on mount
+  // Load food preferences and today's saved meals on mount
   useEffect(() => {
     loadFoodPreferences();
+    const todayStr = format(new Date(), 'yyyy-MM-dd');
+    api.get(`/nutrition/date/${todayStr}`)
+      .then(res => {
+        const logs = res.data || [];
+        if (logs.length === 0) return;
+        // Map each saved log into the correct period slot by its save time
+        setLoggedFoods(prev => {
+          const updated = { ...prev };
+          logs.forEach(log => {
+            const hour = new Date(log.createdAt || log.date).getHours();
+            const pid = getPeriodId(hour);
+            updated[pid] = [...(updated[pid] || []), {
+              name: log.meal_name,
+              cals: log.calories,
+              protein: log.protein || 0,
+              carbs: log.carbs || 0,
+              fat: log.fat || 0,
+            }];
+          });
+          return updated;
+        });
+      })
+      .catch(() => { });
   }, []);
 
   const loadFoodPreferences = async () => {
@@ -135,6 +166,10 @@ export default function NutritionDemo() {
     };
   }, { cals: 0, pro: 0, carb: 0, fat: 0 });
 
+  // Block AI meal generation if current period already has an AI meal
+  const currentPeriodId = getPeriodId(new Date().getHours());
+  const currentPeriodHasAIMeal = (loggedFoods[currentPeriodId] || []).some(f => f._aiTime);
+
   const macroCards = [
     { key: 'calories', label: t('common.calories', 'Calories'), icon: Flame, value: currentMacros.cals, target: tdee, color: '#00F2FF', unit: '' },
     { key: 'protein', label: t('common.protein', 'Protein'), icon: Beef, value: currentMacros.pro, target: p_goal, color: '#CCFF00', unit: 'g' },
@@ -142,11 +177,56 @@ export default function NutritionDemo() {
     { key: 'fat', label: t('common.fat', 'Fat'), icon: Droplet, value: currentMacros.fat, target: f_goal, color: '#FFD93D', unit: 'g' }
   ];
 
-  const handleAddFood = (food) => {
+  const handleAddFood = async (food) => {
     if (!activeSearchPeriod) return;
+    // Save to DB as a single-food log entry
+    try {
+      const now = new Date();
+      await api.post('/nutrition', {
+        meal_name: food.name,
+        calories: food.cals,
+        protein: food.protein || 0,
+        carbs: food.carbs || 0,
+        fat: food.fat || 0,
+        date: now,
+        foods: [{ name: food.name, portion: food.portion || '', calories: food.cals }],
+      });
+    } catch (err) {
+      console.error('Failed to save food to DB:', err);
+    }
     setLoggedFoods(prev => ({
       ...prev,
       [activeSearchPeriod]: [...(prev[activeSearchPeriod] || []), food]
+    }));
+    setActiveSearchPeriod(null);
+  };
+
+  // Called from ManualFoodEntry "Describe" tab — saves full AI-parsed meal to DB + correct period
+  const handleAddMeal = async (meal) => {
+    if (!activeSearchPeriod) return;
+    try {
+      const now = new Date();
+      await api.post('/nutrition', {
+        meal_name: meal.meal_name,
+        calories: meal.total_calories,
+        protein: meal.total_protein || 0,
+        carbs: meal.total_carbs || 0,
+        fat: meal.total_fat || 0,
+        date: now,
+        foods: (meal.foods || []).map(f => ({ name: f.name, portion: f.portion || '', calories: f.calories })),
+      });
+    } catch (err) {
+      console.error('Failed to save meal to DB:', err);
+    }
+    setLoggedFoods(prev => ({
+      ...prev,
+      [activeSearchPeriod]: [...(prev[activeSearchPeriod] || []), {
+        name: meal.meal_name,
+        cals: meal.total_calories,
+        protein: meal.total_protein || 0,
+        carbs: meal.total_carbs || 0,
+        fat: meal.total_fat || 0,
+      }]
     }));
     setActiveSearchPeriod(null);
   };
@@ -181,8 +261,9 @@ export default function NutritionDemo() {
       });
       setCurrentMeal(res.data);
     } catch (err) {
-      console.error('Failed to generate meal plan:', err);
-      setCurrentMeal(null);
+      console.error('Failed to generate meal plan:', err.response?.data || err.message);
+      // Signal error state so MealPlanCard can show retry
+      setCurrentMeal({ _error: true });
     } finally {
       setIsMealLoading(false);
     }
@@ -197,26 +278,38 @@ export default function NutritionDemo() {
     return 'Evening Snack';
   };
 
-  const handleLogMeal = (meal) => {
-    // Add meal foods to the appropriate period
-    const hour = new Date().getHours();
-    let periodId = 'm2'; // default lunch
-    if (hour < 10) periodId = 'm1';
-    else if (hour < 14) periodId = 'm2';
-    else if (hour < 17) periodId = 'm3';
-    else periodId = 'm4';
+  const handleLogMeal = async (meal) => {
+    const now = new Date();
+    const hour = now.getHours();
+    const periodId = getPeriodId(hour);
+    console.log(`[LogMeal] time=${now.toLocaleTimeString()} hour=${hour} → periodId=${periodId}`);
 
-    const foods = meal.foods.map(f => ({
-      name: f.name,
-      cals: f.calories,
-      protein: f.protein,
-      carbs: f.carbs,
-      fat: f.fat,
-    }));
+    // Save to DB
+    try {
+      await api.post('/nutrition', {
+        meal_name: meal.meal_name,
+        calories: meal.total_calories,
+        protein: meal.total_protein,
+        carbs: meal.total_carbs,
+        fat: meal.total_fat,
+        date: now,
+        foods: meal.foods.map(f => ({ name: f.name, portion: f.portion, calories: f.calories })),
+      });
+    } catch (err) {
+      console.error('Failed to save meal to DB:', err);
+    }
 
+    // Add to the correct period slot in the daily log
     setLoggedFoods(prev => ({
       ...prev,
-      [periodId]: [...(prev[periodId] || []), ...foods]
+      [periodId]: [...(prev[periodId] || []), {
+        name: meal.meal_name,
+        cals: meal.total_calories,
+        protein: meal.total_protein,
+        carbs: meal.total_carbs,
+        fat: meal.total_fat,
+        _aiTime: now.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }),
+      }]
     }));
 
     setShowMealPlan(false);
@@ -242,8 +335,8 @@ export default function NutritionDemo() {
           <p className="text-gray-500 text-sm">{format(new Date(), 'EEEE, MMMM d')}</p>
         </div>
         <div className="text-right">
-          <p className="text-[#00F2FF] font-semibold text-sm capitalize">{t(`nutrition.dietTypes.${dietType}`, `${dietType} Diet`)}</p>
-          <p className="text-gray-400 text-xs">{t(`nutrition.goals.${goal}`, GOAL_LABELS[goal])}</p>
+          <p className="text-[#00F2FF] font-semibold text-sm capitalize">{String(t(`nutrition.dietTypes.${dietType}`, `${dietType} Diet`))}</p>
+          <p className="text-gray-400 text-xs">{String(t(`nutrition.goals.${goal}`, GOAL_LABELS[goal]))}</p>
         </div>
       </motion.div>
 
@@ -371,7 +464,7 @@ export default function NutritionDemo() {
           <Target className="w-5 h-5 text-[#00F2FF]" />
         </div>
         <p className="text-sm text-gray-300">
-          <span className="font-semibold text-white">{t('nutrition.coachTip', 'Coach tip:')} </span> {t(`nutrition.dietTips.${dietType}`, DIET_TIPS[dietType])}
+          <span className="font-semibold text-white">{t('nutrition.coachTip', 'Coach tip:')} </span> {String(t(`nutrition.dietTips.${dietType}`, DIET_TIPS[dietType]))}
         </p>
       </motion.div>
 
@@ -414,7 +507,12 @@ export default function NutritionDemo() {
                     {periodFoods.map((food, fIdx) => (
                       <div key={fIdx} className="flex justify-between items-center bg-[#2A2A2A] rounded-lg p-2 text-sm">
                         <div className="flex-1 truncate pr-2">
-                          <span className="text-white block truncate">{t(`nutrition.foods.${food.name}`, food.name)}</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-white block truncate">{String(t(`nutrition.foods.${food.name}`, food.name))}</span>
+                            {food._aiTime && (
+                              <span className="text-[#CCFF00]/60 text-xs shrink-0">✦ {food._aiTime}</span>
+                            )}
+                          </div>
                           <span className="text-xs text-gray-500">{food.cals} {t('common.kcal', 'kcal')} • P:{food.protein} C:{food.carbs} F:{food.fat}</span>
                         </div>
                         <button
@@ -435,7 +533,7 @@ export default function NutritionDemo() {
                     <div className="flex overflow-x-auto snap-x gap-2 pb-2 scrollbar-none">
                       {inspirations.map((insp, i) => (
                         <div key={i} className="snap-start shrink-0 w-48 bg-[#2A2A2A] rounded-lg p-2 text-xs border border-transparent hover:border-[#00F2FF]/30 transition-all cursor-pointer">
-                          <p className="text-gray-300 font-medium truncate">{t(`nutrition.inspirations.${insp.name}`, insp.name)}</p>
+                          <p className="text-gray-300 font-medium truncate">{String(t(`nutrition.inspirations.${insp.name}`, insp.name))}</p>
                           <p className="text-gray-500 mt-1">{insp.cals} {t('common.kcal', 'kcal')} • {insp.protein}g {t('common.protein', 'Protein')}</p>
                         </div>
                       ))}
@@ -493,26 +591,17 @@ export default function NutritionDemo() {
         coachStyle={coachStyle}
       />
 
-      {/* Food Search Modal / Drawer */}
-      <Dialog.Root open={!!activeSearchPeriod} onOpenChange={(open) => !open && setActiveSearchPeriod(null)}>
-        <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 bg-black/80 z-50 backdrop-blur-sm" />
-          <Dialog.Content className="fixed bottom-0 left-0 right-0 top-16 sm:inset-x-4 sm:top-[10%] sm:bottom-[10%] max-w-2xl mx-auto z-50 focus:outline-none">
-            <motion.div
-              initial={{ y: '100%' }}
-              animate={{ y: 0 }}
-              exit={{ y: '100%' }}
-              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="h-full w-full"
-            >
-              <FoodSearch
-                onAddFood={handleAddFood}
-                onClose={() => setActiveSearchPeriod(null)}
-              />
-            </motion.div>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
+      {/* Manual Food Entry Sheet */}
+      <AnimatePresence>
+        {activeSearchPeriod && (
+          <ManualFoodEntry
+            periodLabel={periods.find(p => p.id === activeSearchPeriod)?.label || ''}
+            onAdd={handleAddFood}
+            onAddMeal={handleAddMeal}
+            onClose={() => setActiveSearchPeriod(null)}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Food Swipe Game Overlay */}
       <AnimatePresence>

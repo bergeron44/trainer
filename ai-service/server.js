@@ -15,6 +15,7 @@ connectDB();
 // Routes
 app.use('/ai/meal', require('./routes/mealRoutes'));
 app.use('/ai/workout', require('./routes/workoutRoutes'));
+app.use('/ai/food', require('./routes/foodRoutes'));
 
 // Health check
 app.get('/', (req, res) => {
@@ -25,6 +26,7 @@ app.get('/', (req, res) => {
         endpoints: [
             'POST /ai/meal/next',
             'POST /ai/workout/daily',
+            'POST /ai/food/lookup',
         ]
     });
 });

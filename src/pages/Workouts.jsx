@@ -6,7 +6,6 @@ import { Calendar, Dumbbell, Check, Clock, ChevronRight, List, CalendarDays, Spa
 import { useTranslation } from 'react-i18next';
 import api from '@/api/axios';
 import aiApi from '@/api/aiAxios';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import TrainingCalendar from '@/components/calendar/TrainingCalendar';
 import WorkoutReelsPreview from '@/components/workouts/WorkoutReelsPreview';
 
@@ -104,35 +103,35 @@ export default function Workouts() {
     <div className="min-h-screen px-4 py-6">
       {/* Header */}
       <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
-        <div className="flex items-center justify-between">
+        {/* Row 1: title + view toggle */}
+        <div className="flex items-center justify-between mb-3">
           <div>
             <h1 className="text-2xl font-bold">{t('workouts.title', 'Workouts')}</h1>
             <p className="text-gray-500 text-sm">{t('workouts.history', 'Your training history & schedule')}</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 bg-[#1A1A1A] rounded-xl p-1 border border-[#2A2A2A]">
             <button
-              onClick={() => { setShowAiWorkout(true); setAiWorkout(null); }}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-[#CCFF00]/20 to-[#00F2FF]/20 border border-[#CCFF00]/30 text-[#CCFF00] text-sm font-medium hover:border-[#CCFF00]/60 transition-colors"
+              onClick={() => setViewMode('list')}
+              className={`p-2 rounded-lg transition-colors ${viewMode === 'list' ? 'bg-[#00F2FF] text-black' : 'text-gray-400 hover:text-white'}`}
             >
-              <Sparkles className="w-4 h-4" />
-              {t('workouts.specialToday', 'Special')}
+              <List className="w-4 h-4" />
             </button>
-            <div className="flex items-center gap-1 bg-[#1A1A1A] rounded-xl p-1 border border-[#2A2A2A]">
-              <button
-                onClick={() => setViewMode('list')}
-                className={`p-2 rounded-lg transition-colors ${viewMode === 'list' ? 'bg-[#00F2FF] text-black' : 'text-gray-400 hover:text-white'}`}
-              >
-                <List className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setViewMode('calendar')}
-                className={`p-2 rounded-lg transition-colors ${viewMode === 'calendar' ? 'bg-[#00F2FF] text-black' : 'text-gray-400 hover:text-white'}`}
-              >
-                <CalendarDays className="w-4 h-4" />
-              </button>
-            </div>
+            <button
+              onClick={() => setViewMode('calendar')}
+              className={`p-2 rounded-lg transition-colors ${viewMode === 'calendar' ? 'bg-[#00F2FF] text-black' : 'text-gray-400 hover:text-white'}`}
+            >
+              <CalendarDays className="w-4 h-4" />
+            </button>
           </div>
         </div>
+        {/* Row 2: Special Workout button — full width on mobile */}
+        <button
+          onClick={() => { setShowAiWorkout(true); setAiWorkout(null); }}
+          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#CCFF00]/10 to-[#00F2FF]/10 border border-[#CCFF00]/30 text-[#CCFF00] text-sm font-medium hover:border-[#CCFF00]/60 hover:from-[#CCFF00]/20 hover:to-[#00F2FF]/20 transition-all"
+        >
+          <Sparkles className="w-4 h-4" />
+          {t('workouts.specialToday', '✦ Special Workout Today — Let AI Build My Session')}
+        </button>
       </motion.div>
 
       {isLoading ? (
@@ -150,16 +149,19 @@ export default function Workouts() {
             <>
               {/* Filter Tabs */}
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="mb-6">
-                <Tabs value={filter} onValueChange={setFilter}>
-                  <TabsList className="bg-[#1A1A1A] border border-[#2A2A2A] w-full">
-                    <TabsTrigger value="upcoming" className="flex-1 data-[state=active]:bg-[#00F2FF] data-[state=active]:text-black">
-                      {t('workouts.upcoming', 'Upcoming')}
-                    </TabsTrigger>
-                    <TabsTrigger value="completed" className="flex-1 data-[state=active]:bg-[#00F2FF] data-[state=active]:text-black">
-                      {t('workouts.completed', 'Completed')}
-                    </TabsTrigger>
-                  </TabsList>
-                </Tabs>
+                <div className="flex bg-[#1A1A1A] border border-[#2A2A2A] rounded-lg p-1 gap-1">
+                  {['upcoming', 'completed'].map(f => (
+                    <button
+                      key={f}
+                      onClick={() => setFilter(f)}
+                      className={`flex-1 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                        filter === f ? 'bg-[#00F2FF] text-black' : 'text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      {f === 'upcoming' ? t('workouts.upcoming', 'Upcoming') : t('workouts.completed', 'Completed')}
+                    </button>
+                  ))}
+                </div>
               </motion.div>
 
               {/* Stats */}
@@ -246,53 +248,46 @@ export default function Workouts() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm"
+            className="fixed inset-0 z-[90] flex items-end justify-center bg-black/60 backdrop-blur-sm pb-20"
             onClick={() => setShowAiWorkout(false)}
           >
             <motion.div
               initial={{ y: '100%' }}
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
-              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              transition={{ type: 'spring', damping: 28, stiffness: 320 }}
               onClick={e => e.stopPropagation()}
-              className="w-full max-w-lg bg-[#111] rounded-t-3xl border border-[#2A2A2A] max-h-[85vh] overflow-y-auto"
+              className="w-full max-w-lg bg-[#111] rounded-t-2xl border-t border-x border-[#2A2A2A] max-h-[65vh] overflow-y-auto"
             >
-              {/* Handle */}
-              <div className="flex justify-center pt-3 pb-1">
-                <div className="w-10 h-1 rounded-full bg-[#333]" />
-              </div>
-
-              <div className="px-5 pb-8 pt-2">
-                {/* Header */}
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="w-5 h-5 text-[#CCFF00]" />
-                    <h2 className="text-lg font-bold text-[#CCFF00]">
-                      {t('workouts.specialWorkoutTitle', 'Special Workout Today')}
-                    </h2>
-                  </div>
-                  <button onClick={() => setShowAiWorkout(false)} className="text-gray-500 hover:text-white transition-colors">
-                    <X className="w-5 h-5" />
-                  </button>
+              {/* Handle + header row */}
+              <div className="flex items-center justify-between px-4 pt-3 pb-2">
+                <div className="flex items-center gap-1.5">
+                  <Sparkles className="w-4 h-4 text-[#CCFF00]" />
+                  <span className="text-sm font-semibold text-[#CCFF00]">
+                    {t('workouts.specialWorkoutTitle', 'Special Workout Today')}
+                  </span>
                 </div>
+                <button onClick={() => setShowAiWorkout(false)} className="text-gray-500 hover:text-white p-1">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="mx-4 h-px bg-[#2A2A2A] mb-3" />
 
-                {/* Step 1 — notes input + generate button */}
+              <div className="px-4 pb-5">
+                {/* Step 1 — notes + generate */}
                 {!isAiLoading && !aiWorkout && (
-                  <div className="space-y-4">
-                    <p className="text-sm text-gray-400">
-                      {t('workouts.aiSubtitle', 'NEXUS will replace today\'s workout with exercises from our database, tailored to you.')}
-                    </p>
+                  <div className="space-y-3">
                     <textarea
                       value={aiNotes}
                       onChange={e => setAiNotes(e.target.value)}
-                      placeholder={t('workouts.aiNotesPlaceholder', 'Optional: any notes for today? (e.g. "skip legs", "prefer machines")')}
-                      className="w-full bg-[#1A1A1A] border border-[#2A2A2A] rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 resize-none focus:outline-none focus:border-[#CCFF00]/40 h-20"
+                      placeholder={t('workouts.aiNotesPlaceholder', 'Notes (optional): skip legs, prefer machines…')}
+                      className="w-full bg-[#1A1A1A] border border-[#2A2A2A] rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 resize-none focus:outline-none focus:border-[#CCFF00]/40 h-14"
                     />
                     <button
                       onClick={() => generateAiWorkout(aiNotes)}
-                      className="w-full py-3 rounded-xl bg-[#CCFF00] text-black font-bold text-sm flex items-center justify-center gap-2 hover:bg-[#CCFF00]/90 transition-colors"
+                      className="w-full py-2.5 rounded-xl bg-[#CCFF00] text-black font-bold text-sm flex items-center justify-center gap-2 hover:bg-[#CCFF00]/90 transition-colors"
                     >
-                      <Sparkles className="w-4 h-4" />
+                      <Sparkles className="w-3.5 h-3.5" />
                       {t('workouts.generateBtn', 'Generate My Workout')}
                     </button>
                   </div>
@@ -300,60 +295,54 @@ export default function Workouts() {
 
                 {/* Step 2 — loading */}
                 {isAiLoading && (
-                  <div className="flex flex-col items-center justify-center py-12 gap-4">
-                    <div className="w-10 h-10 border-2 border-[#CCFF00] border-t-transparent rounded-full animate-spin" />
-                    <p className="text-gray-400 text-sm">{t('workouts.generatingWorkout', 'NEXUS is building your workout...')}</p>
+                  <div className="flex items-center justify-center gap-3 py-8">
+                    <div className="w-5 h-5 border-2 border-[#CCFF00] border-t-transparent rounded-full animate-spin" />
+                    <p className="text-gray-400 text-sm">{t('workouts.generatingWorkout', 'Building your workout…')}</p>
                   </div>
                 )}
 
                 {/* Step 3 — result */}
                 {!isAiLoading && aiWorkout && !aiWorkout.error && (
-                  <div className="space-y-4">
-                    <div className="bg-[#1A1A1A] rounded-xl p-4 border border-[#CCFF00]/20">
-                      <h3 className="font-bold text-xl mb-1">{aiWorkout.title}</h3>
-                      <div className="flex items-center gap-3 text-sm text-gray-400">
-                        <span className="capitalize">{aiWorkout.muscle_group}</span>
-                        {aiWorkout.duration_minutes && <span>· {aiWorkout.duration_minutes} min</span>}
-                        {aiWorkout._provider && <span className="text-[#CCFF00]/50 text-xs ml-auto">via {aiWorkout._provider}</span>}
-                      </div>
+                  <div className="space-y-3">
+                    {/* Title row */}
+                    <div className="flex items-baseline justify-between">
+                      <h3 className="font-bold text-base text-white">{aiWorkout.title}</h3>
+                      <span className="text-xs text-gray-500 shrink-0 ml-2">
+                        {aiWorkout.muscle_group}{aiWorkout.duration_minutes ? ` · ${aiWorkout.duration_minutes}m` : ''}
+                      </span>
                     </div>
 
-                    <div className="space-y-2">
+                    {/* Exercise list — compact rows */}
+                    <div className="divide-y divide-[#1E1E1E]">
                       {aiWorkout.exercises?.map((ex, i) => (
-                        <div key={i} className="bg-[#1A1A1A] rounded-xl p-4 border border-[#2A2A2A] flex items-start gap-3">
-                          <span className="text-[#CCFF00] font-bold text-sm w-5 shrink-0">{i + 1}</span>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-semibold">{ex.name}</p>
-                            <p className="text-sm text-gray-400">{ex.sets} sets × {ex.reps} · {ex.rest_seconds}s rest</p>
-                            {ex.notes && <p className="text-xs text-gray-500 mt-1 italic">{ex.notes}</p>}
-                          </div>
+                        <div key={i} className="flex items-center gap-2 py-2">
+                          <span className="text-[#CCFF00] font-bold text-xs w-4 shrink-0">{i + 1}</span>
+                          <span className="font-medium text-sm flex-1 truncate">{ex.name}</span>
+                          <span className="text-xs text-gray-500 shrink-0">{ex.sets}×{ex.reps}</span>
                         </div>
                       ))}
                     </div>
 
                     {aiWorkout.coach_note && (
-                      <div className="bg-[#CCFF00]/10 border border-[#CCFF00]/20 rounded-xl p-4">
-                        <p className="text-sm text-[#CCFF00]/80 leading-relaxed">{aiWorkout.coach_note}</p>
-                      </div>
+                      <p className="text-xs text-[#CCFF00]/60 italic leading-snug">{aiWorkout.coach_note}</p>
                     )}
 
-                    {/* Regenerate with notes */}
                     <button
-                      onClick={() => { setAiWorkout(null); }}
-                      className="w-full py-2.5 rounded-xl border border-[#2A2A2A] text-gray-400 text-sm hover:border-[#CCFF00]/30 hover:text-[#CCFF00] transition-colors"
+                      onClick={() => setAiWorkout(null)}
+                      className="w-full py-2 rounded-xl border border-[#2A2A2A] text-gray-500 text-xs hover:text-[#CCFF00] hover:border-[#CCFF00]/30 transition-colors"
                     >
-                      {t('workouts.regenerateBtn', 'Regenerate with different notes')}
+                      {t('workouts.regenerateBtn', 'Regenerate')}
                     </button>
                   </div>
                 )}
 
                 {/* Error */}
                 {!isAiLoading && aiWorkout?.error && (
-                  <div className="text-center py-10 space-y-4">
-                    <p className="text-gray-500">{t('workouts.aiError', 'Could not generate workout. Try again later.')}</p>
+                  <div className="text-center py-6 space-y-3">
+                    <p className="text-gray-500 text-sm">{t('workouts.aiError', 'Could not generate workout. Try again.')}</p>
                     <button
                       onClick={() => setAiWorkout(null)}
-                      className="px-6 py-2 rounded-xl border border-[#2A2A2A] text-gray-400 text-sm hover:text-white transition-colors"
+                      className="px-5 py-1.5 rounded-xl border border-[#2A2A2A] text-gray-400 text-xs hover:text-white transition-colors"
                     >
                       {t('common.tryAgain', 'Try Again')}
                     </button>

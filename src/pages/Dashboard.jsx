@@ -7,6 +7,7 @@ import { Play, CheckCircle, Flame, Clock, Layers } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
+import api from '@/api/axios';
 import ExercisePreviewCard from '@/components/dashboard/ExercisePreviewCard';
 import ProgressRing from '@/components/dashboard/ProgressRing';
 import WorkoutPlanTabs from '@/components/dashboard/WorkoutPlanTabs';
@@ -60,12 +61,11 @@ export default function Dashboard() {
         const endOfWeek = new Date(today);
         endOfWeek.setDate(today.getDate() + 7);
 
-        const fetchUrl = `http://localhost:5001/api/workouts?startDate=${today.toISOString()}&endDate=${endOfWeek.toISOString()}`;
-        const workRes = await fetch(fetchUrl, { headers });
+        const workRes = await api.get('/workouts', {
+          params: { startDate: today.toISOString(), endDate: endOfWeek.toISOString() }
+        });
 
-        if (!workRes.ok) throw new Error('Failed to fetch workouts');
-
-        const fetchedWorkouts = await workRes.json();
+        const fetchedWorkouts = workRes.data;
 
         if (Array.isArray(fetchedWorkouts) && fetchedWorkouts.length > 0) {
           const todayStr = format(today, 'yyyy-MM-dd');
