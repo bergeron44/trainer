@@ -1,0 +1,160 @@
+{
+  "plan_id": "onboarding_ai_workout_agent_integration_v1",
+  "status": "in_progress",
+  "date": "2026-03-02",
+  "objective": "When onboarding finishes with AI-plan choice, generate the user's initial workout plan through the agent tool loop (workout tools + user_get_profile for personalization), replacing the current legacy /api/workouts/generate dashboard trigger.",
+  "current_state_findings": [
+    "Onboarding sends profile payload including plan_choice/custom_plan in src/pages/Onboarding.jsx.",
+    "User profile schema currently does not define plan_choice/custom_plan, so these are not reliably persisted in server/models/User.js.",
+    "Workout generation is currently legacy and dashboard-triggered via POST /api/workouts/generate in src/pages/Dashboard.jsx.",
+    "Agent/tool loop exists and is production-wired via ChatBrainService + ToolExecutor.",
+    "Workout tools currently have read/edit/log/swap, but no create tool for initial plan creation."
+  ],
+  "hard_requirements": [
+    "Planner execution must happen server-side only.",
+    "Planner must execute via workout tools (not direct model writes inside planner prompt path).",
+    "Planner may use user_get_profile (read-only) to retrieve user profile details for personalization.",
+    "User scope must remain enforced via tool context userId.",
+    "Mutations must keep idempotency + audit behavior."
+  ],
+  "design_decisions": [
+    "Add a workout creation tool (workouts_create_workout) so onboarding agent can create plan records through the same governed tool pipeline.",
+    "Add planner-specific tool allowlist support so onboarding planner can run workout tools plus user_get_profile.",
+    "Keep user tool access read-only in onboarding planner scope (no user_edit_profile).",
+    "Move trigger from dashboard auto-generation to backend onboarding completion path (register/update profile).",
+    "Keep a controlled fallback path if AI planning fails (status + retry endpoint)."
+  ],
+  "phases": [
+    {
+      "phase": 1,
+      "name": "Profile/Onboarding Contract Fix",
+      "status": "completed",
+      "changes": [
+        "Extend User.profile schema with onboarding planning fields: plan_choice, custom_plan, workout_plan_status, workout_plan_error, workout_plan_generated_at, workout_plan_source.",
+        "Persist plan_choice from onboarding payload so backend can decide AI vs existing plan path."
+      ],
+      "files": [
+        "trainer/server/models/User.js",
+        "trainer/server/controllers/userController.js"
+      ]
+    },
+    {
+      "phase": 2,
+      "name": "Workout Creation Tool",
+      "status": "completed",
+      "changes": [
+        "Implement workouts_create_workout in workouts tool handler with strict zod/json schema.",
+        "Require idempotencyKey for write calls.",
+        "Return sanitized workout object.",
+        "Rely on existing ToolExecutor idempotency + audit pipeline."
+      ],
+      "files": [
+        "trainer/server/ai/tools/handlers/workoutsTools.js",
+        "trainer/server/tests/chatTools.test.js"
+      ]
+    },
+    {
+      "phase": 3,
+      "name": "Planner Tool-Scoping Support",
+      "status": "completed",
+      "changes": [
+        "Add optional tool allowlist to ChatBrainService request input.",
+        "Thread allowlist through ToolExecutor.listToolsForModel and ToolRegistry.listForModel.",
+        "Use this to expose only workout tools + user_get_profile during onboarding planning."
+      ],
+      "files": [
+        "trainer/server/services/chatBrainService.js",
+        "trainer/server/ai/tools/toolExecutor.js",
+        "trainer/server/ai/tools/toolRegistry.js",
+        "trainer/server/ai/core/chatSchemas.js",
+        "trainer/server/tests/chatBrainService.toolLoop.test.js"
+      ]
+    },
+    {
+      "phase": 4,
+      "name": "Onboarding Workout Planner Service",
+      "status": "completed",
+      "changes": [
+        "Create a dedicated service to call ChatBrainService with onboarding context and planner system prompt.",
+        "Planner should fetch user profile via user_get_profile before plan generation when profile context is incomplete.",
+        "Prompt constraints: must create workouts via workouts_create_workout, respect frequency/session_duration/environment/injuries/goal/experience.",
+        "Planner call config: higher tool-call budget than chat default, persistSummary=false."
+      ],
+      "files": [
+        "trainer/server/services/onboardingWorkoutPlannerService.js"
+      ]
+    },
+    {
+      "phase": 5,
+      "name": "Backend Trigger Integration",
+      "status": "completed",
+      "changes": [
+        "In registerUser and updateProfile, when onboarding_completed=true and plan_choice='ai' and no existing plan, invoke onboarding planner service.",
+        "Set profile.workout_plan_status transitions: pending -> generating -> ready/failed.",
+        "Set profile.has_existing_plan=true only after successful tool-created plan.",
+        "Store profile.workout_plan_error on failure for UI retry messaging."
+      ],
+      "files": [
+        "trainer/server/controllers/userController.js"
+      ]
+    },
+    {
+      "phase": 6,
+      "name": "Frontend Flow Switch",
+      "status": "completed",
+      "changes": [
+        "Remove legacy dashboard auto-call to POST /api/workouts/generate.",
+        "Read workout_plan_status from user profile to show generating/failure states.",
+        "Keep dashboard workout fetch behavior unchanged once plan is ready."
+      ],
+      "files": [
+        "trainer/src/pages/Dashboard.jsx",
+        "trainer/src/pages/Onboarding.jsx"
+      ]
+    },
+    {
+      "phase": 7,
+      "name": "Retry and Operations",
+      "status": "completed",
+      "changes": [
+        "Add protected endpoint to retry onboarding plan generation for failed/pending edge cases.",
+        "Use requestId-based idempotency key prefixing in planner tool calls.",
+        "Add logs around planner start/end/failure with requestId/userId/provider."
+      ],
+      "files": [
+        "trainer/server/routes/workoutRoutes.js",
+        "trainer/server/controllers/workoutController.js"
+      ]
+    },
+    {
+      "phase": 8,
+      "name": "Test Coverage",
+      "status": "in_progress",
+      "changes": [
+        "Unit tests: workouts_create_workout validation, auth scoping, idempotency replay.",
+        "Integration tests: onboarding planner tool scope includes user_get_profile and excludes user_edit_profile.",
+        "Integration tests: registration/updateProfile with plan_choice='ai' triggers planner and persists workouts.",
+        "Regression tests: non-AI path and existing-routine path do not trigger planner."
+      ],
+      "files": [
+        "trainer/server/tests/chatTools.test.js",
+        "trainer/server/tests/chatBrainService.toolLoop.test.js",
+        "trainer/server/tests/userController.onboardingPlanner.test.js",
+        "trainer/server/tests/workoutController.test.js"
+      ]
+    }
+  ],
+  "acceptance_criteria": [
+    "New user finishing onboarding with AI option gets workouts created via tool execution (audited), without dashboard /generate call.",
+    "Generated workouts are correctly scoped to that user and visible in dashboard.",
+    "No duplicate plans on retries due to idempotency keys.",
+    "Planner failures are visible in profile status and can be retried.",
+    "Existing chat agent behavior remains unchanged for normal coach chat."
+  ],
+  "env_additions": [
+    "ONBOARDING_AI_PLANNER_ENABLED=true",
+    "ONBOARDING_AI_PLANNER_MAX_TOOL_CALLS=30",
+    "ONBOARDING_AI_PLANNER_MAX_ITERATIONS=8",
+    "ONBOARDING_AI_PLANNER_RETRY_ATTEMPTS=1"
+  ]
+}

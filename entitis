@@ -206,11 +206,12 @@
         "trainer_personality": {
             "type": "string",
             "enum": [
-                "drill_sergeant",
-                "scientist",
+                "drill_sergeant_coach",
+                "scientist_coach",
+                "nutritionist",
                 "zen_coach"
             ],
-            "default": "drill_sergeant",
+            "default": "drill_sergeant_coach",
             "description": "AI trainer personality type"
         },
         "onboarding_completed": {

@@ -16,7 +16,7 @@ import WorkoutReelsPreview from '@/components/workouts/WorkoutReelsPreview';
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { user, isLoadingAuth } = useAuth();
+  const { user, isLoadingAuth, checkUserAuth } = useAuth();
   const { t } = useTranslation();
 
   const [profile, setProfile] = useState(null);
@@ -29,6 +29,9 @@ export default function Dashboard() {
   const [editingWorkout, setEditingWorkout] = useState(null);
   const [showReels, setShowReels] = useState(false);
   const [reelsStartIndex, setReelsStartIndex] = useState(0);
+  const [planStatus, setPlanStatus] = useState('pending');
+  const [planError, setPlanError] = useState('');
+  const [isRetryingPlan, setIsRetryingPlan] = useState(false);
 
   useEffect(() => {
     if (isLoadingAuth) return;
@@ -41,17 +44,16 @@ export default function Dashboard() {
     }
 
     setProfile(profileData);
+    setPlanStatus(profileData.workout_plan_status || 'pending');
+    setPlanError(profileData.workout_plan_error || '');
 
     const initWorkouts = async () => {
       try {
-        let needsPlan = !profileData.has_existing_plan;
-
-        if (needsPlan) {
-          const genRes = await api.post('/workouts/generate');
-          if (genRes.status === 200 || genRes.status === 201) {
-            profileData.has_existing_plan = true;
-          }
-        }
+        const token = localStorage.getItem('token');
+        const headers = {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        };
 
         const today = new Date();
         today.setHours(0, 0, 0, 0);
@@ -92,13 +94,23 @@ export default function Dashboard() {
 
           localStorage.setItem('nexus_live_workouts', JSON.stringify(fetchedWorkouts));
         } else {
+          const isGenerating = ['pending', 'generating'].includes(profileData.workout_plan_status)
+            && profileData.plan_choice !== 'existing';
+          const isFailed = profileData.workout_plan_status === 'failed';
           setTodayWorkout({
-            id: 'error_fallback',
-            muscle_group: t('dashboard.noWorkoutsFound', 'No Workouts Found'),
+            id: isGenerating ? 'plan_generating' : (isFailed ? 'plan_failed' : 'no_workouts'),
+            muscle_group: isGenerating
+              ? t('dashboard.planGenerating', 'AI Plan Is Being Built')
+              : (isFailed ? t('dashboard.planFailed', 'AI Plan Failed') : t('dashboard.noWorkoutsFound', 'No Workouts Found')),
             exercises: [],
-            status: 'planned'
+            status: isGenerating ? 'generating' : 'planned'
           });
-          setWorkoutPlans([{ id: 'fb', name: t('dashboard.noWorkoutsFound', 'No Workouts') }]);
+          setWorkoutPlans([{
+            id: 'fb',
+            name: isGenerating
+              ? t('dashboard.planGenerating', 'AI Plan Is Being Built')
+              : t('dashboard.noWorkoutsFound', 'No Workouts')
+          }]);
         }
       } catch (err) {
         console.error('Failed to initialize workout data:', err);
@@ -183,6 +195,35 @@ export default function Dashboard() {
   const totalSets = todayWorkout?.exercises?.reduce((acc, ex) => acc + ex.sets, 0) || 0;
   const completedSetsTotal = Object.values(completedSets).reduce((acc, n) => acc + n, 0);
   const progress = totalSets > 0 ? Math.round((completedSetsTotal / totalSets) * 100) : 0;
+  const isPlanGenerating = ['pending', 'generating'].includes(planStatus) && profile?.plan_choice !== 'existing';
+  const isPlanFailed = planStatus === 'failed';
+
+  const handleRetryPlan = async () => {
+    if (isRetryingPlan) return;
+    try {
+      setIsRetryingPlan(true);
+      const token = localStorage.getItem('token');
+      const res = await fetch('http://localhost:5001/api/workouts/plan/retry', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      const payload = await res.json();
+      if (!res.ok) {
+        throw new Error(payload?.message || 'Failed to retry AI plan generation');
+      }
+      await checkUserAuth();
+      setPlanStatus(payload?.profile?.workout_plan_status || 'pending');
+      setPlanError(payload?.profile?.workout_plan_error || '');
+    } catch (error) {
+      setPlanStatus('failed');
+      setPlanError(error?.message || 'Failed to retry AI plan generation');
+    } finally {
+      setIsRetryingPlan(false);
+    }
+  };
 
   // Estimated workout duration in minutes
   const estimatedDuration = todayWorkout?.exercises?.length > 0
@@ -308,9 +349,35 @@ export default function Dashboard() {
               </Button>
             )
           ) : (
-            <p className="text-sm text-gray-500 text-center py-2">
-              {t('dashboard.restDay', '🧘 Rest Day — Recover & Recharge')}
-            </p>
+            <div className="text-sm text-center py-2">
+              {isPlanGenerating ? (
+                <p className="text-[#00F2FF]">
+                  {t('dashboard.planGeneratingMsg', 'Your AI workout plan is generating. This may take up to a minute.')}
+                </p>
+              ) : isPlanFailed ? (
+                <div className="space-y-3">
+                  <p className="text-red-400">
+                    {t('dashboard.planFailedMsg', 'AI workout plan generation failed. Please retry.')}
+                  </p>
+                  {planError ? (
+                    <p className="text-xs text-red-300/80">{planError}</p>
+                  ) : null}
+                  <Button
+                    onClick={handleRetryPlan}
+                    disabled={isRetryingPlan}
+                    className="h-11 px-6 bg-red-500/90 hover:bg-red-500 text-white font-semibold rounded-xl"
+                  >
+                    {isRetryingPlan
+                      ? t('dashboard.retrying', 'Retrying...')
+                      : t('dashboard.retryPlan', 'Retry AI Plan')}
+                  </Button>
+                </div>
+              ) : (
+                <p className="text-gray-500">
+                  {t('dashboard.restDay', '🧘 Rest Day — Recover & Recharge')}
+                </p>
+              )}
+            </div>
           )}
         </div>
       </motion.div>

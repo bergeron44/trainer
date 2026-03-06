@@ -2,6 +2,10 @@ const asyncHandler = require('express-async-handler');
 const Workout = require('../models/Workout');
 const WorkoutSession = require('../models/WorkoutSession');
 const Exercise = require('../models/Exercise');
+const User = require('../models/User');
+const OnboardingWorkoutPlannerService = require('../services/onboardingWorkoutPlannerService');
+
+const onboardingWorkoutPlannerService = new OnboardingWorkoutPlannerService();
 
 // @desc    Get workouts
 // @route   GET /api/workouts
@@ -168,7 +172,6 @@ const getWorkout = asyncHandler(async (req, res) => {
 // @route   POST /api/workouts/generate
 // @access  Private
 const generateWorkoutPlan = asyncHandler(async (req, res) => {
-    const User = require('../models/User'); // Import here to avoid circular dep if any
     const user = await User.findById(req.user.id);
 
     if (!user) {
@@ -313,6 +316,57 @@ const generateWorkoutPlan = asyncHandler(async (req, res) => {
     });
 });
 
+// @desc    Retry onboarding AI workout plan generation through agent tools
+// @route   POST /api/workouts/plan/retry
+// @access  Private
+const retryOnboardingWorkoutPlan = asyncHandler(async (req, res) => {
+    const user = await User.findById(req.user.id);
+
+    if (!user) {
+        res.status(404);
+        throw new Error('User not found');
+    }
+
+    if (user.profile?.onboarding_completed !== true) {
+        res.status(400);
+        throw new Error('Onboarding must be completed before retrying AI workout planning.');
+    }
+
+    user.profile = {
+        ...(user.profile || {}),
+        has_existing_plan: false,
+        plan_choice: 'ai',
+        workout_plan_status: 'pending',
+        workout_plan_error: undefined,
+    };
+    await user.save();
+
+    const outcome = await onboardingWorkoutPlannerService.ensurePlanForUser({
+        userId: req.user.id,
+        requestId: req.requestId,
+        trigger: 'manual_retry',
+        force: true,
+    });
+
+    const refreshed = await User.findById(req.user.id);
+    if (outcome.status !== 'ready') {
+        return res.status(502).json({
+            message: 'AI workout plan generation failed.',
+            status: outcome.status,
+            error: outcome.error,
+            profile: refreshed?.profile || user.profile,
+        });
+    }
+
+    res.status(200).json({
+        message: 'AI workout plan generated successfully.',
+        status: outcome.status,
+        createdCount: outcome.createdCount,
+        workoutCount: outcome.workoutCount,
+        profile: refreshed?.profile || user.profile,
+    });
+});
+
 
 
 module.exports = {
@@ -323,5 +377,6 @@ module.exports = {
     deleteWorkout,
     startSession,
     getActiveSession,
-    generateWorkoutPlan
+    generateWorkoutPlan,
+    retryOnboardingWorkoutPlan,
 };
