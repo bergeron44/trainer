@@ -2,7 +2,6 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const connectDB = require('./config/db');
-const { requestContext } = require('./middleware/requestContextMiddleware');
 
 dotenv.config();
 
@@ -11,7 +10,6 @@ const app = express();
 // Middleware
 app.use(cors());
 app.use(express.json());
-app.use(requestContext);
 
 // Connect to Database
 connectDB();
@@ -20,8 +18,8 @@ connectDB();
 app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/workouts', require('./routes/workoutRoutes'));
 app.use('/api/nutrition', require('./routes/nutritionRoutes'));
-app.use('/api/chat', require('./routes/chatRoutes'));
 app.use('/api/exercises', require('./routes/exerciseRoutes'));
+app.use('/api/progress', require('./routes/progressRoutes'));
 
 // Health Check
 app.get('/', (req, res) => {

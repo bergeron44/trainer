@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   User, Scale, Ruler, Target, Calendar, Clock,
   Dumbbell, Utensils, Moon, LogOut, KeyRound,
@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/lib/AuthContext';
+import ProgressView from '@/components/profile/ProgressView';
 
 /** @type {any} */
 const DialogContentAny = DialogContent;
@@ -39,6 +40,7 @@ export default function Profile() {
   const { t } = useTranslation();
   const [editField, setEditField] = useState(null);
   const [editValue, setEditValue] = useState(/** @type {string | number} */(''));
+  const [activeTab, setActiveTab] = useState('personal');
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -248,116 +250,158 @@ export default function Profile() {
         <p className="text-gray-500 text-sm">{t('profile.manageSettings', 'Manage your settings')}</p>
       </motion.div>
 
-      {/* User Card */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
-        className="bg-gradient-to-br from-[#1A1A1A] to-[#0A0A0A] rounded-2xl p-6 border border-[#2A2A2A] mb-6"
-      >
-        <div className="flex items-center gap-4">
-          <div className="w-16 h-16 rounded-full gradient-cyan flex items-center justify-center">
-            <User className="w-8 h-8 text-black" />
-          </div>
-          <div>
-            <h2 className="text-xl font-bold">{profile?.name || t('profile.athlete', 'Fitness Athlete')}</h2>
-            <p className="text-gray-500 text-sm">{user?.email || t('profile.demoUser', 'Demo User')}</p>
-            <div className="flex items-center gap-2 mt-1">
-              <span className="text-xs px-2 py-0.5 rounded-full bg-[#CCFF00]/20 text-[#CCFF00]">
-                {experienceLabels[profile?.experience_level] || t('onboarding.options.beginner', 'Beginner')}
-              </span>
-              <span className="text-xs px-2 py-0.5 rounded-full bg-[#00F2FF]/20 text-[#00F2FF]">
-                {goalLabels[profile?.goal] || t('profile.fitness', 'Fitness')}
-              </span>
-            </div>
-          </div>
-        </div>
+      {/* ═══ Tab Bar ═══ */}
+      <div className="flex items-center gap-2 mb-6 bg-[#111] rounded-2xl p-1 border border-white/5">
+        {[
+          { id: 'personal', emoji: '👤', label: t('profile.personalTab', 'Personal') },
+          { id: 'progress', emoji: '📊', label: t('profile.progressTab', 'Progress') },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setActiveTab(tab.id)}
+            className={`relative flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-sm font-medium transition-colors ${activeTab === tab.id ? 'text-white' : 'text-white/40 hover:text-white/60'
+              }`}
+          >
+            <div
+              className={`absolute inset-0 rounded-xl border transition-all duration-300 ${activeTab === tab.id
+                ? 'bg-gradient-to-r from-[#1A1A1A] to-[#222] border-white/10 opacity-100'
+                : 'border-transparent opacity-0'
+                }`}
+              style={{ boxShadow: activeTab === tab.id ? '0 0 20px rgba(0,242,255,0.08)' : 'none' }}
+            />
+            <span className="relative z-10 text-lg">{tab.emoji}</span>
+            <span className="relative z-10">{tab.label}</span>
+          </button>
+        ))}
+      </div>
 
-        {profile?.tdee && (
-          <div className="mt-4 pt-4 border-t border-[#2A2A2A]">
-            <p className="text-sm text-gray-500">{t('profile.yourTdee', 'Your TDEE (maintenance calories)')}</p>
-            <p className="text-2xl font-bold text-[#00F2FF]">{profile.tdee} {t('common.kcal', 'kcal')}</p>
-          </div>
-        )}
-      </motion.div>
-
-      {/* Profile Sections */}
-      {profileSections.map((section, sectionIndex) => (
+      {/* ═══ Tab Content ═══ */}
+      <AnimatePresence mode="wait" initial={false}>
+      {activeTab === 'progress' ? (
         <motion.div
-          key={section.title}
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15 + sectionIndex * 0.05 }}
-          className="mb-6"
+          key="progress"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.15 }}
         >
-          <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">
-            {section.title}
-          </h3>
-          <div className="bg-[#1A1A1A] rounded-xl border border-[#2A2A2A] divide-y divide-[#2A2A2A]">
-            {section.items.map((item) => {
-              const Icon = item.icon;
-              return (
-                <button
-                  key={item.key}
-                  onClick={() => {
-                    setEditField(item.key);
-                    setEditValue(profile?.[item.key] || '');
-                  }}
-                  className="w-full flex items-center justify-between p-4 hover:bg-[#2A2A2A]/50 transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <Icon className="w-5 h-5 text-gray-500" />
-                    <span className="text-gray-400">{item.label}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">
-                      {item.value}{item.unit ? ` ${item.unit}` : ''}
-                    </span>
-                    <Edit2 className="w-4 h-4 text-gray-600" />
-                  </div>
-                </button>
-              );
-            })}
-          </div>
+          <ProgressView />
         </motion.div>
-      ))}
-
-      {/* Actions */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.4 }}
-        className="space-y-3"
-      >
-        <Button
-          onClick={handleRestartOnboarding}
-          variant="outline"
-          className="w-full h-12 bg-transparent border-[#2A2A2A] text-white hover:bg-[#1A1A1A] hover:text-white"
+      ) : (
+        <motion.div
+          key="personal"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.15 }}
         >
-          <RefreshCw className="w-4 h-4 mr-2" />
-          {t('profile.restartOnboarding', 'Restart Onboarding')}
-        </Button>
 
-        <Button
-          onClick={() => handlePasswordDialogOpenChange(true)}
-          variant="outline"
-          className="w-full h-12 bg-transparent border-[#2A2A2A] text-white hover:bg-[#1A1A1A] hover:text-white"
-        >
-          <KeyRound className="w-4 h-4 mr-2" />
-          {t('profile.changePassword', 'Change Password')}
-        </Button>
+          {/* User Card */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="bg-gradient-to-br from-[#1A1A1A] to-[#0A0A0A] rounded-2xl p-6 border border-[#2A2A2A] mb-6"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-16 h-16 rounded-full gradient-cyan flex items-center justify-center">
+                <User className="w-8 h-8 text-black" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold">{profile?.name || t('profile.athlete', 'Fitness Athlete')}</h2>
+                <p className="text-gray-500 text-sm">{user?.email || t('profile.demoUser', 'Demo User')}</p>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-[#CCFF00]/20 text-[#CCFF00]">
+                    {experienceLabels[profile?.experience_level] || t('onboarding.options.beginner', 'Beginner')}
+                  </span>
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-[#00F2FF]/20 text-[#00F2FF]">
+                    {goalLabels[profile?.goal] || t('profile.fitness', 'Fitness')}
+                  </span>
+                </div>
+              </div>
+            </div>
 
-        <Button
-          onClick={handleLogout}
-          variant="outline"
-          className="w-full h-12 bg-transparent border-red-500/30 text-red-500 hover:bg-red-500/10 hover:text-red-400"
-        >
-          <LogOut className="w-4 h-4 mr-2" />
-          {t('profile.clearDataAndRestart', 'Clear Data & Restart')}
-        </Button>
-      </motion.div>
+            {profile?.tdee && (
+              <div className="mt-4 pt-4 border-t border-[#2A2A2A]">
+                <p className="text-sm text-gray-500">{t('profile.yourTdee', 'Your TDEE (maintenance calories)')}</p>
+                <p className="text-2xl font-bold text-[#00F2FF]">{profile.tdee} {t('common.kcal', 'kcal')}</p>
+              </div>
+            )}
+          </motion.div>
 
+          {/* Profile Sections */}
+          {profileSections.map((section, sectionIndex) => (
+            <motion.div
+              key={section.title}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.15 + sectionIndex * 0.05 }}
+              className="mb-6"
+            >
+              <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">
+                {section.title}
+              </h3>
+              <div className="bg-[#1A1A1A] rounded-xl border border-[#2A2A2A] divide-y divide-[#2A2A2A]">
+                {section.items.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <button
+                      key={item.key}
+                      onClick={() => {
+                        setEditField(item.key);
+                        setEditValue(profile?.[item.key] || '');
+                      }}
+                      className="w-full flex items-center justify-between p-4 hover:bg-[#2A2A2A]/50 transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <Icon className="w-5 h-5 text-gray-500" />
+                        <span className="text-gray-400">{item.label}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">
+                          {item.value}{item.unit ? ` ${item.unit}` : ''}
+                        </span>
+                        <Edit2 className="w-4 h-4 text-gray-600" />
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </motion.div>
+          ))}
 
+          {/* Actions */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
+            className="space-y-3"
+          >
+            <Button
+              onClick={() => handlePasswordDialogOpenChange(true)}
+              variant="outline"
+              className="w-full h-12 bg-transparent border-[#2A2A2A] text-white hover:bg-[#1A1A1A] hover:text-white"
+            >
+              <KeyRound className="w-4 h-4 mr-2" />
+              {t('profile.changePassword', 'Change Password')}
+            </Button>
+
+            <Button
+              onClick={handleLogout}
+              variant="outline"
+              className="w-full h-12 bg-transparent border-red-500/30 text-red-500 hover:bg-red-500/10 hover:text-red-400"
+            >
+              <LogOut className="w-4 h-4 mr-2" />
+              {t('profile.clearDataAndRestart', 'Clear Data & Restart')}
+            </Button>
+          </motion.div>
+
+        </motion.div>
+      )}
+      </AnimatePresence>
+
+      {/* Password Dialog */}
       <Dialog open={isPasswordDialogOpen} onOpenChange={handlePasswordDialogOpenChange}>
         <DialogContentAny className="bg-[#0A0A0A] border border-[#2A2A2A] text-white">
           <DialogHeaderAny>
@@ -418,8 +462,6 @@ export default function Profile() {
           </div>
         </DialogContentAny>
       </Dialog>
-
-
 
       {/* Edit Dialog */}
       <Dialog open={!!editField} onOpenChange={() => setEditField(null)}>
