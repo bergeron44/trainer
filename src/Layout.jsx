@@ -14,11 +14,22 @@ export default function Layout({ children, currentPageName }) {
   const [mounted, setMounted] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [coachStyle, setCoachStyle] = useState('motivational');
+  const [chatPrefill, setChatPrefill] = useState('');
 
   useEffect(() => {
     setMounted(true);
     const savedCoach = localStorage.getItem('nexus_coach_style');
     if (savedCoach) setCoachStyle(savedCoach);
+  }, []);
+
+  useEffect(() => {
+    const handleOpenChat = (e) => {
+      const prefill = e.detail?.prefill || '';
+      setChatPrefill(prefill);
+      setChatOpen(true);
+    };
+    window.addEventListener('nexus:open-coach-chat', handleOpenChat);
+    return () => window.removeEventListener('nexus:open-coach-chat', handleOpenChat);
   }, []);
 
   const navItems = [
@@ -101,13 +112,13 @@ export default function Layout({ children, currentPageName }) {
         }
       `}</style>
 
-      <AnimatePresence mode="wait">
+      <AnimatePresence mode="sync" initial={false}>
         <motion.main
           key={currentPageName}
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -10 }}
-          transition={{ duration: 0.3 }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.15 }}
           className={`max-w-4xl mx-auto ${hideNav ? '' : 'pb-24'}`}
         >
           {children}
@@ -128,9 +139,11 @@ export default function Layout({ children, currentPageName }) {
       {/* Global Coach Chat */}
       <GlobalCoachChat
         isOpen={chatOpen}
-        onClose={() => setChatOpen(false)}
+        onClose={() => { setChatOpen(false); setChatPrefill(''); }}
         context={getContext()}
         coachStyle={coachStyle}
+        prefill={chatPrefill}
+        onPrefillConsumed={() => setChatPrefill('')}
       />
 
       {!hideNav && (
