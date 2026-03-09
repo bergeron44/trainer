@@ -350,10 +350,15 @@ const retryOnboardingWorkoutPlan = asyncHandler(async (req, res) => {
 
     const refreshed = await User.findById(req.user.id);
     if (outcome.status !== 'ready') {
-        return res.status(502).json({
-            message: 'AI workout plan generation failed.',
+        const statusCode = outcome.status === 'pending' ? 202 : 502;
+        return res.status(statusCode).json({
+            message: outcome.status === 'pending'
+                ? 'AI workout plan generation is still in progress.'
+                : 'AI workout plan generation failed.',
             status: outcome.status,
             error: outcome.error,
+            retryable: Boolean(outcome.retryable),
+            retryScheduled: Boolean(outcome.retryScheduled),
             profile: refreshed?.profile || user.profile,
         });
     }

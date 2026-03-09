@@ -77,6 +77,108 @@ const logSessionInputSchema = z.object({
     idempotencyKey: z.string().min(1).max(128),
 }).strict();
 
+function normalizeCreateWorkoutExercise(rawExercise = {}) {
+    if (!rawExercise || typeof rawExercise !== 'object') {
+        return rawExercise;
+    }
+
+    const exercise = { ...rawExercise };
+    if (!exercise.name && typeof exercise.exercise_name === 'string') {
+        exercise.name = exercise.exercise_name;
+    }
+    if (exercise.rest_seconds === undefined && exercise.restSeconds !== undefined) {
+        exercise.rest_seconds = exercise.restSeconds;
+    }
+
+    delete exercise.exercise_name;
+    delete exercise.restSeconds;
+
+    if (exercise.reps !== undefined && typeof exercise.reps !== 'string') {
+        exercise.reps = String(exercise.reps);
+    }
+    if (exercise.sets !== undefined) {
+        const sets = Number(exercise.sets);
+        exercise.sets = Number.isFinite(sets) ? sets : exercise.sets;
+    }
+    if (exercise.weight !== undefined) {
+        const weight = Number(exercise.weight);
+        exercise.weight = Number.isFinite(weight) ? weight : exercise.weight;
+    }
+    if (exercise.rest_seconds !== undefined) {
+        const rest = Number(exercise.rest_seconds);
+        exercise.rest_seconds = Number.isFinite(rest) ? rest : exercise.rest_seconds;
+    }
+
+    return exercise;
+}
+
+function normalizeCreateWorkoutArgs(rawArgs = {}) {
+    if (!rawArgs || typeof rawArgs !== 'object') {
+        return rawArgs;
+    }
+
+    const args = { ...rawArgs };
+    if (!args.idempotencyKey && typeof args.idempotency_key === 'string') {
+        args.idempotencyKey = args.idempotency_key;
+    }
+    if (!args.muscle_group && typeof args.muscleGroup === 'string') {
+        args.muscle_group = args.muscleGroup;
+    }
+    if (args.duration_minutes === undefined && args.durationMinutes !== undefined) {
+        args.duration_minutes = args.durationMinutes;
+    }
+    if (args.total_volume === undefined && args.totalVolume !== undefined) {
+        args.total_volume = args.totalVolume;
+    }
+
+    delete args.idempotency_key;
+    delete args.muscleGroup;
+    delete args.durationMinutes;
+    delete args.totalVolume;
+
+    if (typeof args.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(args.date.trim())) {
+        args.date = `${args.date.trim()}T00:00:00.000Z`;
+    } else if (args.date instanceof Date) {
+        args.date = args.date.toISOString();
+    } else if (typeof args.date === 'number' && Number.isFinite(args.date)) {
+        args.date = new Date(args.date).toISOString();
+    }
+
+    if (Array.isArray(args.exercises)) {
+        args.exercises = args.exercises.map(normalizeCreateWorkoutExercise);
+    }
+
+    if (args.status !== undefined) {
+        args.status = String(args.status).trim().toLowerCase();
+    }
+
+    if (args.duration_minutes !== undefined) {
+        const duration = Number(args.duration_minutes);
+        args.duration_minutes = Number.isFinite(duration) ? duration : args.duration_minutes;
+    }
+    if (args.total_volume !== undefined) {
+        const volume = Number(args.total_volume);
+        args.total_volume = Number.isFinite(volume) ? volume : args.total_volume;
+    }
+
+    return args;
+}
+
+const createWorkoutInputNormalizedSchema = z.preprocess(
+    normalizeCreateWorkoutArgs,
+    z.object({
+        date: z.string().min(1),
+        muscle_group: z.string().min(1).max(120),
+        exercises: z.array(exerciseSchema).min(1).max(60),
+        status: z.enum(['planned', 'in_progress', 'completed']).optional(),
+        duration_minutes: z.number().int().nonnegative().max(1200).optional(),
+        total_volume: z.number().nonnegative().max(1_000_000).optional(),
+        notes: z.string().max(2000).optional(),
+        archived: z.boolean().optional(),
+        idempotencyKey: z.string().min(1).max(128),
+    }).strict()
+);
+
 const swapExerciseInputSchema = z.object({
     workoutId: z.string().min(1),
     exerciseName: z.string().min(1).optional(),
@@ -445,7 +547,7 @@ function createWorkoutTools({ models = {} } = {}) {
             readWriteMode: 'write',
             idempotent: true,
             timeoutMs: 7000,
-            inputSchema: createWorkoutInputSchema,
+            inputSchema: createWorkoutInputNormalizedSchema,
             jsonSchema: {
                 type: 'object',
                 additionalProperties: false,

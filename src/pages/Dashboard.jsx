@@ -131,6 +131,21 @@ export default function Dashboard() {
     if (saved) setCompletedSets(JSON.parse(saved));
   }, [user, isLoadingAuth, navigate]);
 
+  useEffect(() => {
+    const shouldPollForPlan = !isLoadingAuth
+      && user?.profile
+      && ['pending', 'generating'].includes(user.profile.workout_plan_status)
+      && user.profile.plan_choice !== 'existing';
+
+    if (!shouldPollForPlan) return undefined;
+
+    const intervalId = window.setInterval(() => {
+      checkUserAuth();
+    }, 15000);
+
+    return () => window.clearInterval(intervalId);
+  }, [user, isLoadingAuth, checkUserAuth]);
+
   const handleStartWorkout = () => {
     if (todayWorkout?.exercises?.length > 0) {
       setWorkoutStarted(true);
@@ -197,29 +212,26 @@ export default function Dashboard() {
   const progress = totalSets > 0 ? Math.round((completedSetsTotal / totalSets) * 100) : 0;
   const isPlanGenerating = ['pending', 'generating'].includes(planStatus) && profile?.plan_choice !== 'existing';
   const isPlanFailed = planStatus === 'failed';
+  const canManualRetryPendingPlan = isPlanGenerating && Boolean(planError);
 
   const handleRetryPlan = async () => {
     if (isRetryingPlan) return;
     try {
       setIsRetryingPlan(true);
-      const token = localStorage.getItem('token');
-      const res = await fetch('http://localhost:5001/api/workouts/plan/retry', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      const payload = await res.json();
-      if (!res.ok) {
-        throw new Error(payload?.message || 'Failed to retry AI plan generation');
-      }
+      const { data: payload } = await api.post('/workouts/plan/retry');
       await checkUserAuth();
       setPlanStatus(payload?.profile?.workout_plan_status || 'pending');
       setPlanError(payload?.profile?.workout_plan_error || '');
     } catch (error) {
-      setPlanStatus('failed');
-      setPlanError(error?.message || 'Failed to retry AI plan generation');
+      const payload = error?.response?.data;
+      setPlanStatus(payload?.profile?.workout_plan_status || payload?.status || 'failed');
+      setPlanError(
+        payload?.profile?.workout_plan_error
+        || payload?.error
+        || payload?.message
+        || error?.message
+        || 'Failed to retry AI plan generation'
+      );
     } finally {
       setIsRetryingPlan(false);
     }
@@ -351,9 +363,25 @@ export default function Dashboard() {
           ) : (
             <div className="text-sm text-center py-2">
               {isPlanGenerating ? (
-                <p className="text-[#00F2FF]">
-                  {t('dashboard.planGeneratingMsg', 'Your AI workout plan is generating. This may take up to a minute.')}
-                </p>
+                <div className="space-y-3">
+                  <p className="text-[#00F2FF]">
+                    {t('dashboard.planGeneratingMsg', 'Your AI workout plan is generating. This may take up to a minute.')}
+                  </p>
+                  {planError ? (
+                    <p className="text-xs text-[#00F2FF]/80">{planError}</p>
+                  ) : null}
+                  {canManualRetryPendingPlan ? (
+                    <Button
+                      onClick={handleRetryPlan}
+                      disabled={isRetryingPlan}
+                      className="h-11 px-6 bg-[#00F2FF]/90 hover:bg-[#00F2FF] text-black font-semibold rounded-xl"
+                    >
+                      {isRetryingPlan
+                        ? t('dashboard.retrying', 'Retrying...')
+                        : t('dashboard.retryPlan', 'Retry AI Plan')}
+                    </Button>
+                  ) : null}
+                </div>
               ) : isPlanFailed ? (
                 <div className="space-y-3">
                   <p className="text-red-400">

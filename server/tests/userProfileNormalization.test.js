@@ -43,3 +43,19 @@ test('normalizeIncomingProfile keeps legacy payloads without nutrition choice un
     assert.equal(Object.hasOwn(normalized, 'nutrition_plan_status'), false);
     assert.equal(Object.hasOwn(normalized, 'nutrition_plan_source'), false);
 });
+
+test('normalizeIncomingProfile maps legacy trainer_personality to canonical enum', () => {
+    const normalized = normalizeIncomingProfile({
+        trainer_personality: 'drill_sergeant',
+    });
+
+    assert.equal(normalized.trainer_personality, 'drill_sergeant_coach');
+});
+
+test('normalizeIncomingProfile defaults unknown trainer_personality to drill_sergeant_coach', () => {
+    const normalized = normalizeIncomingProfile({
+        trainer_personality: 'unknown_mode',
+    });
+
+    assert.equal(normalized.trainer_personality, 'drill_sergeant_coach');
+});

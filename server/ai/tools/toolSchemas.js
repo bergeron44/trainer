@@ -44,9 +44,15 @@ function normalizeToolError(error) {
     }
 
     if (error?.name === 'ZodError') {
+        const firstIssue = Array.isArray(error.issues) && error.issues.length > 0
+            ? error.issues[0]
+            : null;
+        const issuePath = Array.isArray(firstIssue?.path) ? firstIssue.path.join('.') : '';
+        const issueMessage = typeof firstIssue?.message === 'string' ? firstIssue.message : '';
+        const message = [issuePath, issueMessage].filter(Boolean).join(': ');
         return {
             code: 'TOOL_VALIDATION_ERROR',
-            message: 'Invalid tool arguments.',
+            message: message ? `Invalid tool arguments. ${message}` : 'Invalid tool arguments.',
             details: error.issues || [],
             status: 400,
         };

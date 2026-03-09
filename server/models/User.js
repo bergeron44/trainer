@@ -1,6 +1,32 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
+const TRAINER_PERSONALITY_VALUES = [
+    'drill_sergeant_coach',
+    'scientist_coach',
+    'nutritionist',
+    'zen_coach',
+];
+
+const TRAINER_PERSONALITY_ALIASES = {
+    drill_sergeant: 'drill_sergeant_coach',
+    scientist: 'scientist_coach',
+    nutritionist: 'nutritionist',
+    zen: 'zen_coach',
+    zen_coach: 'zen_coach',
+    drill_sergeant_coach: 'drill_sergeant_coach',
+    scientist_coach: 'scientist_coach',
+};
+
+function normalizeTrainerPersonality(value) {
+    if (value === undefined || value === null || value === '') return undefined;
+    const normalized = String(value).trim().toLowerCase();
+    const mapped = TRAINER_PERSONALITY_ALIASES[normalized];
+    if (mapped) return mapped;
+    if (TRAINER_PERSONALITY_VALUES.includes(normalized)) return normalized;
+    return 'drill_sergeant_coach';
+}
+
 const userSchema = mongoose.Schema({
     name: { type: String, required: true },
     email: { type: String, required: true, unique: true },
@@ -67,7 +93,8 @@ const userSchema = mongoose.Schema({
         onboarding_date: Date,
         trainer_personality: {
             type: String,
-            enum: ['drill_sergeant_coach', 'scientist_coach', 'nutritionist', 'zen_coach'],
+            enum: TRAINER_PERSONALITY_VALUES,
+            set: normalizeTrainerPersonality,
             default: 'drill_sergeant_coach'
         },
         onboarding_completed: { type: Boolean, default: false },
@@ -115,6 +142,16 @@ const userSchema = mongoose.Schema({
 userSchema.methods.matchPassword = async function (enteredPassword) {
     return await bcrypt.compare(enteredPassword, this.password);
 };
+
+userSchema.pre('validate', function (next) {
+    if (this.profile) {
+        const normalized = normalizeTrainerPersonality(this.profile.trainer_personality);
+        if (normalized) {
+            this.profile.trainer_personality = normalized;
+        }
+    }
+    next();
+});
 
 userSchema.pre('save', async function (next) {
     if (!this.isModified('password')) {

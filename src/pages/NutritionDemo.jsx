@@ -41,28 +41,6 @@ const generateCoachPeriods = (goal, dietType, t = null) => {
   return periods;
 };
 
-// --- Static Inspirations ---
-const getInspirationsForPeriod = (dietType) => {
-  const db = {
-    vegan: [
-      { name: 'Tofu Scramble Bowl', cals: 415, protein: 25, carbs: 45, fat: 15 },
-      { name: 'Oatmeal & Protein Shake', cals: 350, protein: 20, carbs: 50, fat: 8 },
-      { name: 'Avocado Toast', cals: 300, protein: 10, carbs: 30, fat: 18 }
-    ],
-    keto: [
-      { name: 'Eggs & Bacon', cals: 450, protein: 25, carbs: 2, fat: 38 },
-      { name: 'Avocado & Salmon', cals: 400, protein: 28, carbs: 5, fat: 30 },
-      { name: 'Cheese Omelette', cals: 350, protein: 20, carbs: 3, fat: 28 }
-    ],
-    everything: [
-      { name: 'Greek Yogurt & Berries', cals: 250, protein: 20, carbs: 30, fat: 5 },
-      { name: 'Turkey Wrap', cals: 400, protein: 35, carbs: 40, fat: 12 },
-      { name: 'Steak & Sweet Potato', cals: 550, protein: 45, carbs: 45, fat: 20 }
-    ]
-  };
-  return db[dietType] || db['everything'];
-};
-
 const DIET_TIPS = {
   vegan: "Plant-based proteins like lentils, tofu, and quinoa are essential for muscle repair.",
   vegetarian: "Incorporate eggs and dairy for complete amino acid profiles.",
@@ -77,7 +55,7 @@ const GOAL_LABELS = {
   athletic_performance: 'Athletic Performance'
 };
 
-// Map hour → period ID (matches 5-meal layout: m1-m5)
+// Map hour → period ID
 const getPeriodId = (hour) => {
   if (hour < 10) return 'm1';
   if (hour < 13) return 'm2';
@@ -85,6 +63,8 @@ const getPeriodId = (hour) => {
   if (hour < 19) return 'm4';
   return 'm5';
 };
+
+const normalizePeriodValue = (value) => String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
 
 export default function NutritionDemo() {
   const { user } = useAuth();
@@ -108,39 +88,115 @@ export default function NutritionDemo() {
 
   const [activeSearchPeriod, setActiveSearchPeriod] = useState(null);
   const [loggedFoods, setLoggedFoods] = useState({});
+  const [savedMenuEntries, setSavedMenuEntries] = useState([]);
   const [periods, setPeriods] = useState([]);
 
   useEffect(() => {
     setPeriods(generateCoachPeriods(goal, dietType, t));
   }, [goal, dietType, t]);
 
-  // Load food preferences and today's saved meals on mount
+  const resolvePeriodForLog = (log) => {
+    const periodValue = String(log?.meal_period || '').trim();
+    if (periodValue) {
+      const byId = periods.find((p) => p.id === periodValue);
+      if (byId) return byId.id;
+      const byLabel = periods.find((p) => p.label === periodValue);
+      if (byLabel) return byLabel.id;
+    }
+
+    const fallbackByHour = getPeriodId(new Date(log?.date || log?.createdAt || Date.now()).getHours());
+    if (periods.some((p) => p.id === fallbackByHour)) return fallbackByHour;
+    return periods[0]?.id || 'm1';
+  };
+
+  const resolvePeriodForMenuEntry = (entry) => {
+    const periodValue = normalizePeriodValue(entry?.meal_period);
+    if (!periodValue) return null;
+
+    const byId = periods.find((period) => normalizePeriodValue(period.id) === periodValue);
+    if (byId) return byId.id;
+
+    const byLabel = periods.find((period) => normalizePeriodValue(period.label) === periodValue);
+    if (byLabel) return byLabel.id;
+
+    return null;
+  };
+
+  const loadTodaysLogs = async () => {
+    const todayStr = format(new Date(), 'yyyy-MM-dd');
+    try {
+      const res = await api.get(`/nutrition/date/${todayStr}`);
+      const logs = Array.isArray(res.data) ? res.data : [];
+      const mapped = {};
+
+      logs.forEach((log) => {
+        const periodId = resolvePeriodForLog(log);
+        if (!mapped[periodId]) mapped[periodId] = [];
+        mapped[periodId].push({
+          _logId: log._id,
+          source: log.source || 'manual',
+          name: log.meal_name,
+          cals: log.calories || 0,
+          protein: log.protein || 0,
+          carbs: log.carbs || 0,
+          fat: log.fat || 0,
+          _aiTime: (log.source === 'ai')
+            ? format(new Date(log.createdAt || log.date), 'HH:mm')
+            : undefined,
+        });
+      });
+
+      setLoggedFoods(mapped);
+    } catch (error) {
+      console.error('Failed to load nutrition logs:', error);
+    }
+  };
+
+  const loadSavedMenu = async () => {
+    try {
+      const res = await api.get('/nutrition/menu');
+      const entries = Array.isArray(res.data) ? res.data : [];
+      setSavedMenuEntries(entries);
+    } catch (error) {
+      console.error('Failed to load saved menu:', error);
+    }
+  };
+
+  const saveTrackingEntry = async ({
+    mealName,
+    mealPeriod,
+    source = 'manual',
+    calories,
+    protein = 0,
+    carbs = 0,
+    fat = 0,
+    foods = [],
+  }) => {
+    const payload = {
+      meal_name: mealName,
+      meal_period: mealPeriod,
+      source,
+      calories,
+      protein,
+      carbs,
+      fat,
+      date: new Date().toISOString(),
+      foods,
+    };
+    const { data } = await api.post('/nutrition', payload);
+    return data;
+  };
+
+  // Load food preferences and today's saved meals on mount/periods update
   useEffect(() => {
     loadFoodPreferences();
-    const todayStr = format(new Date(), 'yyyy-MM-dd');
-    api.get(`/nutrition/date/${todayStr}`)
-      .then(res => {
-        const logs = res.data || [];
-        if (logs.length === 0) return;
-        // Map each saved log into the correct period slot by its save time
-        setLoggedFoods(prev => {
-          const updated = { ...prev };
-          logs.forEach(log => {
-            const hour = new Date(log.createdAt || log.date).getHours();
-            const pid = getPeriodId(hour);
-            updated[pid] = [...(updated[pid] || []), {
-              name: log.meal_name,
-              cals: log.calories,
-              protein: log.protein || 0,
-              carbs: log.carbs || 0,
-              fat: log.fat || 0,
-            }];
-          });
-          return updated;
-        });
-      })
-      .catch(() => { });
+    loadSavedMenu();
   }, []);
+
+  useEffect(() => {
+    if (!periods.length) return;
+    loadTodaysLogs();
+  }, [periods]);
 
   const loadFoodPreferences = async () => {
     try {
@@ -168,7 +224,7 @@ export default function NutritionDemo() {
 
   // Block AI meal generation if current period already has an AI meal
   const currentPeriodId = getPeriodId(new Date().getHours());
-  const currentPeriodHasAIMeal = (loggedFoods[currentPeriodId] || []).some(f => f._aiTime);
+  const currentPeriodHasAIMeal = (loggedFoods[currentPeriodId] || []).some((f) => f.source === 'ai');
 
   const macroCards = [
     { key: 'calories', label: t('common.calories', 'Calories'), icon: Flame, value: currentMacros.cals, target: tdee, color: '#00F2FF', unit: '' },
@@ -179,48 +235,71 @@ export default function NutritionDemo() {
 
   const handleAddFood = async (food) => {
     if (!activeSearchPeriod) return;
-    // Save to DB as a single-food log entry
+    let createdLog = null;
     try {
-      const now = new Date();
-      await api.post('/nutrition', {
-        meal_name: food.name,
+      createdLog = await saveTrackingEntry({
+        mealName: food.name,
+        mealPeriod: activeSearchPeriod,
+        source: 'manual',
         calories: food.cals,
         protein: food.protein || 0,
         carbs: food.carbs || 0,
         fat: food.fat || 0,
-        date: now,
-        foods: [{ name: food.name, portion: food.portion || '', calories: food.cals }],
+        foods: [{
+          name: food.name,
+          portion: food.portion || '',
+          calories: food.cals,
+          protein: food.protein || 0,
+          carbs: food.carbs || 0,
+          fat: food.fat || 0,
+        }],
       });
     } catch (err) {
       console.error('Failed to save food to DB:', err);
-    }
-    setLoggedFoods(prev => ({
-      ...prev,
-      [activeSearchPeriod]: [...(prev[activeSearchPeriod] || []), food]
-    }));
-    setActiveSearchPeriod(null);
-  };
-
-  // Called from ManualFoodEntry "Describe" tab — saves full AI-parsed meal to DB + correct period
-  const handleAddMeal = async (meal) => {
-    if (!activeSearchPeriod) return;
-    try {
-      const now = new Date();
-      await api.post('/nutrition', {
-        meal_name: meal.meal_name,
-        calories: meal.total_calories,
-        protein: meal.total_protein || 0,
-        carbs: meal.total_carbs || 0,
-        fat: meal.total_fat || 0,
-        date: now,
-        foods: (meal.foods || []).map(f => ({ name: f.name, portion: f.portion || '', calories: f.calories })),
-      });
-    } catch (err) {
-      console.error('Failed to save meal to DB:', err);
+      return;
     }
     setLoggedFoods(prev => ({
       ...prev,
       [activeSearchPeriod]: [...(prev[activeSearchPeriod] || []), {
+        ...food,
+        _logId: createdLog?._id,
+        source: 'manual',
+      }],
+    }));
+    setActiveSearchPeriod(null);
+  };
+
+  // Called from ManualFoodEntry "Describe" tab — saves full AI-parsed meal to tracking DB
+  const handleAddMeal = async (meal) => {
+    if (!activeSearchPeriod) return;
+    let createdLog = null;
+    try {
+      createdLog = await saveTrackingEntry({
+        mealName: meal.meal_name,
+        mealPeriod: activeSearchPeriod,
+        source: 'manual',
+        calories: meal.total_calories,
+        protein: meal.total_protein || 0,
+        carbs: meal.total_carbs || 0,
+        fat: meal.total_fat || 0,
+        foods: (meal.foods || []).map((f) => ({
+          name: f.name,
+          portion: f.portion || '',
+          calories: f.calories || 0,
+          protein: f.protein || 0,
+          carbs: f.carbs || 0,
+          fat: f.fat || 0,
+        })),
+      });
+    } catch (err) {
+      console.error('Failed to save meal to DB:', err);
+      return;
+    }
+    setLoggedFoods(prev => ({
+      ...prev,
+      [activeSearchPeriod]: [...(prev[activeSearchPeriod] || []), {
+        _logId: createdLog?._id,
+        source: 'manual',
         name: meal.meal_name,
         cals: meal.total_calories,
         protein: meal.total_protein || 0,
@@ -231,8 +310,18 @@ export default function NutritionDemo() {
     setActiveSearchPeriod(null);
   };
 
-  const removeFood = (periodId, index) => {
-    setLoggedFoods(prev => {
+  const removeFood = async (periodId, index) => {
+    const target = loggedFoods[periodId]?.[index];
+    if (target?._logId) {
+      try {
+        await api.delete(`/nutrition/entry/${target._logId}`);
+      } catch (error) {
+        console.error('Failed to remove meal log:', error);
+        return;
+      }
+    }
+
+    setLoggedFoods((prev) => {
       const updated = [...(prev[periodId] || [])];
       updated.splice(index, 1);
       return { ...prev, [periodId]: updated };
@@ -282,33 +371,42 @@ export default function NutritionDemo() {
     const now = new Date();
     const hour = now.getHours();
     const periodId = getPeriodId(hour);
-    console.log(`[LogMeal] time=${now.toLocaleTimeString()} hour=${hour} → periodId=${periodId}`);
-
-    // Save to DB
+    let createdLog = null;
     try {
-      await api.post('/nutrition', {
-        meal_name: meal.meal_name,
+      createdLog = await saveTrackingEntry({
+        mealName: meal.meal_name,
+        mealPeriod: periodId,
+        source: 'ai',
         calories: meal.total_calories,
-        protein: meal.total_protein,
-        carbs: meal.total_carbs,
-        fat: meal.total_fat,
-        date: now,
-        foods: meal.foods.map(f => ({ name: f.name, portion: f.portion, calories: f.calories })),
+        protein: meal.total_protein || 0,
+        carbs: meal.total_carbs || 0,
+        fat: meal.total_fat || 0,
+        foods: (meal.foods || []).map((f) => ({
+          name: f.name,
+          portion: f.portion || '',
+          calories: f.calories || 0,
+          protein: f.protein || 0,
+          carbs: f.carbs || 0,
+          fat: f.fat || 0,
+        })),
       });
     } catch (err) {
       console.error('Failed to save meal to DB:', err);
+      return;
     }
 
     // Add to the correct period slot in the daily log
     setLoggedFoods(prev => ({
       ...prev,
       [periodId]: [...(prev[periodId] || []), {
+        _logId: createdLog?._id,
+        source: 'ai',
         name: meal.meal_name,
         cals: meal.total_calories,
         protein: meal.total_protein,
         carbs: meal.total_carbs,
         fat: meal.total_fat,
-        _aiTime: now.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }),
+        _aiTime: format(now, 'HH:mm'),
       }]
     }));
 
@@ -341,6 +439,44 @@ export default function NutritionDemo() {
       </motion.div>
 
       {/* ─── Action Buttons ─────────────────────────────────── */}
+      {savedMenuEntries.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.04 }}
+          className="mb-6"
+        >
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wider">
+              {t('nutrition.savedMenu', 'Saved Menu')}
+            </h3>
+            <span className="text-xs text-gray-500">
+              {savedMenuEntries.length} {t('nutrition.mealsCount', 'meals')}
+            </span>
+          </div>
+
+          <div className="space-y-2">
+            {savedMenuEntries.slice(0, 6).map((entry) => (
+              <div
+                key={entry._id}
+                className="rounded-xl border border-[#2A2A2A] bg-[#1A1A1A] p-3 flex items-center justify-between"
+              >
+                <div>
+                  <p className="text-sm font-medium text-white">{entry.meal_name}</p>
+                  <p className="text-xs text-gray-500">
+                    {entry.meal_period || t('nutrition.unspecifiedPeriod', 'Unspecified period')}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm text-[#00F2FF] font-semibold">{entry.total_calories || 0} {t('common.kcal', 'kcal')}</p>
+                  <p className="text-xs text-gray-500 uppercase">{entry.source || 'manual'}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </motion.div>
+      )}
+
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -365,8 +501,8 @@ export default function NutritionDemo() {
 
         <button
           onClick={requestMealPlan}
-          disabled={isTrackingOnlyMode}
-          className={`relative overflow-hidden rounded-xl p-4 border border-[#2A2A2A] bg-gradient-to-br from-[#1A1A1A] to-[#0D0D0D] transition-all group ${isTrackingOnlyMode
+          disabled={isTrackingOnlyMode || currentPeriodHasAIMeal}
+          className={`relative overflow-hidden rounded-xl p-4 border border-[#2A2A2A] bg-gradient-to-br from-[#1A1A1A] to-[#0D0D0D] transition-all group ${(isTrackingOnlyMode || currentPeriodHasAIMeal)
             ? 'opacity-50 cursor-not-allowed'
             : 'hover:border-[#00F2FF]/30'
             }`}
@@ -380,6 +516,8 @@ export default function NutritionDemo() {
               <p className="text-xs text-gray-500">
                 {isTrackingOnlyMode
                   ? t('nutrition.trackingOnlyModeTitle', 'Tracking-only mode is active')
+                  : currentPeriodHasAIMeal
+                    ? t('nutrition.aiMealAlreadySaved', 'AI meal already saved for this meal period')
                   : t('nutrition.aiPowered', 'AI Powered')}
               </p>
             </div>
@@ -484,7 +622,7 @@ export default function NutritionDemo() {
         <div className="space-y-4">
           {periods.map((period, index) => {
             const periodFoods = loggedFoods[period.id] || [];
-            const inspirations = getInspirationsForPeriod(dietType);
+            const plannedMeals = savedMenuEntries.filter((entry) => resolvePeriodForMenuEntry(entry) === period.id);
 
             const pCals = periodFoods.reduce((sum, f) => sum + (f.cals || 0), 0);
 
@@ -526,18 +664,45 @@ export default function NutritionDemo() {
                   </div>
                 )}
 
-                {/* Inspirations Carousel */}
-                {periodFoods.length === 0 && (
+                {/* Saved plan for this period */}
+                {periodFoods.length === 0 && plannedMeals.length > 0 && (
                   <div className="mb-3">
-                    <p className="text-xs text-gray-500 mb-2">{t('nutrition.ideasToHitMacros', 'Ideas to hit your macros:')}</p>
-                    <div className="flex overflow-x-auto snap-x gap-2 pb-2 scrollbar-none">
-                      {inspirations.map((insp, i) => (
-                        <div key={i} className="snap-start shrink-0 w-48 bg-[#2A2A2A] rounded-lg p-2 text-xs border border-transparent hover:border-[#00F2FF]/30 transition-all cursor-pointer">
-                          <p className="text-gray-300 font-medium truncate">{String(t(`nutrition.inspirations.${insp.name}`, insp.name))}</p>
-                          <p className="text-gray-500 mt-1">{insp.cals} {t('common.kcal', 'kcal')} • {insp.protein}g {t('common.protein', 'Protein')}</p>
+                    <p className="text-xs text-gray-500 mb-2">
+                      {t('nutrition.savedPlanForPeriod', 'Saved plan for this meal period:')}
+                    </p>
+                    <div className="space-y-2">
+                      {plannedMeals.map((meal) => (
+                        <div
+                          key={meal._id}
+                          className="rounded-lg border border-[#2A2A2A] bg-[#111] p-3"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-medium text-white">{meal.meal_name}</p>
+                              <p className="text-xs text-gray-500 mt-1">
+                                {meal.total_calories || 0} {t('common.kcal', 'kcal')} • P:{meal.total_protein || 0} C:{meal.total_carbs || 0} F:{meal.total_fat || 0}
+                              </p>
+                            </div>
+                            <span className="text-[10px] uppercase tracking-wide text-gray-500">
+                              {meal.source || 'manual'}
+                            </span>
+                          </div>
                         </div>
                       ))}
                     </div>
+                  </div>
+                )}
+
+                {periodFoods.length === 0 && plannedMeals.length === 0 && (
+                  <div className="mb-3 rounded-lg border border-dashed border-[#2A2A2A] bg-[#111]/60 px-3 py-3">
+                    <p className="text-sm text-gray-400">
+                      {t('nutrition.noMealLoggedForPeriod', 'No food logged for this meal period yet.')}
+                    </p>
+                    <p className="mt-1 text-xs text-gray-500">
+                      {isTrackingOnlyMode
+                        ? t('nutrition.addFoodToStartTracking', 'Add food manually to start tracking.')
+                        : t('nutrition.useAiOrManualToStart', 'Use Plan Meal or Add Food to create this meal.')}
+                    </p>
                   </div>
                 )}
 
@@ -580,7 +745,7 @@ export default function NutritionDemo() {
 
       {/* Demo Notice */}
       <p className="text-xs text-gray-600 text-center mt-6">
-        📊 {t('nutrition.demoNotice', 'Demo data shown. In the full version, this syncs with your actual intake.')}
+        📊 {t('nutrition.demoNotice', 'Meals and saved menus on this page are tied to your account data.')}
       </p>
 
       {/* Global Coach Chat */}

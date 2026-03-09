@@ -25,9 +25,9 @@ export default function PlanChoice({ onSelect, onBack }) {
           {t('common.back', 'Back')}
         </button>
 
-        <h2 className="text-2xl font-bold mb-2">{t('onboarding.planChoice.title', "You're Experienced!")}</h2>
+        <h2 className="text-2xl font-bold mb-2">{t('onboarding.planChoice.title', 'Your Workout Plan')}</h2>
         <p className="text-gray-500 mb-8">
-          {t('onboarding.planChoice.subtitle', 'Would you like to build a new plan or import your existing routine?')}
+          {t('onboarding.planChoice.subtitle', 'Would you like AI to build your workouts, or do you want to use your own routine?')}
         </p>
 
         <div className="space-y-4">

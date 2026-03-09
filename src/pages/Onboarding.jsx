@@ -9,6 +9,7 @@ import CoachSummary from '@/components/onboarding/CoachSummary';
 import BodyFatSelector from '@/components/onboarding/BodyFatSelector';
 import PlanChoice from '@/components/onboarding/PlanChoice.jsx';
 import NutritionPlanChoice from '@/components/onboarding/NutritionPlanChoice.jsx';
+import NutritionMenuImport from '@/components/onboarding/NutritionMenuImport.jsx';
 import { Loader2 } from 'lucide-react';
 
 const QUESTIONS = [
@@ -158,15 +159,20 @@ export default function Onboarding() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { register, user, updateProfile } = useAuth();
-  const [phase, setPhase] = useState('welcome'); // welcome, questions, plan_choice, plan_import, coach_selection, nutrition_plan_choice, summary, account_setup
+  const [phase, setPhase] = useState('welcome'); // welcome, questions, plan_choice, plan_import, coach_selection, nutrition_plan_choice, nutrition_menu_import, summary, account_setup
   const [currentStep, setCurrentStep] = useState(0);
   const [answers, setAnswers] = useState({});
   const [coachStyle, setCoachStyle] = useState(null);
   const [planChoice, setPlanChoice] = useState(null); // 'ai' or 'existing'
   const [nutritionPlanChoice, setNutritionPlanChoice] = useState(null); // 'ai' | 'existing' | 'tracking_only'
+  const [customNutritionMenu, setCustomNutritionMenu] = useState([]);
   const [customPlan, setCustomPlan] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const isExperiencedUser = answers.experience_level === 'intermediate' || answers.experience_level === 'advanced';
+  const hasAccountDetails = Boolean(answers.name && answers.email && answers.password);
+
+  const goToSummaryGate = () => {
+    setPhase(user ? 'summary' : 'account_setup');
+  };
 
   // Load saved progress
   useEffect(() => {
@@ -242,7 +248,7 @@ export default function Onboarding() {
     setCoachStyle(style);
     localStorage.setItem('nexus_coach_style', style);
     if (nutritionPlanChoice) {
-      setPhase('summary');
+      goToSummaryGate();
       return;
     }
     setPhase('nutrition_plan_choice');
@@ -252,12 +258,7 @@ export default function Onboarding() {
     if (currentStep < QUESTIONS.length - 1) {
       setCurrentStep(prev => prev + 1);
     } else {
-      // Show plan choice for intermediate/advanced users
-      if (isExperiencedUser) {
-        setPhase('plan_choice');
-      } else {
-        setPhase('coach_selection');
-      }
+      setPhase('plan_choice');
     }
   };
 
@@ -275,7 +276,7 @@ export default function Onboarding() {
   };
 
   const handleComplete = () => {
-    if (user) {
+    if (user || hasAccountDetails) {
       handleFinalSubmit();
     } else {
       setPhase('account_setup');
@@ -305,6 +306,7 @@ export default function Onboarding() {
       plan_choice: planChoice || 'ai',
       nutrition_plan_choice: nutritionPlanChoice || 'ai',
       custom_plan: customPlan,
+      custom_nutrition_menu: customNutritionMenu,
       onboarding_completed: true,
       onboarding_date: new Date().toISOString()
     };
@@ -448,23 +450,31 @@ export default function Onboarding() {
       <NutritionPlanChoice
         onSelect={(choice) => {
           setNutritionPlanChoice(choice);
-          if (isExperiencedUser) {
-            setPhase('coach_selection');
+          if (choice === 'existing') {
+            setPhase('nutrition_menu_import');
           } else {
-            setPhase('summary');
+            setPhase('coach_selection');
           }
         }}
         onBack={() => {
-          if (!isExperiencedUser) {
-            setPhase('coach_selection');
-            return;
-          }
           if (planChoice === 'existing') {
             setPhase('plan_import');
             return;
           }
           setPhase('plan_choice');
         }}
+      />
+    );
+  }
+
+  if (phase === 'nutrition_menu_import') {
+    return (
+      <NutritionMenuImport
+        onComplete={(menuEntries) => {
+          setCustomNutritionMenu(menuEntries);
+          setPhase('coach_selection');
+        }}
+        onBack={() => setPhase('nutrition_plan_choice')}
       />
     );
   }
@@ -537,14 +547,14 @@ export default function Onboarding() {
 
             <div className="pt-4">
               <button
-                onClick={handleFinalSubmit}
+                onClick={() => setPhase('summary')}
                 disabled={!answers.name || !answers.email || !answers.password}
                 className={`w-full h-12 rounded-xl font-semibold transition-all ${answers.name && answers.email && answers.password
                   ? 'gradient-cyan text-black'
                   : 'bg-[#2A2A2A] text-gray-500 cursor-not-allowed'
                   }`}
               >
-                {t('register.createAccount')}
+                {t('common.continue')}
               </button>
             </div>
           </div>

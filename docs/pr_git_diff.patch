@@ -1,0 +1,1397 @@
+diff --git a/server/controllers/nutritionController.js b/server/controllers/nutritionController.js
+index 38bb2a3..a530ad7 100644
+--- a/server/controllers/nutritionController.js
++++ b/server/controllers/nutritionController.js
+@@ -1,12 +1,16 @@
+ const asyncHandler = require('express-async-handler');
+ const axios = require('axios');
+ const NutritionLog = require('../models/NutritionLog');
++const NutritionMenu = require('../models/NutritionMenu');
+ 
+ // @desc    Get nutrition logs
+ // @route   GET /api/nutrition
+ // @access  Private
+ const getNutritionLogs = asyncHandler(async (req, res) => {
+-    const logs = await NutritionLog.find({ user: req.user.id });
++    const logs = await NutritionLog.find({
++        user: req.user.id,
++        archived: { $ne: true },
++    }).sort({ date: -1, createdAt: -1 });
+ 
+     res.status(200).json(logs);
+ });
+@@ -15,14 +19,60 @@ const getNutritionLogs = asyncHandler(async (req, res) => {
+ // @route   POST /api/nutrition
+ // @access  Private
+ const logMeal = asyncHandler(async (req, res) => {
++    const {
++        date,
++        meal_name,
++        meal_period,
++        source,
++        calories,
++        protein,
++        carbs,
++        fat,
++        foods,
++    } = req.body || {};
++
++    if (!meal_name || calories === undefined || calories === null) {
++        res.status(400);
++        throw new Error('meal_name and calories are required.');
++    }
++
+     const log = await NutritionLog.create({
+         user: req.user.id,
+-        ...req.body
++        date: date ? new Date(date) : new Date(),
++        meal_name,
++        meal_period: meal_period || '',
++        source: source || 'manual',
++        calories,
++        protein: protein || 0,
++        carbs: carbs || 0,
++        fat: fat || 0,
++        foods: Array.isArray(foods) ? foods : [],
+     });
+ 
+     res.status(200).json(log);
+ });
+ 
++// @desc    Archive one nutrition log entry
++// @route   DELETE /api/nutrition/entry/:id
++// @access  Private
++const deleteNutritionLog = asyncHandler(async (req, res) => {
++    const log = await NutritionLog.findOne({
++        _id: req.params.id,
++        user: req.user.id,
++        archived: { $ne: true },
++    });
++
++    if (!log) {
++        res.status(404);
++        throw new Error('Nutrition log not found.');
++    }
++
++    log.archived = true;
++    await log.save();
++
++    res.status(200).json({ archived: true, id: String(log._id) });
++});
++
+ // @desc    Get logs by date
+ // @route   GET /api/nutrition/:date
+ // @access  Private
+@@ -35,15 +85,80 @@ const getLogsByDate = asyncHandler(async (req, res) => {
+ 
+     const logs = await NutritionLog.find({
+         user: req.user.id,
++        archived: { $ne: true },
+         date: {
+             $gte: start,
+             $lte: end
+         }
+-    });
++    }).sort({ createdAt: 1 });
+ 
+     res.status(200).json(logs);
+ });
+ 
++// @desc    Save menu/meal template for the user
++// @route   POST /api/nutrition/menu
++// @access  Private
++const saveNutritionMenu = asyncHandler(async (req, res) => {
++    const {
++        date,
++        meal_period = '',
++        meal_name,
++        source = 'manual',
++        total_calories,
++        total_protein = 0,
++        total_carbs = 0,
++        total_fat = 0,
++        note = '',
++        foods = [],
++    } = req.body || {};
++
++    if (!meal_name || total_calories === undefined || total_calories === null) {
++        res.status(400);
++        throw new Error('meal_name and total_calories are required.');
++    }
++
++    const menuEntry = await NutritionMenu.create({
++        user: req.user.id,
++        date: date ? new Date(date) : new Date(),
++        meal_period,
++        meal_name,
++        source,
++        total_calories,
++        total_protein,
++        total_carbs,
++        total_fat,
++        note,
++        foods: Array.isArray(foods) ? foods : [],
++    });
++
++    res.status(201).json(menuEntry);
++});
++
++// @desc    Get saved menu entries (optionally for a specific date)
++// @route   GET /api/nutrition/menu
++// @access  Private
++const getNutritionMenu = asyncHandler(async (req, res) => {
++    const { date } = req.query;
++    const query = {
++        user: req.user.id,
++        archived: { $ne: true },
++    };
++
++    if (date) {
++        const start = new Date(date);
++        const end = new Date(date);
++        start.setHours(0, 0, 0, 0);
++        end.setHours(23, 59, 59, 999);
++        query.date = { $gte: start, $lte: end };
++    }
++
++    const menuEntries = await NutritionMenu.find(query)
++        .sort({ date: -1, createdAt: -1 })
++        .limit(200);
++
++    res.status(200).json(menuEntries);
++});
++
+ // @desc    Generate a meal plan (mock — rule-based, ready for LLM swap)
+ // @route   POST /api/nutrition/meal-plan
+ // @access  Private
+@@ -205,7 +320,10 @@ const fetchFoods = asyncHandler(async (req, res) => {
+ module.exports = {
+     getNutritionLogs,
+     logMeal,
++    deleteNutritionLog,
+     getLogsByDate,
++    saveNutritionMenu,
++    getNutritionMenu,
+     generateMealPlan,
+     fetchFoods,
+ };
+diff --git a/server/controllers/userController.js b/server/controllers/userController.js
+index 83e172e..d0cb929 100644
+--- a/server/controllers/userController.js
++++ b/server/controllers/userController.js
+@@ -2,12 +2,13 @@ const jwt = require('jsonwebtoken');
+ const bcrypt = require('bcryptjs');
+ const asyncHandler = require('express-async-handler');
+ const User = require('../models/User');
++const NutritionMenu = require('../models/NutritionMenu');
+ const OnboardingWorkoutPlannerService = require('../services/onboardingWorkoutPlannerService');
+ 
+ const onboardingWorkoutPlannerService = new OnboardingWorkoutPlannerService();
+ const ONBOARDING_AI_MENU_AUTOGEN_ENABLED = parseBoolean(
+     process.env.ONBOARDING_AI_MENU_AUTOGEN_ENABLED,
+-    false
++    true
+ );
+ 
+ const generateToken = (id) => {
+@@ -21,6 +22,86 @@ function parseBoolean(value, fallback = false) {
+     return String(value).trim().toLowerCase() === 'true';
+ }
+ 
++function clampNumber(value, min, max, fallback) {
++    const parsed = Number(value);
++    if (!Number.isFinite(parsed)) return fallback;
++    return Math.min(max, Math.max(min, parsed));
++}
++
++function cleanText(value, maxLen = 200) {
++    return String(value || '').trim().slice(0, maxLen);
++}
++
++function sanitizeMenuFoods(foods) {
++    if (!Array.isArray(foods)) return [];
++    return foods
++        .slice(0, 20)
++        .map((food) => ({
++            name: cleanText(food?.name, 120),
++            portion: cleanText(food?.portion, 60),
++            calories: clampNumber(food?.calories, 0, 5000, 0),
++            protein: clampNumber(food?.protein, 0, 1000, 0),
++            carbs: clampNumber(food?.carbs, 0, 1000, 0),
++            fat: clampNumber(food?.fat, 0, 1000, 0),
++        }))
++        .filter((food) => food.name);
++}
++
++function sanitizeCustomNutritionMenu(entries) {
++    if (!Array.isArray(entries)) return [];
++    return entries
++        .slice(0, 30)
++        .map((entry) => ({
++            meal_name: cleanText(entry?.meal_name || entry?.name, 160),
++            meal_period: cleanText(entry?.meal_period || entry?.period, 80),
++            total_calories: clampNumber(entry?.total_calories ?? entry?.calories, 1, 10000, 0),
++            total_protein: clampNumber(entry?.total_protein ?? entry?.protein, 0, 1500, 0),
++            total_carbs: clampNumber(entry?.total_carbs ?? entry?.carbs, 0, 1500, 0),
++            total_fat: clampNumber(entry?.total_fat ?? entry?.fat, 0, 1500, 0),
++            note: cleanText(entry?.note, 500),
++            foods: sanitizeMenuFoods(entry?.foods),
++        }))
++        .filter((entry) => entry.meal_name && entry.total_calories > 0);
++}
++
++function buildAiMenuEntriesFromProfile(profile = {}) {
++    const dailyCalories = clampNumber(profile?.target_calories, 1200, 6000, 2200);
++    const dailyProtein = clampNumber(profile?.protein_goal, 0, 600, Math.round((dailyCalories * 0.3) / 4));
++    const dailyCarbs = clampNumber(profile?.carbs_goal, 0, 1000, Math.round((dailyCalories * 0.4) / 4));
++    const dailyFat = clampNumber(profile?.fat_goal, 0, 400, Math.round((dailyCalories * 0.3) / 9));
++    const mealCount = clampNumber(profile?.meal_frequency, 3, 6, 4);
++
++    const periodTemplates = {
++        3: ['Breakfast', 'Lunch', 'Dinner'],
++        4: ['Breakfast', 'Lunch', 'Snack', 'Dinner'],
++        5: ['Breakfast', 'Snack', 'Lunch', 'Snack', 'Dinner'],
++        6: ['Breakfast', 'Snack', 'Lunch', 'Snack', 'Dinner', 'Evening Snack'],
++    };
++    const calorieSplits = {
++        3: [0.3, 0.4, 0.3],
++        4: [0.25, 0.35, 0.15, 0.25],
++        5: [0.22, 0.12, 0.33, 0.11, 0.22],
++        6: [0.2, 0.1, 0.28, 0.1, 0.22, 0.1],
++    };
++
++    const periods = periodTemplates[mealCount] || periodTemplates[4];
++    const splits = calorieSplits[mealCount] || calorieSplits[4];
++
++    return periods.map((period, idx) => {
++        const split = splits[idx] || (1 / periods.length);
++        return {
++            meal_name: `${period} Plan`,
++            meal_period: period,
++            total_calories: Math.round(dailyCalories * split),
++            total_protein: Math.round(dailyProtein * split),
++            total_carbs: Math.round(dailyCarbs * split),
++            total_fat: Math.round(dailyFat * split),
++            note: 'Auto-generated onboarding menu',
++            foods: [],
++        };
++    });
++}
++
+ function normalizeIncomingProfile(profile = {}) {
+     const normalized = { ...(profile || {}) };
+     const hasWorkoutPlanChoice = typeof normalized.plan_choice === 'string';
+@@ -93,25 +174,181 @@ function shouldRunNutritionMenuAutogen(profile = {}) {
+ }
+ 
+ async function runOnboardingNutritionPlannerSafely({ userId, requestId, trigger, profile }) {
+-    if (!shouldRunNutritionMenuAutogen(profile)) {
++    if (!userId) {
++        return {
++            triggered: false,
++            status: 'skipped',
++            reason: 'missing_user_id',
++        };
++    }
++
++    const user = await User.findById(userId);
++    if (!user) {
++        return {
++            triggered: false,
++            status: 'skipped',
++            reason: 'user_not_found',
++        };
++    }
++
++    const currentProfile = profile || user.profile || {};
++    const onboardingCompleted = currentProfile?.onboarding_completed === true;
++    if (!onboardingCompleted) {
++        return {
++            triggered: false,
++            status: 'skipped',
++            reason: 'onboarding_not_completed',
++        };
++    }
++
++    const nutritionPlanChoice = String(currentProfile?.nutrition_plan_choice || '').trim().toLowerCase();
++    if (!nutritionPlanChoice || nutritionPlanChoice === 'tracking_only') {
++        user.profile = {
++            ...(user.profile || {}),
++            nutrition_plan_status: 'skipped',
++            nutrition_plan_error: undefined,
++            nutrition_plan_source: 'none',
++        };
++        await user.save();
+         return {
+             triggered: false,
+             status: 'skipped',
+-            reason: 'menu_autogen_disabled_or_not_eligible',
++            reason: 'tracking_only_or_missing_choice',
+         };
+     }
+ 
+-    // Hook point for future onboarding AI menu generation service integration.
+-    console.info('userController.onboardingNutritionPlanner hook reached', {
+-        userId,
+-        requestId,
+-        trigger,
+-        status: 'not_implemented',
++    const sanitizedCustomMenu = sanitizeCustomNutritionMenu(currentProfile?.custom_nutrition_menu);
++    const existingMenuCount = await NutritionMenu.countDocuments({
++        user: user._id,
++        archived: { $ne: true },
+     });
+ 
++    try {
++        if (nutritionPlanChoice === 'existing') {
++            if (sanitizedCustomMenu.length > 0) {
++                const now = new Date();
++                await NutritionMenu.insertMany(sanitizedCustomMenu.map((entry) => ({
++                    user: user._id,
++                    date: now,
++                    meal_period: entry.meal_period,
++                    meal_name: entry.meal_name,
++                    source: 'existing',
++                    total_calories: entry.total_calories,
++                    total_protein: entry.total_protein,
++                    total_carbs: entry.total_carbs,
++                    total_fat: entry.total_fat,
++                    note: entry.note,
++                    foods: entry.foods,
++                })));
++                user.profile = {
++                    ...(user.profile || {}),
++                    nutrition_plan_status: 'ready',
++                    nutrition_plan_error: undefined,
++                    nutrition_plan_source: 'manual',
++                    nutrition_plan_generated_at: new Date(),
++                };
++            } else {
++                user.profile = {
++                    ...(user.profile || {}),
++                    nutrition_plan_status: existingMenuCount > 0 ? 'ready' : 'skipped',
++                    nutrition_plan_error: undefined,
++                    nutrition_plan_source: 'manual',
++                };
++            }
++            await user.save();
++            return {
++                triggered: true,
++                status: user.profile.nutrition_plan_status,
++                reason: sanitizedCustomMenu.length > 0 ? 'custom_menu_saved' : 'no_custom_menu_provided',
++            };
++        }
++
++        if (nutritionPlanChoice === 'ai') {
++            if (!shouldRunNutritionMenuAutogen(currentProfile)) {
++                return {
++                    triggered: false,
++                    status: 'skipped',
++                    reason: 'menu_autogen_disabled',
++                };
++            }
++
++            if (existingMenuCount < 1) {
++                const generatedEntries = buildAiMenuEntriesFromProfile(currentProfile);
++                const now = new Date();
++                await NutritionMenu.insertMany(generatedEntries.map((entry) => ({
++                    user: user._id,
++                    date: now,
++                    meal_period: entry.meal_period,
++                    meal_name: entry.meal_name,
++                    source: 'ai',
++                    total_calories: entry.total_calories,
++                    total_protein: entry.total_protein,
++                    total_carbs: entry.total_carbs,
++                    total_fat: entry.total_fat,
++                    note: entry.note,
++                    foods: entry.foods,
++                })));
++            }
++
++            user.profile = {
++                ...(user.profile || {}),
++                nutrition_plan_status: 'ready',
++                nutrition_plan_error: undefined,
++                nutrition_plan_source: 'agent',
++                nutrition_plan_generated_at: new Date(),
++            };
++            await user.save();
++
++            return {
++                triggered: true,
++                status: 'ready',
++            };
++        }
++
++        return {
++            triggered: false,
++            status: 'skipped',
++            reason: 'unsupported_nutrition_choice',
++        };
++    } catch (error) {
++        const errorMessage = cleanText(error?.message || 'Nutrition planner failed.', 400);
++        user.profile = {
++            ...(user.profile || {}),
++            nutrition_plan_status: 'failed',
++            nutrition_plan_error: errorMessage,
++        };
++        await user.save();
++        console.error('userController.onboardingNutritionPlanner error:', {
++            userId,
++            requestId,
++            trigger,
++            message: errorMessage,
++        });
++        return {
++            triggered: true,
++            status: 'failed',
++            error: errorMessage,
++        };
++    }
++}
++
++function extractIncomingCustomNutritionMenu(sourceProfile) {
++    const source = sourceProfile || {};
++    const entries = Array.isArray(source.custom_nutrition_menu) ? source.custom_nutrition_menu : [];
++    return sanitizeCustomNutritionMenu(entries);
++}
++
++function stripTransientProfileFields(profile = {}) {
++    const nextProfile = { ...(profile || {}) };
++    delete nextProfile.custom_nutrition_menu;
++    return nextProfile;
++}
++
++function withTransientMenu(profile = {}, menu = []) {
++    if (!Array.isArray(menu) || menu.length === 0) return profile;
+     return {
+-        triggered: false,
+-        status: 'not_implemented',
++        ...(profile || {}),
++        custom_nutrition_menu: menu,
+     };
+ }
+ 
+@@ -120,6 +357,7 @@ async function runOnboardingNutritionPlannerSafely({ userId, requestId, trigger,
+ // @access  Public
+ const registerUser = asyncHandler(async (req, res) => {
+     const { name, email, password, profile } = req.body;
++    const incomingCustomNutritionMenu = extractIncomingCustomNutritionMenu(profile);
+ 
+     if (!name || !email || !password) {
+         res.status(400);
+@@ -137,7 +375,7 @@ const registerUser = asyncHandler(async (req, res) => {
+         name,
+         email,
+         password,
+-        profile: normalizeIncomingProfile(profile),
++        profile: normalizeIncomingProfile(stripTransientProfileFields(profile)),
+     });
+ 
+     if (user) {
+@@ -150,7 +388,7 @@ const registerUser = asyncHandler(async (req, res) => {
+             userId: user.id,
+             requestId: req.requestId,
+             trigger: 'register',
+-            profile: user.profile,
++            profile: withTransientMenu(user.profile, incomingCustomNutritionMenu),
+         });
+ 
+         const latestUser = await User.findById(user.id);
+@@ -213,6 +451,7 @@ const getMe = asyncHandler(async (req, res) => {
+ // @access  Private
+ const updateProfile = asyncHandler(async (req, res) => {
+     const user = await User.findById(req.user.id);
++    const incomingCustomNutritionMenu = extractIncomingCustomNutritionMenu(req.body);
+ 
+     if (!user) {
+         res.status(401);
+@@ -220,7 +459,10 @@ const updateProfile = asyncHandler(async (req, res) => {
+     }
+ 
+     // Update profile fields
+-    user.profile = normalizeIncomingProfile({ ...user.profile, ...req.body });
++    user.profile = normalizeIncomingProfile({
++        ...user.profile,
++        ...stripTransientProfileFields(req.body),
++    });
+ 
+     await user.save();
+     await runOnboardingPlannerSafely({
+@@ -232,7 +474,7 @@ const updateProfile = asyncHandler(async (req, res) => {
+         userId: user.id,
+         requestId: req.requestId,
+         trigger: 'update_profile',
+-        profile: user.profile,
++        profile: withTransientMenu(user.profile, incomingCustomNutritionMenu),
+     });
+ 
+     const updatedUser = await User.findById(user.id);
+diff --git a/server/models/NutritionLog.js b/server/models/NutritionLog.js
+index 4ffb141..c578560 100644
+--- a/server/models/NutritionLog.js
++++ b/server/models/NutritionLog.js
+@@ -8,6 +8,12 @@ const nutritionLogSchema = mongoose.Schema({
+     },
+     date: { type: Date, required: true },
+     meal_name: { type: String, required: true },
++    meal_period: { type: String, default: '' },
++    source: {
++        type: String,
++        enum: ['ai', 'manual', 'existing', 'imported'],
++        default: 'manual',
++    },
+     calories: { type: Number, required: true },
+     protein: Number,
+     carbs: Number,
+diff --git a/server/routes/nutritionRoutes.js b/server/routes/nutritionRoutes.js
+index afa0c65..26aed22 100644
+--- a/server/routes/nutritionRoutes.js
++++ b/server/routes/nutritionRoutes.js
+@@ -3,13 +3,18 @@ const router = express.Router();
+ const {
+     getNutritionLogs,
+     logMeal,
++    deleteNutritionLog,
+     getLogsByDate,
++    saveNutritionMenu,
++    getNutritionMenu,
+     generateMealPlan,
+     fetchFoods
+ } = require('../controllers/nutritionController');
+ const { protect } = require('../middleware/authMiddleware');
+ 
+ router.route('/').get(protect, getNutritionLogs).post(protect, logMeal);
++router.route('/menu').get(protect, getNutritionMenu).post(protect, saveNutritionMenu);
++router.route('/entry/:id').delete(protect, deleteNutritionLog);
+ router.route('/date/:date').get(protect, getLogsByDate);
+ router.post('/meal-plan', protect, generateMealPlan);
+ router.post('/foods', protect, fetchFoods);
+diff --git a/src/locales/en.json b/src/locales/en.json
+index efb7625..f733633 100644
+--- a/src/locales/en.json
++++ b/src/locales/en.json
+@@ -94,6 +94,15 @@
+             "trackingOnlyDesc": "Skip meal planning and just use nutrition tracking tools",
+             "changeLater": "You can always change this later in settings"
+         },
++        "nutritionMenuImport": {
++            "title": "Add Your Menu",
++            "subtitle": "Add meals you already use so we can save them to your account",
++            "mealName": "Meal name",
++            "calories": "Calories",
++            "note": "Optional note",
++            "addMeal": "Add Meal",
++            "saveMenu": "Save My Menu"
++        },
+         "questions": {
+             "age": "How old are you?",
+             "gender": "What's your gender?",
+@@ -256,6 +265,7 @@
+         "allRatedSub": "You can request a meal from the AI coach",
+         "trackingOnlyModeTitle": "Tracking-only mode is active",
+         "trackingOnlyModeDesc": "AI meal planning is disabled for your account settings. You can still track all meals here.",
++        "aiMealAlreadySaved": "AI meal already saved for this meal period",
+         "requestMeal": "Request a Meal",
+         "sessionDone": "Session Complete!",
+         "savingPrefs": "Saving your preferences..."
+diff --git a/src/locales/he.json b/src/locales/he.json
+index 9e84d00..317c32c 100644
+--- a/src/locales/he.json
++++ b/src/locales/he.json
+@@ -94,6 +94,15 @@
+             "trackingOnlyDesc": "דלג על תכנון ארוחות והשתמש רק בכלי המעקב",
+             "changeLater": "תמיד אפשר לשנות את זה בהגדרות"
+         },
++        "nutritionMenuImport": {
++            "title": "הוסף את התפריט שלך",
++            "subtitle": "הוסף ארוחות שאתה כבר משתמש בהן כדי שנשמור אותן לחשבון שלך",
++            "mealName": "שם הארוחה",
++            "calories": "קלוריות",
++            "note": "הערה (אופציונלי)",
++            "addMeal": "הוסף ארוחה",
++            "saveMenu": "שמור את התפריט שלי"
++        },
+         "questions": {
+             "age": "בן/בת כמה אתם?",
+             "gender": "מהו המין שלכם?",
+@@ -256,6 +265,7 @@
+         "allRatedSub": "תוכל לבקש ארוחה מה-AI",
+         "trackingOnlyModeTitle": "מצב מעקב בלבד פעיל",
+         "trackingOnlyModeDesc": "תכנון ארוחות AI כבוי לפי ההגדרות שלך. עדיין אפשר לעקוב אחרי כל הארוחות כאן.",
++        "aiMealAlreadySaved": "כבר נשמרה ארוחת AI לחלון הארוחה הזה",
+         "requestMeal": "בקש ארוחה",
+         "sessionDone": "סיום סשן!",
+         "savingPrefs": "שומר את ההעדפות שלך..."
+diff --git a/src/pages/NutritionDemo.jsx b/src/pages/NutritionDemo.jsx
+index dec7b09..f7291c6 100644
+--- a/src/pages/NutritionDemo.jsx
++++ b/src/pages/NutritionDemo.jsx
+@@ -77,7 +77,7 @@ const GOAL_LABELS = {
+   athletic_performance: 'Athletic Performance'
+ };
+ 
+-// Map hour → period ID (matches 5-meal layout: m1-m5)
++// Map hour → period ID
+ const getPeriodId = (hour) => {
+   if (hour < 10) return 'm1';
+   if (hour < 13) return 'm2';
+@@ -114,34 +114,112 @@ export default function NutritionDemo() {
+     setPeriods(generateCoachPeriods(goal, dietType, t));
+   }, [goal, dietType, t]);
+ 
+-  // Load food preferences and today's saved meals on mount
+-  useEffect(() => {
+-    loadFoodPreferences();
++  const resolvePeriodForLog = (log) => {
++    const periodValue = String(log?.meal_period || '').trim();
++    if (periodValue) {
++      const byId = periods.find((p) => p.id === periodValue);
++      if (byId) return byId.id;
++      const byLabel = periods.find((p) => p.label === periodValue);
++      if (byLabel) return byLabel.id;
++    }
++
++    const fallbackByHour = getPeriodId(new Date(log?.date || log?.createdAt || Date.now()).getHours());
++    if (periods.some((p) => p.id === fallbackByHour)) return fallbackByHour;
++    return periods[0]?.id || 'm1';
++  };
++
++  const loadTodaysLogs = async () => {
+     const todayStr = format(new Date(), 'yyyy-MM-dd');
+-    api.get(`/nutrition/date/${todayStr}`)
+-      .then(res => {
+-        const logs = res.data || [];
+-        if (logs.length === 0) return;
+-        // Map each saved log into the correct period slot by its save time
+-        setLoggedFoods(prev => {
+-          const updated = { ...prev };
+-          logs.forEach(log => {
+-            const hour = new Date(log.createdAt || log.date).getHours();
+-            const pid = getPeriodId(hour);
+-            updated[pid] = [...(updated[pid] || []), {
+-              name: log.meal_name,
+-              cals: log.calories,
+-              protein: log.protein || 0,
+-              carbs: log.carbs || 0,
+-              fat: log.fat || 0,
+-            }];
+-          });
+-          return updated;
++    try {
++      const res = await api.get(`/nutrition/date/${todayStr}`);
++      const logs = Array.isArray(res.data) ? res.data : [];
++      const mapped = {};
++
++      logs.forEach((log) => {
++        const periodId = resolvePeriodForLog(log);
++        if (!mapped[periodId]) mapped[periodId] = [];
++        mapped[periodId].push({
++          _logId: log._id,
++          source: log.source || 'manual',
++          name: log.meal_name,
++          cals: log.calories || 0,
++          protein: log.protein || 0,
++          carbs: log.carbs || 0,
++          fat: log.fat || 0,
++          _aiTime: (log.source === 'ai')
++            ? format(new Date(log.createdAt || log.date), 'HH:mm')
++            : undefined,
+         });
+-      })
+-      .catch(() => { });
++      });
++
++      setLoggedFoods(mapped);
++    } catch (error) {
++      console.error('Failed to load nutrition logs:', error);
++    }
++  };
++
++  const saveTrackingEntry = async ({
++    mealName,
++    mealPeriod,
++    source = 'manual',
++    calories,
++    protein = 0,
++    carbs = 0,
++    fat = 0,
++    foods = [],
++  }) => {
++    const payload = {
++      meal_name: mealName,
++      meal_period: mealPeriod,
++      source,
++      calories,
++      protein,
++      carbs,
++      fat,
++      date: new Date().toISOString(),
++      foods,
++    };
++    const { data } = await api.post('/nutrition', payload);
++    return data;
++  };
++
++  const saveMenuEntry = async ({
++    mealName,
++    mealPeriod,
++    source = 'manual',
++    totalCalories,
++    totalProtein = 0,
++    totalCarbs = 0,
++    totalFat = 0,
++    note = '',
++    foods = [],
++  }) => {
++    const payload = {
++      meal_name: mealName,
++      meal_period: mealPeriod,
++      source,
++      total_calories: totalCalories,
++      total_protein: totalProtein,
++      total_carbs: totalCarbs,
++      total_fat: totalFat,
++      note,
++      date: new Date().toISOString(),
++      foods,
++    };
++    const { data } = await api.post('/nutrition/menu', payload);
++    return data;
++  };
++
++  // Load food preferences and today's saved meals on mount/periods update
++  useEffect(() => {
++    loadFoodPreferences();
+   }, []);
+ 
++  useEffect(() => {
++    if (!periods.length) return;
++    loadTodaysLogs();
++  }, [periods]);
++
+   const loadFoodPreferences = async () => {
+     try {
+       const res = await api.get('/users/food-preferences');
+@@ -168,7 +246,7 @@ export default function NutritionDemo() {
+ 
+   // Block AI meal generation if current period already has an AI meal
+   const currentPeriodId = getPeriodId(new Date().getHours());
+-  const currentPeriodHasAIMeal = (loggedFoods[currentPeriodId] || []).some(f => f._aiTime);
++  const currentPeriodHasAIMeal = (loggedFoods[currentPeriodId] || []).some((f) => f.source === 'ai');
+ 
+   const macroCards = [
+     { key: 'calories', label: t('common.calories', 'Calories'), icon: Flame, value: currentMacros.cals, target: tdee, color: '#00F2FF', unit: '' },
+@@ -179,24 +257,35 @@ export default function NutritionDemo() {
+ 
+   const handleAddFood = async (food) => {
+     if (!activeSearchPeriod) return;
+-    // Save to DB as a single-food log entry
++    let createdLog = null;
+     try {
+-      const now = new Date();
+-      await api.post('/nutrition', {
+-        meal_name: food.name,
++      createdLog = await saveTrackingEntry({
++        mealName: food.name,
++        mealPeriod: activeSearchPeriod,
++        source: 'manual',
+         calories: food.cals,
+         protein: food.protein || 0,
+         carbs: food.carbs || 0,
+         fat: food.fat || 0,
+-        date: now,
+-        foods: [{ name: food.name, portion: food.portion || '', calories: food.cals }],
++        foods: [{
++          name: food.name,
++          portion: food.portion || '',
++          calories: food.cals,
++          protein: food.protein || 0,
++          carbs: food.carbs || 0,
++          fat: food.fat || 0,
++        }],
+       });
+     } catch (err) {
+       console.error('Failed to save food to DB:', err);
+     }
+     setLoggedFoods(prev => ({
+       ...prev,
+-      [activeSearchPeriod]: [...(prev[activeSearchPeriod] || []), food]
++      [activeSearchPeriod]: [...(prev[activeSearchPeriod] || []), {
++        ...food,
++        _logId: createdLog?._id,
++        source: 'manual',
++      }],
+     }));
+     setActiveSearchPeriod(null);
+   };
+@@ -204,16 +293,43 @@ export default function NutritionDemo() {
+   // Called from ManualFoodEntry "Describe" tab — saves full AI-parsed meal to DB + correct period
+   const handleAddMeal = async (meal) => {
+     if (!activeSearchPeriod) return;
++    let createdLog = null;
+     try {
+-      const now = new Date();
+-      await api.post('/nutrition', {
+-        meal_name: meal.meal_name,
++      await saveMenuEntry({
++        mealName: meal.meal_name,
++        mealPeriod: activeSearchPeriod,
++        source: 'manual',
++        totalCalories: meal.total_calories,
++        totalProtein: meal.total_protein || 0,
++        totalCarbs: meal.total_carbs || 0,
++        totalFat: meal.total_fat || 0,
++        note: meal.coach_note || '',
++        foods: (meal.foods || []).map((f) => ({
++          name: f.name,
++          portion: f.portion || '',
++          calories: f.calories || 0,
++          protein: f.protein || 0,
++          carbs: f.carbs || 0,
++          fat: f.fat || 0,
++        })),
++      });
++
++      createdLog = await saveTrackingEntry({
++        mealName: meal.meal_name,
++        mealPeriod: activeSearchPeriod,
++        source: 'manual',
+         calories: meal.total_calories,
+         protein: meal.total_protein || 0,
+         carbs: meal.total_carbs || 0,
+         fat: meal.total_fat || 0,
+-        date: now,
+-        foods: (meal.foods || []).map(f => ({ name: f.name, portion: f.portion || '', calories: f.calories })),
++        foods: (meal.foods || []).map((f) => ({
++          name: f.name,
++          portion: f.portion || '',
++          calories: f.calories || 0,
++          protein: f.protein || 0,
++          carbs: f.carbs || 0,
++          fat: f.fat || 0,
++        })),
+       });
+     } catch (err) {
+       console.error('Failed to save meal to DB:', err);
+@@ -221,6 +337,8 @@ export default function NutritionDemo() {
+     setLoggedFoods(prev => ({
+       ...prev,
+       [activeSearchPeriod]: [...(prev[activeSearchPeriod] || []), {
++        _logId: createdLog?._id,
++        source: 'manual',
+         name: meal.meal_name,
+         cals: meal.total_calories,
+         protein: meal.total_protein || 0,
+@@ -231,8 +349,18 @@ export default function NutritionDemo() {
+     setActiveSearchPeriod(null);
+   };
+ 
+-  const removeFood = (periodId, index) => {
+-    setLoggedFoods(prev => {
++  const removeFood = async (periodId, index) => {
++    const target = loggedFoods[periodId]?.[index];
++    if (target?._logId) {
++      try {
++        await api.delete(`/nutrition/entry/${target._logId}`);
++      } catch (error) {
++        console.error('Failed to remove meal log:', error);
++        return;
++      }
++    }
++
++    setLoggedFoods((prev) => {
+       const updated = [...(prev[periodId] || [])];
+       updated.splice(index, 1);
+       return { ...prev, [periodId]: updated };
+@@ -282,18 +410,43 @@ export default function NutritionDemo() {
+     const now = new Date();
+     const hour = now.getHours();
+     const periodId = getPeriodId(hour);
+-    console.log(`[LogMeal] time=${now.toLocaleTimeString()} hour=${hour} → periodId=${periodId}`);
+-
+-    // Save to DB
++    let createdLog = null;
+     try {
+-      await api.post('/nutrition', {
+-        meal_name: meal.meal_name,
++      await saveMenuEntry({
++        mealName: meal.meal_name,
++        mealPeriod: periodId,
++        source: 'ai',
++        totalCalories: meal.total_calories,
++        totalProtein: meal.total_protein || 0,
++        totalCarbs: meal.total_carbs || 0,
++        totalFat: meal.total_fat || 0,
++        note: meal.coach_note || '',
++        foods: (meal.foods || []).map((f) => ({
++          name: f.name,
++          portion: f.portion || '',
++          calories: f.calories || 0,
++          protein: f.protein || 0,
++          carbs: f.carbs || 0,
++          fat: f.fat || 0,
++        })),
++      });
++
++      createdLog = await saveTrackingEntry({
++        mealName: meal.meal_name,
++        mealPeriod: periodId,
++        source: 'ai',
+         calories: meal.total_calories,
+-        protein: meal.total_protein,
+-        carbs: meal.total_carbs,
+-        fat: meal.total_fat,
+-        date: now,
+-        foods: meal.foods.map(f => ({ name: f.name, portion: f.portion, calories: f.calories })),
++        protein: meal.total_protein || 0,
++        carbs: meal.total_carbs || 0,
++        fat: meal.total_fat || 0,
++        foods: (meal.foods || []).map((f) => ({
++          name: f.name,
++          portion: f.portion || '',
++          calories: f.calories || 0,
++          protein: f.protein || 0,
++          carbs: f.carbs || 0,
++          fat: f.fat || 0,
++        })),
+       });
+     } catch (err) {
+       console.error('Failed to save meal to DB:', err);
+@@ -303,12 +456,14 @@ export default function NutritionDemo() {
+     setLoggedFoods(prev => ({
+       ...prev,
+       [periodId]: [...(prev[periodId] || []), {
++        _logId: createdLog?._id,
++        source: 'ai',
+         name: meal.meal_name,
+         cals: meal.total_calories,
+         protein: meal.total_protein,
+         carbs: meal.total_carbs,
+         fat: meal.total_fat,
+-        _aiTime: now.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }),
++        _aiTime: format(now, 'HH:mm'),
+       }]
+     }));
+ 
+@@ -365,8 +520,8 @@ export default function NutritionDemo() {
+ 
+         <button
+           onClick={requestMealPlan}
+-          disabled={isTrackingOnlyMode}
+-          className={`relative overflow-hidden rounded-xl p-4 border border-[#2A2A2A] bg-gradient-to-br from-[#1A1A1A] to-[#0D0D0D] transition-all group ${isTrackingOnlyMode
++          disabled={isTrackingOnlyMode || currentPeriodHasAIMeal}
++          className={`relative overflow-hidden rounded-xl p-4 border border-[#2A2A2A] bg-gradient-to-br from-[#1A1A1A] to-[#0D0D0D] transition-all group ${(isTrackingOnlyMode || currentPeriodHasAIMeal)
+             ? 'opacity-50 cursor-not-allowed'
+             : 'hover:border-[#00F2FF]/30'
+             }`}
+@@ -380,6 +535,8 @@ export default function NutritionDemo() {
+               <p className="text-xs text-gray-500">
+                 {isTrackingOnlyMode
+                   ? t('nutrition.trackingOnlyModeTitle', 'Tracking-only mode is active')
++                  : currentPeriodHasAIMeal
++                    ? t('nutrition.aiMealAlreadySaved', 'AI meal already saved for this meal period')
+                   : t('nutrition.aiPowered', 'AI Powered')}
+               </p>
+             </div>
+diff --git a/src/pages/Onboarding.jsx b/src/pages/Onboarding.jsx
+index cf9e959..003ca30 100644
+--- a/src/pages/Onboarding.jsx
++++ b/src/pages/Onboarding.jsx
+@@ -9,6 +9,7 @@ import CoachSummary from '@/components/onboarding/CoachSummary';
+ import BodyFatSelector from '@/components/onboarding/BodyFatSelector';
+ import PlanChoice from '@/components/onboarding/PlanChoice.jsx';
+ import NutritionPlanChoice from '@/components/onboarding/NutritionPlanChoice.jsx';
++import NutritionMenuImport from '@/components/onboarding/NutritionMenuImport.jsx';
+ import { Loader2 } from 'lucide-react';
+ 
+ const QUESTIONS = [
+@@ -158,12 +159,13 @@ export default function Onboarding() {
+   const { t } = useTranslation();
+   const navigate = useNavigate();
+   const { register, user, updateProfile } = useAuth();
+-  const [phase, setPhase] = useState('welcome'); // welcome, questions, plan_choice, plan_import, coach_selection, nutrition_plan_choice, summary, account_setup
++  const [phase, setPhase] = useState('welcome'); // welcome, questions, plan_choice, plan_import, coach_selection, nutrition_plan_choice, nutrition_menu_import, summary, account_setup
+   const [currentStep, setCurrentStep] = useState(0);
+   const [answers, setAnswers] = useState({});
+   const [coachStyle, setCoachStyle] = useState(null);
+   const [planChoice, setPlanChoice] = useState(null); // 'ai' or 'existing'
+   const [nutritionPlanChoice, setNutritionPlanChoice] = useState(null); // 'ai' | 'existing' | 'tracking_only'
++  const [customNutritionMenu, setCustomNutritionMenu] = useState([]);
+   const [customPlan, setCustomPlan] = useState(null);
+   const [isSubmitting, setIsSubmitting] = useState(false);
+   const isExperiencedUser = answers.experience_level === 'intermediate' || answers.experience_level === 'advanced';
+@@ -305,6 +307,7 @@ export default function Onboarding() {
+       plan_choice: planChoice || 'ai',
+       nutrition_plan_choice: nutritionPlanChoice || 'ai',
+       custom_plan: customPlan,
++      custom_nutrition_menu: customNutritionMenu,
+       onboarding_completed: true,
+       onboarding_date: new Date().toISOString()
+     };
+@@ -448,7 +451,9 @@ export default function Onboarding() {
+       <NutritionPlanChoice
+         onSelect={(choice) => {
+           setNutritionPlanChoice(choice);
+-          if (isExperiencedUser) {
++          if (choice === 'existing') {
++            setPhase('nutrition_menu_import');
++          } else if (isExperiencedUser) {
+             setPhase('coach_selection');
+           } else {
+             setPhase('summary');
+@@ -469,6 +474,22 @@ export default function Onboarding() {
+     );
+   }
+ 
++  if (phase === 'nutrition_menu_import') {
++    return (
++      <NutritionMenuImport
++        onComplete={(menuEntries) => {
++          setCustomNutritionMenu(menuEntries);
++          if (isExperiencedUser) {
++            setPhase('coach_selection');
++          } else {
++            setPhase('summary');
++          }
++        }}
++        onBack={() => setPhase('nutrition_plan_choice')}
++      />
++    );
++  }
++
+   // Coach Selection Phase (now after questions)
+   if (phase === 'coach_selection') {
+     return (
+diff --git a/docs/pr_change_summary.md b/docs/pr_change_summary.md
+new file mode 100644
+index 0000000..cf8699a
+--- /dev/null
++++ b/docs/pr_change_summary.md
+@@ -0,0 +1,79 @@
++# PR Change Summary
++
++## Scope
++This PR turns onboarding nutrition/menu selection and nutrition tracking into database-backed flows, and extends onboarding to persist user-entered menu data.
++
++## High-Level Changes
++- Added persistent nutrition menu storage (`NutritionMenu`) linked to `user`.
++- Extended nutrition history tracking (`NutritionLog`) with `meal_period` and `source`.
++- Added nutrition menu APIs:
++  - `GET /api/nutrition/menu`
++  - `POST /api/nutrition/menu`
++  - `DELETE /api/nutrition/entry/:id` (archive meal log)
++- Updated `NutritionDemo` to persist/reload tracking and menu data from backend APIs.
++- Added onboarding menu import step (`nutrition_menu_import`) when user chooses `Use My Existing Menu`.
++- Updated onboarding submission payload to include `custom_nutrition_menu` (transient field used server-side for DB insertion).
++- Added onboarding nutrition planner persistence logic in `userController`:
++  - Saves user-entered onboarding menu (`existing`) into `NutritionMenu`.
++  - Auto-generates starter menu entries for `ai` choice and saves to `NutritionMenu`.
++  - Updates profile statuses/source fields accordingly.
++- Added/updated i18n keys (EN/HE) for new onboarding/menu UX and nutrition status labels.
++
++## Backend Details
++### Models
++- `server/models/NutritionMenu.js` (new)
++  - User-scoped menu entries with macros, period, source, foods, archive flag.
++- `server/models/NutritionLog.js` (updated)
++  - Added `meal_period` and `source`.
++
++### Controllers and Routes
++- `server/controllers/nutritionController.js`
++  - Added menu CRUD endpoints (save/get).
++  - Added entry archive endpoint for tracking logs.
++  - Hardened meal log creation validation and sorting/filtering.
++- `server/routes/nutritionRoutes.js`
++  - Wired `/menu` and `/entry/:id` routes.
++- `server/controllers/userController.js`
++  - Added onboarding nutrition persistence helpers:
++    - sanitization for incoming `custom_nutrition_menu`
++    - AI starter menu generation from profile macros
++    - save-to-DB logic on register/profile update
++  - Strips transient onboarding payload fields before persisting profile document.
++  - Keeps profile nutrition status/source in sync with actual menu persistence.
++
++## Frontend Details
++- `src/components/onboarding/NutritionMenuImport.jsx` (new)
++  - UI for entering existing user menu during onboarding.
++- `src/pages/Onboarding.jsx`
++  - Added `nutrition_menu_import` phase.
++  - Existing-menu path now captures meals and passes them to backend via `custom_nutrition_menu`.
++- `src/pages/NutritionDemo.jsx`
++  - Loads today logs from DB and maps them to periods.
++  - Persists manual foods, described meals, and AI-generated meals.
++  - Saves menu entries + tracking entries.
++  - Archives DB log when user removes a tracked entry.
++  - Prevents duplicate AI meal save per current period.
++
++## Localization
++- Updated:
++  - `src/locales/en.json`
++  - `src/locales/he.json`
++- Added strings for onboarding nutrition import and AI-meal state copy.
++
++## Changed Files
++- `server/controllers/nutritionController.js`
++- `server/controllers/userController.js`
++- `server/models/NutritionLog.js`
++- `server/models/NutritionMenu.js` (new)
++- `server/routes/nutritionRoutes.js`
++- `src/components/onboarding/NutritionMenuImport.jsx` (new)
++- `src/locales/en.json`
++- `src/locales/he.json`
++- `src/pages/NutritionDemo.jsx`
++- `src/pages/Onboarding.jsx`
++
++## Verification (latest run in working tree)
++- `eslint` passed for updated frontend files.
++- `npm run build` passed.
++- `node --test server/tests/userProfileNormalization.test.js` passed.
++- `node --test server/tests/chatTools.test.js` passed.
+diff --git a/server/models/NutritionMenu.js b/server/models/NutritionMenu.js
+new file mode 100644
+index 0000000..ec3889c
+--- /dev/null
++++ b/server/models/NutritionMenu.js
+@@ -0,0 +1,51 @@
++const mongoose = require('mongoose');
++
++const nutritionMenuSchema = mongoose.Schema({
++    user: {
++        type: mongoose.Schema.Types.ObjectId,
++        required: true,
++        ref: 'User',
++    },
++    date: {
++        type: Date,
++        required: true,
++    },
++    meal_period: {
++        type: String,
++        default: '',
++    },
++    meal_name: {
++        type: String,
++        required: true,
++    },
++    source: {
++        type: String,
++        enum: ['ai', 'manual', 'existing', 'imported'],
++        default: 'manual',
++    },
++    total_calories: {
++        type: Number,
++        required: true,
++    },
++    total_protein: Number,
++    total_carbs: Number,
++    total_fat: Number,
++    note: String,
++    foods: [{
++        name: String,
++        portion: String,
++        calories: Number,
++        protein: Number,
++        carbs: Number,
++        fat: Number,
++    }],
++    archived: {
++        type: Boolean,
++        default: false,
++    },
++}, {
++    timestamps: true,
++});
++
++const NutritionMenu = mongoose.model('NutritionMenu', nutritionMenuSchema);
++module.exports = NutritionMenu;
+diff --git a/src/components/onboarding/NutritionMenuImport.jsx b/src/components/onboarding/NutritionMenuImport.jsx
+new file mode 100644
+index 0000000..98acc64
+--- /dev/null
++++ b/src/components/onboarding/NutritionMenuImport.jsx
+@@ -0,0 +1,183 @@
++import React, { useState } from 'react';
++import { motion, AnimatePresence } from 'framer-motion';
++import { ChevronLeft, Plus, Trash2, Check } from 'lucide-react';
++import { useTranslation } from 'react-i18next';
++import { Button } from '@/components/ui/button';
++import { Input } from '@/components/ui/input';
++
++const PERIODS = ['Breakfast', 'Lunch', 'Snack', 'Dinner', 'Evening Snack'];
++
++function createEmptyEntry(defaultPeriod = 'Breakfast') {
++  return {
++    meal_period: defaultPeriod,
++    meal_name: '',
++    total_calories: '',
++    total_protein: '',
++    total_carbs: '',
++    total_fat: '',
++    note: '',
++  };
++}
++
++export default function NutritionMenuImport({ onComplete, onBack }) {
++  const { t } = useTranslation();
++  const [entries, setEntries] = useState([createEmptyEntry()]);
++
++  const updateEntry = (index, field, value) => {
++    setEntries((prev) => prev.map((entry, i) => (
++      i === index ? { ...entry, [field]: value } : entry
++    )));
++  };
++
++  const addEntry = () => {
++    setEntries((prev) => [...prev, createEmptyEntry()]);
++  };
++
++  const removeEntry = (index) => {
++    setEntries((prev) => prev.filter((_, i) => i !== index));
++  };
++
++  const cleanedEntries = entries
++    .map((entry) => ({
++      ...entry,
++      meal_name: entry.meal_name.trim(),
++      total_calories: Number(entry.total_calories || 0),
++      total_protein: Number(entry.total_protein || 0),
++      total_carbs: Number(entry.total_carbs || 0),
++      total_fat: Number(entry.total_fat || 0),
++      note: entry.note.trim(),
++    }))
++    .filter((entry) => entry.meal_name && entry.total_calories > 0);
++
++  const hasValidMenu = cleanedEntries.length > 0;
++
++  return (
++    <motion.div
++      initial={{ opacity: 0 }}
++      animate={{ opacity: 1 }}
++      className="min-h-screen flex flex-col px-4 py-6"
++    >
++      <div className="mb-6">
++        <button
++          onClick={onBack}
++          className="flex items-center gap-2 text-gray-500 mb-4 hover:text-white transition-colors"
++        >
++          <ChevronLeft className="w-4 h-4" />
++          {t('common.back', 'Back')}
++        </button>
++        <h1 className="text-2xl font-bold mb-1">
++          {t('onboarding.nutritionMenuImport.title', 'Add Your Menu')}
++        </h1>
++        <p className="text-gray-500 text-sm">
++          {t('onboarding.nutritionMenuImport.subtitle', 'Add meals you already use so we can save them to your account')}
++        </p>
++      </div>
++
++      <div className="flex-1 space-y-3 overflow-y-auto pr-1">
++        <AnimatePresence>
++          {entries.map((entry, index) => (
++            <motion.div
++              key={index}
++              initial={{ opacity: 0, y: 10 }}
++              animate={{ opacity: 1, y: 0 }}
++              exit={{ opacity: 0, y: -10 }}
++              className="bg-[#1A1A1A] rounded-xl p-4 border border-[#2A2A2A] space-y-3"
++            >
++              <div className="flex items-center gap-2">
++                <select
++                  value={entry.meal_period}
++                  onChange={(e) => updateEntry(index, 'meal_period', e.target.value)}
++                  className="bg-[#0A0A0A] border border-[#2A2A2A] rounded-lg px-3 py-2 text-sm"
++                >
++                  {PERIODS.map((period) => (
++                    <option key={period} value={period}>
++                      {period}
++                    </option>
++                  ))}
++                </select>
++                <Input
++                  value={entry.meal_name}
++                  onChange={(e) => updateEntry(index, 'meal_name', e.target.value)}
++                  placeholder={t('onboarding.nutritionMenuImport.mealName', 'Meal name')}
++                  className="flex-1 bg-[#0A0A0A] border-[#2A2A2A]"
++                />
++                {entries.length > 1 && (
++                  <button
++                    onClick={() => removeEntry(index)}
++                    className="p-2 text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
++                  >
++                    <Trash2 className="w-4 h-4" />
++                  </button>
++                )}
++              </div>
++
++              <div className="grid grid-cols-2 gap-2">
++                <Input
++                  type="number"
++                  min="0"
++                  value={entry.total_calories}
++                  onChange={(e) => updateEntry(index, 'total_calories', e.target.value)}
++                  placeholder={t('onboarding.nutritionMenuImport.calories', 'Calories')}
++                  className="bg-[#0A0A0A] border-[#2A2A2A]"
++                />
++                <Input
++                  type="number"
++                  min="0"
++                  value={entry.total_protein}
++                  onChange={(e) => updateEntry(index, 'total_protein', e.target.value)}
++                  placeholder={t('common.protein', 'Protein')}
++                  className="bg-[#0A0A0A] border-[#2A2A2A]"
++                />
++                <Input
++                  type="number"
++                  min="0"
++                  value={entry.total_carbs}
++                  onChange={(e) => updateEntry(index, 'total_carbs', e.target.value)}
++                  placeholder={t('common.carbs', 'Carbs')}
++                  className="bg-[#0A0A0A] border-[#2A2A2A]"
++                />
++                <Input
++                  type="number"
++                  min="0"
++                  value={entry.total_fat}
++                  onChange={(e) => updateEntry(index, 'total_fat', e.target.value)}
++                  placeholder={t('common.fat', 'Fat')}
++                  className="bg-[#0A0A0A] border-[#2A2A2A]"
++                />
++              </div>
++
++              <Input
++                value={entry.note}
++                onChange={(e) => updateEntry(index, 'note', e.target.value)}
++                placeholder={t('onboarding.nutritionMenuImport.note', 'Optional note')}
++                className="bg-[#0A0A0A] border-[#2A2A2A]"
++              />
++            </motion.div>
++          ))}
++        </AnimatePresence>
++
++        <button
++          onClick={addEntry}
++          className="w-full py-3 rounded-xl border-2 border-dashed border-[#2A2A2A] text-gray-500 hover:border-[#00F2FF] hover:text-[#00F2FF] transition-all flex items-center justify-center gap-2"
++        >
++          <Plus className="w-4 h-4" />
++          {t('onboarding.nutritionMenuImport.addMeal', 'Add Meal')}
++        </button>
++      </div>
++
++      <div className="mt-6 pt-4 border-t border-[#2A2A2A]">
++        <Button
++          onClick={() => onComplete(cleanedEntries)}
++          disabled={!hasValidMenu}
++          className={`w-full h-12 font-semibold ${hasValidMenu
++            ? 'gradient-cyan text-black'
++            : 'bg-[#1A1A1A] text-gray-500 cursor-not-allowed'
++            }`}
++        >
++          <Check className="w-4 h-4 mr-2" />
++          {t('onboarding.nutritionMenuImport.saveMenu', 'Save My Menu')}
++        </Button>
++      </div>
++    </motion.div>
++  );
++}

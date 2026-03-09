@@ -1,5 +1,28 @@
 const mongoose = require('mongoose');
 
+const TRAINER_PERSONALITY_VALUES = [
+    'drill_sergeant_coach',
+    'scientist_coach',
+    'nutritionist',
+    'zen_coach',
+];
+
+const TRAINER_PERSONALITY_ALIASES = {
+    drill_sergeant: 'drill_sergeant_coach',
+    scientist: 'scientist_coach',
+    nutritionist: 'nutritionist',
+    zen: 'zen_coach',
+    zen_coach: 'zen_coach',
+    drill_sergeant_coach: 'drill_sergeant_coach',
+    scientist_coach: 'scientist_coach',
+};
+
+function normalizeTrainerPersonality(value) {
+    if (value === undefined || value === null || value === '') return undefined;
+    const normalized = String(value).trim().toLowerCase();
+    return TRAINER_PERSONALITY_ALIASES[normalized] || 'drill_sergeant_coach';
+}
+
 const userSchema = mongoose.Schema({
     name: { type: String, required: true },
     email: { type: String, required: true, unique: true },
@@ -28,7 +51,12 @@ const userSchema = mongoose.Schema({
         protein_goal: Number,
         carbs_goal: Number,
         fat_goal: Number,
-        trainer_personality: { type: String, enum: ['drill_sergeant', 'scientist', 'zen_coach'], default: 'drill_sergeant' },
+        trainer_personality: {
+            type: String,
+            enum: TRAINER_PERSONALITY_VALUES,
+            set: normalizeTrainerPersonality,
+            default: 'drill_sergeant_coach',
+        },
         plan_choice: { type: String, enum: ['ai', 'existing'], default: 'ai' },
         nutrition_plan_choice: { type: String, enum: ['ai', 'existing', 'tracking_only'], default: 'ai' },
         onboarding_completed: { type: Boolean, default: false },

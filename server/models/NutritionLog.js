@@ -8,6 +8,12 @@ const nutritionLogSchema = mongoose.Schema({
     },
     date: { type: Date, required: true },
     meal_name: { type: String, required: true },
+    meal_period: { type: String, default: '' },
+    source: {
+        type: String,
+        enum: ['ai', 'manual', 'existing', 'imported'],
+        default: 'manual',
+    },
     calories: { type: Number, required: true },
     protein: Number,
     carbs: Number,

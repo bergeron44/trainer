@@ -331,6 +331,59 @@ test('workouts_create_workout persists a new workout for the authenticated user'
     assert.equal(result.data.created.muscle_group, 'Full Body');
 });
 
+test('workouts_create_workout accepts normalized alias arguments from LLM output', async () => {
+    let createdPayload;
+    const registry = createDefaultToolRegistry({
+        models: {
+            Workout: {
+                async create(payload) {
+                    createdPayload = payload;
+                    return {
+                        _id: 'w-aliased',
+                        ...payload,
+                        createdAt: new Date('2026-03-02T00:00:00.000Z'),
+                        updatedAt: new Date('2026-03-02T00:00:00.000Z'),
+                        toObject() {
+                            return this;
+                        },
+                    };
+                },
+            },
+            WorkoutLog: {},
+            Exercise: {},
+            User: {},
+            NutritionLog: {},
+        },
+    });
+
+    const executor = new ToolExecutor({ registry });
+    const result = await executor.executeToolCall({
+        toolCall: {
+            name: 'workouts_create_workout',
+            arguments: {
+                date: '2026-03-03',
+                muscleGroup: 'Upper Body',
+                exercises: [{
+                    exercise_name: 'Push Up',
+                    sets: '3',
+                    reps: 12,
+                    restSeconds: '60',
+                }],
+                idempotency_key: 'create-aliased-1',
+            },
+        },
+        context: { userId: 'u1', requestId: 'r-create-aliased' },
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(createdPayload.user, 'u1');
+    assert.equal(createdPayload.muscle_group, 'Upper Body');
+    assert.equal(createdPayload.exercises[0].name, 'Push Up');
+    assert.equal(createdPayload.exercises[0].sets, 3);
+    assert.equal(createdPayload.exercises[0].reps, '12');
+    assert.equal(createdPayload.exercises[0].rest_seconds, 60);
+});
+
 test('nutrition_set_daily_targets updates allowlisted macro fields', async () => {
     const saved = { count: 0 };
     const userDoc = {

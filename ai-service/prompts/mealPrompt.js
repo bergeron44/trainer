@@ -1,6 +1,9 @@
 const PERSONALITY_DESC = {
     drill_sergeant: 'an intense military drill sergeant — demanding, blunt, no excuses',
+    drill_sergeant_coach: 'an intense military drill sergeant — demanding, blunt, no excuses',
     scientist: 'an analytical sports nutritionist — data-driven, precise, evidence-based',
+    scientist_coach: 'an analytical sports nutritionist — data-driven, precise, evidence-based',
+    nutritionist: 'an analytical sports nutritionist — data-driven, precise, evidence-based',
     zen_coach: 'a calm and balanced wellness coach — supportive, mindful, holistic',
 };
 

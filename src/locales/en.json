@@ -75,8 +75,8 @@
         "creatingPlan": "Creating your plan...",
         "analyzingData": "Analyzing your data and building your personalized program",
         "planChoice": {
-            "title": "You're Experienced!",
-            "subtitle": "Would you like to build a new plan or import your existing routine?",
+            "title": "Your Workout Plan",
+            "subtitle": "Would you like AI to build your workouts, or do you want to use your own routine?",
             "aiPlan": "Build New AI Plan",
             "aiPlanDesc": "Let Nexus AI create a personalized program based on your goals",
             "existingRoutine": "Use My Current Routine",
@@ -93,6 +93,15 @@
             "trackingOnly": "Tracking Only",
             "trackingOnlyDesc": "Skip meal planning and just use nutrition tracking tools",
             "changeLater": "You can always change this later in settings"
+        },
+        "nutritionMenuImport": {
+            "title": "Add Your Menu",
+            "subtitle": "Add meals you already use so we can save them to your account",
+            "mealName": "Meal name",
+            "calories": "Calories",
+            "note": "Optional note",
+            "addMeal": "Add Meal",
+            "saveMenu": "Save My Menu"
         },
         "questions": {
             "age": "How old are you?",
@@ -256,6 +265,12 @@
         "allRatedSub": "You can request a meal from the AI coach",
         "trackingOnlyModeTitle": "Tracking-only mode is active",
         "trackingOnlyModeDesc": "AI meal planning is disabled for your account settings. You can still track all meals here.",
+        "aiMealAlreadySaved": "AI meal already saved for this meal period",
+        "savedPlanForPeriod": "Saved plan for this meal period:",
+        "noMealLoggedForPeriod": "No food logged for this meal period yet.",
+        "addFoodToStartTracking": "Add food manually to start tracking.",
+        "useAiOrManualToStart": "Use Plan Meal or Add Food to create this meal.",
+        "demoNotice": "Meals and saved menus on this page are tied to your account data.",
         "requestMeal": "Request a Meal",
         "sessionDone": "Session Complete!",
         "savingPrefs": "Saving your preferences..."
