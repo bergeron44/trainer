@@ -10,6 +10,8 @@ const {
     getActiveSession,
     generateWorkoutPlan,
     retryOnboardingWorkoutPlan,
+    completeSession,
+    logExerciseSet,
 } = require('../controllers/workoutController');
 const { protect } = require('../middleware/authMiddleware');
 const Workout = require('../models/Workout');
@@ -33,6 +35,8 @@ router.delete('/reset', protect, asyncHandler(async (req, res) => {
 
 router.route('/session').post(protect, startSession);
 router.route('/session/active').get(protect, getActiveSession);
+router.route('/session/:id/complete').put(protect, completeSession);
+router.route('/session/:id/log').post(protect, logExerciseSet);
 router.route('/:id').get(protect, getWorkout).put(protect, updateWorkout).delete(protect, deleteWorkout);
 
 module.exports = router;

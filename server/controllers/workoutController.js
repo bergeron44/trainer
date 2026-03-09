@@ -116,8 +116,17 @@ const startSession = asyncHandler(async (req, res) => {
     });
 
     if (existingSession) {
-        res.status(400);
-        throw new Error('Active session already exists');
+        // If the active session is from a different day, abandon it and allow a new one
+        const today = new Date().toISOString().slice(0, 10);
+        const sessionDay = new Date(existingSession.start_time).toISOString().slice(0, 10);
+        if (sessionDay !== today) {
+            existingSession.status = 'abandoned';
+            existingSession.end_time = new Date();
+            await existingSession.save();
+        } else {
+            // Same-day active session — return it instead of creating a duplicate
+            return res.status(200).json(existingSession);
+        }
     }
 
     const session = await WorkoutSession.create({
@@ -201,41 +210,41 @@ const generateWorkoutPlan = asyncHandler(async (req, res) => {
     // Helper: map an Exercise doc → workout exercise entry
     function toWorkoutEx(ex) {
         return {
-            name:         ex.name,
-            sets:         ex.default_sets,
-            reps:         ex.default_reps,
+            name: ex.name,
+            sets: ex.default_sets,
+            reps: ex.default_reps,
             rest_seconds: ex.rest_seconds,
-            weight:       0,
+            weight: 0,
         };
     }
 
     // Fetch exercises from DB grouped by movement pattern
     const [pushExercises, pullExercises, legsExercises, coreExercises, cardioExercises, fullBodyExercises] =
         await Promise.all([
-            Exercise.find({ movement_type: 'push',     video_url: { $ne: null } }).lean(),
-            Exercise.find({ movement_type: 'pull',     video_url: { $ne: null } }).lean(),
-            Exercise.find({ movement_type: 'legs',     video_url: { $ne: null } }).lean(),
-            Exercise.find({ movement_type: 'core',     video_url: { $ne: null } }).lean(),
-            Exercise.find({ movement_type: 'cardio',   video_url: { $ne: null } }).lean(),
-            Exercise.find({ movement_type: 'full_body',video_url: { $ne: null } }).lean(),
+            Exercise.find({ movement_type: 'push', video_url: { $ne: null } }).lean(),
+            Exercise.find({ movement_type: 'pull', video_url: { $ne: null } }).lean(),
+            Exercise.find({ movement_type: 'legs', video_url: { $ne: null } }).lean(),
+            Exercise.find({ movement_type: 'core', video_url: { $ne: null } }).lean(),
+            Exercise.find({ movement_type: 'cardio', video_url: { $ne: null } }).lean(),
+            Exercise.find({ movement_type: 'full_body', video_url: { $ne: null } }).lean(),
         ]);
 
     // Define workout day "slots" per goal — each slot picks from a pool
     const DAY_TEMPLATES = {
         muscle_gain: [
-            { group: 'Push',  pools: [{ src: pushExercises,  compound: 2, isolation: 3 }] },
-            { group: 'Pull',  pools: [{ src: pullExercises,  compound: 2, isolation: 3 }] },
-            { group: 'Legs',  pools: [{ src: legsExercises,  compound: 2, isolation: 3 }] },
+            { group: 'Push', pools: [{ src: pushExercises, compound: 2, isolation: 3 }] },
+            { group: 'Pull', pools: [{ src: pullExercises, compound: 2, isolation: 3 }] },
+            { group: 'Legs', pools: [{ src: legsExercises, compound: 2, isolation: 3 }] },
         ],
         weight_loss: [
-            { group: 'Full Body Circuit', pools: [{ src: cardioExercises,  compound: 3, isolation: 2 }, { src: fullBodyExercises, compound: 1, isolation: 0 }] },
-            { group: 'Upper + Core',      pools: [{ src: pushExercises,    compound: 2, isolation: 1 }, { src: coreExercises,     compound: 0, isolation: 2 }] },
-            { group: 'Lower HIIT',        pools: [{ src: legsExercises,    compound: 2, isolation: 2 }, { src: cardioExercises,   compound: 0, isolation: 1 }] },
+            { group: 'Full Body Circuit', pools: [{ src: cardioExercises, compound: 3, isolation: 2 }, { src: fullBodyExercises, compound: 1, isolation: 0 }] },
+            { group: 'Upper + Core', pools: [{ src: pushExercises, compound: 2, isolation: 1 }, { src: coreExercises, compound: 0, isolation: 2 }] },
+            { group: 'Lower HIIT', pools: [{ src: legsExercises, compound: 2, isolation: 2 }, { src: cardioExercises, compound: 0, isolation: 1 }] },
         ],
         athletic_performance: [
-            { group: 'Power & Speed',      pools: [{ src: fullBodyExercises, compound: 2, isolation: 1 }, { src: cardioExercises,  compound: 0, isolation: 2 }] },
-            { group: 'Agility & Core',     pools: [{ src: coreExercises,    compound: 2, isolation: 2 }, { src: cardioExercises,  compound: 0, isolation: 1 }] },
-            { group: 'Functional Strength',pools: [{ src: pullExercises,    compound: 2, isolation: 1 }, { src: legsExercises,    compound: 2, isolation: 0 }] },
+            { group: 'Power & Speed', pools: [{ src: fullBodyExercises, compound: 2, isolation: 1 }, { src: cardioExercises, compound: 0, isolation: 2 }] },
+            { group: 'Agility & Core', pools: [{ src: coreExercises, compound: 2, isolation: 2 }, { src: cardioExercises, compound: 0, isolation: 1 }] },
+            { group: 'Functional Strength', pools: [{ src: pullExercises, compound: 2, isolation: 1 }, { src: legsExercises, compound: 2, isolation: 0 }] },
         ],
     };
 
@@ -249,7 +258,7 @@ const generateWorkoutPlan = asyncHandler(async (req, res) => {
             const heavy = src.filter(e => e.default_sets >= 4);
             const light = src.filter(e => e.default_sets < 4);
             exercises.push(...pickRandom(heavy.length ? heavy : src, compound).map(toWorkoutEx));
-            exercises.push(...pickRandom(light.length  ? light  : src, isolation).map(toWorkoutEx));
+            exercises.push(...pickRandom(light.length ? light : src, isolation).map(toWorkoutEx));
         }
         // Deduplicate by name (in case same exercise appears in multiple pools)
         const seen = new Set();
@@ -257,7 +266,7 @@ const generateWorkoutPlan = asyncHandler(async (req, res) => {
     }
 
     let planTemplate = daySlots.map(slot => ({
-        group:     slot.group,
+        group: slot.group,
         exercises: buildDayExercises(slot),
     }));
 
@@ -368,6 +377,77 @@ const retryOnboardingWorkoutPlan = asyncHandler(async (req, res) => {
 });
 
 
+// @desc    Complete a workout session
+// @route   PUT /api/workouts/session/:id/complete
+// @access  Private
+const completeSession = asyncHandler(async (req, res) => {
+    const session = await WorkoutSession.findOne({
+        _id: req.params.id,
+        user: req.user.id,
+    });
+
+    if (!session) {
+        res.status(404);
+        throw new Error('Session not found');
+    }
+
+    if (session.status === 'completed') {
+        return res.status(200).json(session);
+    }
+
+    const { completed_exercises, total_volume } = req.body;
+
+    session.end_time = new Date();
+    session.status = 'completed';
+    if (completed_exercises) session.completed_exercises = completed_exercises;
+    if (total_volume != null) session.total_volume = total_volume;
+
+    // Calculate XP: 10 per exercise completed + volume bonus
+    const exerciseXp = (completed_exercises?.length || 0) * 10;
+    const volumeXp = Math.floor((total_volume || 0) / 100);
+    session.xp_earned = exerciseXp + volumeXp;
+
+    await session.save();
+    res.status(200).json(session);
+});
+
+// @desc    Log individual exercise set
+// @route   POST /api/workouts/session/:id/log
+// @access  Private
+const WorkoutLog = require('../models/WorkoutLog');
+
+const logExerciseSet = asyncHandler(async (req, res) => {
+    const session = await WorkoutSession.findOne({
+        _id: req.params.id,
+        user: req.user.id,
+    });
+
+    if (!session) {
+        res.status(404);
+        throw new Error('Session not found');
+    }
+
+    const { exercise_name, set_number, reps_completed, weight_used, rpe } = req.body;
+
+    if (!exercise_name || set_number == null || reps_completed == null || weight_used == null) {
+        res.status(400);
+        throw new Error('exercise_name, set_number, reps_completed, and weight_used are required');
+    }
+
+    const log = await WorkoutLog.create({
+        user: req.user.id,
+        workout_id: session.workout_id,
+        exercise_name,
+        set_number,
+        reps_completed,
+        weight_used,
+        date: new Date(),
+        rpe: rpe || undefined,
+    });
+
+    res.status(201).json(log);
+});
+
 
 module.exports = {
     getWorkouts,
@@ -379,4 +459,6 @@ module.exports = {
     getActiveSession,
     generateWorkoutPlan,
     retryOnboardingWorkoutPlan,
+    completeSession,
+    logExerciseSet,
 };

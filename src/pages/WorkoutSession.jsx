@@ -284,6 +284,7 @@ export default function WorkoutSession() {
   const [sessionStats, setSessionStats] = useState(null);
   const [sessionStartTime] = useState(Date.now());
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [sessionDbId, setSessionDbId] = useState(null);
 
   // Exercise media data
   const [exerciseMap, setExerciseMap] = useState({});
@@ -337,6 +338,24 @@ export default function WorkoutSession() {
     workout.exercises.forEach(ex => fetchExercise(ex.name));
   }, [workout?.exercises?.length, gender]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Start or resume DB session when workout loads ──
+  useEffect(() => {
+    if (!workoutId) return;
+    const initSession = async () => {
+      try {
+        const activeRes = await api.get('/workouts/session/active');
+        if (activeRes.data?._id) { setSessionDbId(activeRes.data._id); return; }
+      } catch (_) { /* none active */ }
+      try {
+        const res = await api.post('/workouts/session', { workout_id: workoutId });
+        if (res.data?._id) setSessionDbId(res.data._id);
+      } catch (err) {
+        console.error('Failed to start session:', err);
+      }
+    };
+    initSession();
+  }, [workoutId]);
+
   // ── IntersectionObserver: track visible slide, play/pause videos ──
   useEffect(() => {
     if (!workout?.exercises?.length) return;
@@ -389,18 +408,18 @@ export default function WorkoutSession() {
         duration_minutes: sessionDuration
       });
 
-      await api.post('/workouts/session', {
-        workout_id: workoutId,
-        start_time: new Date(sessionStartTime).toISOString(),
-        end_time: new Date().toISOString(),
-        completed_exercises: workout.exercises.map(ex => ({
-          exercise_id: ex.id,
-          sets_completed: completedSets[ex.id] || 0,
-          time_spent: 0
-        })),
-        xp_earned: xpEarned,
-        status: 'completed'
-      });
+      if (sessionDbId) {
+        await api.put(`/workouts/session/${sessionDbId}/complete`, {
+          completed_exercises: workout.exercises
+            .filter(ex => (completedSets[ex.id] || 0) > 0)
+            .map(ex => ({
+              exercise_id: ex.id,
+              sets_completed: completedSets[ex.id] || 0,
+            })),
+          total_volume: workout.exercises.reduce((sum, ex) =>
+            sum + (ex.weight || 0) * (completedSets[ex.id] || 0) * (parseInt(ex.reps) || 0), 0),
+        });
+      }
     } catch (error) {
       console.error('Failed to save session:', error);
     }

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import api from '@/api/axios';
+import aiApi from '@/api/aiAxios';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
 import { X, Trophy, Clock, Flame, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -75,21 +76,21 @@ export default function LiveSession() {
   const [sessionStats, setSessionStats] = useState({ duration: 0, volume: 0, setsCompleted: 0 });
   const [pulsePhase, setPulsePhase] = useState('idle');
   const [sessionStartTime] = useState(Date.now());
+  const [sessionDbId, setSessionDbId] = useState(null);
 
   useEffect(() => {
     setCoachMessage(getTranslatedMessage('start'));
   }, [getTranslatedMessage]);
 
-  // Load workout
+  // Load workout + start DB session
   useEffect(() => {
     const today = format(new Date(), 'yyyy-MM-dd');
-    const savedWorkouts = localStorage.getItem('nexus_workouts');
+    const savedWorkouts = localStorage.getItem('nexus_live_workouts');
+    let loadedWorkout = null;
     if (savedWorkouts) {
       const workouts = JSON.parse(savedWorkouts);
-      const todaysWorkout = workouts.find(w => w.date === today);
-      if (todaysWorkout) {
-        setWorkout(todaysWorkout);
-      }
+      loadedWorkout = workouts.find(w => format(new Date(w.date), 'yyyy-MM-dd') === today) || null;
+      if (loadedWorkout) setWorkout(loadedWorkout);
     }
 
     // Load completed sets
@@ -97,6 +98,28 @@ export default function LiveSession() {
     if (savedSets) {
       setCompletedSets(JSON.parse(savedSets));
     }
+
+    // Start or resume a DB session
+    const initSession = async () => {
+      try {
+        // Check for existing active session first
+        const activeRes = await api.get('/workouts/session/active');
+        if (activeRes.data?._id) {
+          setSessionDbId(activeRes.data._id);
+          return;
+        }
+      } catch (_) { /* no active session */ }
+
+      if (!loadedWorkout?._id) return;
+      try {
+        const res = await api.post('/workouts/session', { workout_id: loadedWorkout._id });
+        if (res.data?._id) setSessionDbId(res.data._id);
+      } catch (err) {
+        console.error('Failed to start workout session:', err);
+      }
+    };
+
+    initSession();
   }, []);
 
   // Session timer
@@ -120,12 +143,23 @@ export default function LiveSession() {
 
     // Update stats
     const exercise = workout?.exercises.find(e => e.id === exerciseId);
+    const addedVolume = exercise ? (exercise.weight || 0) * (parseInt(exercise.reps) || 0) : 0;
     if (exercise) {
       setSessionStats(prev => ({
         ...prev,
-        volume: prev.volume + (exercise.weight || 0) * parseInt(exercise.reps) || 0,
+        volume: prev.volume + addedVolume,
         setsCompleted: prev.setsCompleted + 1
       }));
+    }
+
+    // Log set to DB (fire and forget)
+    if (sessionDbId && exercise) {
+      api.post(`/workouts/session/${sessionDbId}/log`, {
+        exercise_name: exercise.name,
+        set_number: setNumber,
+        reps_completed: parseInt(exercise.reps) || 0,
+        weight_used: exercise.weight || 0,
+      }).catch(err => console.error('Failed to log set:', err));
     }
 
     // Coach feedback
@@ -134,7 +168,7 @@ export default function LiveSession() {
       setCoachMessage(getTranslatedMessage('setComplete'));
       setIsCoachTyping(false);
     }, 800);
-  }, [completedSets, workout, getTranslatedMessage]);
+  }, [completedSets, workout, sessionDbId, getTranslatedMessage]);
 
   const handleFeedback = useCallback(async (feedback) => {
     setIsCoachTyping(true);
@@ -165,7 +199,7 @@ export default function LiveSession() {
       } else if (feedback.energy === 'custom') {
         // Use custom backend API for mock LLM response
         try {
-          const { data } = await api.post('/chat/response', {
+          const { data } = await aiApi.post('/chat/response', {
             prompt: `You are a fitness coach. The user just said: "${feedback.label}". Give a brief, encouraging response (1-2 sentences max). Be motivational but practical.`
           });
           setCoachMessage(data.response);
@@ -198,6 +232,23 @@ export default function LiveSession() {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const handleFinishSession = useCallback(async () => {
+    if (sessionDbId) {
+      try {
+        await api.put(`/workouts/session/${sessionDbId}/complete`, {
+          completed_exercises: Object.keys(completedSets).map(exerciseId => ({
+            exercise_id: exerciseId,
+            sets_completed: completedSets[exerciseId] || 0,
+          })),
+          total_volume: sessionStats.volume,
+        });
+      } catch (err) {
+        console.error('Failed to complete session:', err);
+      }
+    }
+    navigate(createPageUrl('Dashboard'));
+  }, [sessionDbId, completedSets, sessionStats.volume, navigate]);
+
   const currentExercise = workout?.exercises[currentExerciseIndex];
   const totalExercises = workout?.exercises?.length || 0;
 
@@ -229,7 +280,7 @@ export default function LiveSession() {
         {/* Session stats bar */}
         <div className="flex items-center justify-between px-4 py-3">
           <button
-            onClick={() => navigate(createPageUrl('Dashboard'))}
+            onClick={handleFinishSession}
             className="p-2 hover:bg-[#1A1A1A] rounded-full"
           >
             <X className="w-5 h-5 text-gray-400" />
