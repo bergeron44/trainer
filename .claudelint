@@ -1,0 +1,24 @@
+
+> trainer-app@1.0.0 lint
+> eslint . --quiet
+
+
+/Users/ronberger/Downloads/trainer/src/components/dashboard/ExercisePreviewCard.jsx
+  3:16  error  'Dumbbell' is defined but never used  unused-imports/no-unused-imports
+
+/Users/ronberger/Downloads/trainer/src/components/nutrition/MealPlanCard.jsx
+  2:18  error  'AnimatePresence' is defined but never used  unused-imports/no-unused-imports
+
+/Users/ronberger/Downloads/trainer/src/components/workouts/WorkoutReelsPreview.jsx
+  3:23  error  'ChevronRight' is defined but never used  unused-imports/no-unused-imports
+
+/Users/ronberger/Downloads/trainer/src/pages/WorkoutSession.jsx
+  6:18  error  'AnimatePresence' is defined but never used  unused-imports/no-unused-imports
+  9:3   error  'SkipForward' is defined but never used      unused-imports/no-unused-imports
+  9:56  error  'Play' is defined but never used             unused-imports/no-unused-imports
+  9:62  error  'Pause' is defined but never used            unused-imports/no-unused-imports
+  9:69  error  'RotateCcw' is defined but never used        unused-imports/no-unused-imports
+
+✖ 8 problems (8 errors, 0 warnings)
+  8 errors and 0 warnings potentially fixable with the `--fix` option.
+

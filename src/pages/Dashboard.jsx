@@ -148,6 +148,15 @@ export default function Dashboard() {
     }
   };
 
+  const handleSwapRequest = (exercise) => {
+    window.dispatchEvent(new CustomEvent('nexus:open-coach-chat', {
+      detail: {
+        prefill: `I'd like to swap out the exercise "${exercise.name}" from today's workout. Can you suggest a similar alternative that targets the same muscle group?`,
+        context: 'Dashboard - Exercise Swap',
+      }
+    }));
+  };
+
   const handleOpenEditor = (plan) => {
     const saved = localStorage.getItem('nexus_live_workouts');
     let workouts = saved ? JSON.parse(saved) : [];
@@ -399,6 +408,7 @@ export default function Dashboard() {
                 exercise={exercise}
                 index={index}
                 onClick={handleExerciseClick}
+                onSwapRequest={handleSwapRequest}
               />
             ))}
           </div>

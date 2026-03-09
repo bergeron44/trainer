@@ -1190,6 +1190,7 @@ export default function NutritionDemo() {
         onClose={() => setChatOpen(false)}
         context="Nutrition"
         coachStyle={coachStyle}
+        onPrefillConsumed={() => {}}
       />
 
       {/* Manual Food Entry Sheet */}

@@ -1,66 +1,93 @@
-import React from 'react';
-import { motion } from 'framer-motion';
-import { Play, Dumbbell } from 'lucide-react';
+import React, { useRef } from 'react';
+import { motion, useMotionValue, useTransform, useAnimation } from 'framer-motion';
+import { ArrowLeftRight } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-export default function ExercisePreviewCard({ exercise, index, onClick }) {
+const SWIPE_THRESHOLD = -80;
+
+export default function ExercisePreviewCard({ exercise, index, onClick, onSwapRequest }) {
     const { t } = useTranslation();
+    const dragX = useMotionValue(0);
+    const controls = useAnimation();
+    const swapOpacity = useTransform(dragX, [-120, -60, 0], [1, 0.6, 0]);
+    const swapScale = useTransform(dragX, [-120, -60, 0], [1, 0.85, 0.7]);
+
+    const handleDragEnd = (_, info) => {
+        if (info.offset.x < SWIPE_THRESHOLD) {
+            controls.start({ x: 0, transition: { type: 'spring', stiffness: 400, damping: 30 } });
+            onSwapRequest?.(exercise);
+        } else {
+            controls.start({ x: 0, transition: { type: 'spring', stiffness: 400, damping: 30 } });
+        }
+    };
 
     return (
-        <motion.button
-            initial={{ opacity: 0, y: 20 }}
+        <motion.div
+            initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.06, type: 'spring', stiffness: 300, damping: 25 }}
-            onClick={() => onClick?.(index)}
-            className="w-full group relative overflow-hidden rounded-2xl border border-[#2A2A2A] bg-gradient-to-br from-[#1A1A1A] to-[#111111] hover:border-[#00F2FF]/40 transition-all duration-300 text-left"
-            style={{ height: '25vh', minHeight: '140px', maxHeight: '200px' }}
+            transition={{ delay: index * 0.04, type: 'spring', stiffness: 320, damping: 28 }}
+            className="relative overflow-hidden rounded-xl"
+            style={{ height: '56px' }}
         >
-            {/* Subtle gradient accent on the left */}
-            <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-[#00F2FF] to-[#CCFF00] rounded-l-2xl opacity-60 group-hover:opacity-100 transition-opacity" />
+            {/* Swap action background — revealed on drag */}
+            <motion.div
+                className="absolute inset-0 rounded-xl flex items-center justify-end pr-5 gap-2"
+                style={{
+                    background: 'linear-gradient(135deg, #00F2FF 0%, #00A8B5 100%)',
+                    opacity: swapOpacity,
+                }}
+            >
+                <motion.div style={{ scale: swapScale }} className="flex items-center gap-1.5">
+                    <ArrowLeftRight className="w-4 h-4 text-black" />
+                    <span className="text-black text-xs font-bold tracking-wide">
+                        {t('dashboard.swapExercise', 'Swap')}
+                    </span>
+                </motion.div>
+            </motion.div>
 
-            {/* Content */}
-            <div className="relative h-full flex items-center justify-between px-5 py-4">
-                {/* Left side — exercise info */}
-                <div className="flex items-center gap-4 flex-1 min-w-0">
-                    {/* Number badge */}
-                    <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-[#00F2FF]/10 border border-[#00F2FF]/20 flex items-center justify-center">
-                        <span className="text-[#00F2FF] font-bold text-lg">{index + 1}</span>
-                    </div>
+            {/* Draggable card */}
+            <motion.button
+                drag="x"
+                dragConstraints={{ left: -140, right: 0 }}
+                dragElastic={0.25}
+                dragMomentum={false}
+                animate={controls}
+                onDragEnd={handleDragEnd}
+                onClick={() => onClick?.(index)}
+                className="absolute inset-0 w-full h-full flex items-center gap-3 px-4 rounded-xl text-left cursor-grab active:cursor-grabbing select-none border border-[#1E1E1E] hover:border-[#00F2FF]/30 transition-colors"
+                style={{
+                    x: dragX,
+                    background: 'linear-gradient(135deg, #141414 0%, #1A1A1A 50%, #1E1E1E 100%)',
+                }}
+            >
+                {/* Subtle left accent line */}
+                <div className="absolute left-0 top-2 bottom-2 w-[2px] rounded-full"
+                    style={{ background: 'linear-gradient(180deg, #00F2FF, #CCFF00)' }}
+                />
 
-                    <div className="min-w-0 flex-1">
-                        <h3 className="font-bold text-lg text-white truncate group-hover:text-[#00F2FF] transition-colors">
-                            {exercise.name}
-                        </h3>
-                        <div className="flex items-center gap-3 mt-1.5">
-                            <span className="text-sm text-gray-400">
-                                <span className="text-[#00F2FF] font-semibold">{exercise.sets}</span> {t('common.sets', 'sets')}
-                            </span>
-                            <span className="text-[#2A2A2A]">·</span>
-                            <span className="text-sm text-gray-400">
-                                <span className="text-[#00F2FF] font-semibold">{exercise.reps}</span> {t('session.reps', 'reps')}
-                            </span>
-                            {exercise.weight > 0 && (
-                                <>
-                                    <span className="text-[#2A2A2A]">·</span>
-                                    <span className="text-sm text-gray-400">
-                                        <span className="text-[#CCFF00] font-semibold">{exercise.weight}</span> {t('common.kg', 'kg')}
-                                    </span>
-                                </>
-                            )}
-                        </div>
-                    </div>
+                {/* Index circle */}
+                <div className="flex-shrink-0 w-7 h-7 rounded-full bg-[#00F2FF]/10 border border-[#00F2FF]/25 flex items-center justify-center ml-1">
+                    <span className="text-[#00F2FF] font-bold text-xs">{index + 1}</span>
                 </div>
 
-                {/* Right side — play icon */}
-                <div className="flex-shrink-0 w-12 h-12 rounded-full bg-[#00F2FF]/10 border border-[#00F2FF]/20 flex items-center justify-center group-hover:bg-[#00F2FF]/20 group-hover:scale-110 transition-all duration-300">
-                    <Play className="w-5 h-5 text-[#00F2FF] ml-0.5" />
-                </div>
-            </div>
+                {/* Exercise name */}
+                <span className="flex-1 font-semibold text-sm text-white/90 truncate">
+                    {exercise.name}
+                </span>
 
-            {/* Hover glow effect */}
-            <div className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
-                style={{ boxShadow: 'inset 0 0 30px rgba(0, 242, 255, 0.05)' }}
-            />
-        </motion.button>
+                {/* Sets × Reps pill */}
+                <div className="flex-shrink-0 flex items-center gap-1 bg-white/5 rounded-full px-2.5 py-0.5 border border-white/10">
+                    <span className="text-[#00F2FF] text-xs font-bold">{exercise.sets}</span>
+                    <span className="text-gray-500 text-[10px]">×</span>
+                    <span className="text-[#00F2FF] text-xs font-bold">{exercise.reps}</span>
+                </div>
+
+                {exercise.weight > 0 && (
+                    <div className="flex-shrink-0 bg-[#CCFF00]/10 rounded-full px-2 py-0.5 border border-[#CCFF00]/20">
+                        <span className="text-[#CCFF00] text-[11px] font-bold">{exercise.weight}kg</span>
+                    </div>
+                )}
+            </motion.button>
+        </motion.div>
     );
 }

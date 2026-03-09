@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s -L --max-time 8 \"https://world.openfoodfacts.org/cgi/search.pl?search_terms=chicken+breast&json=1&page_size=3&fields=product_name,image_front_url,nutriments,brands\" -H \"Accept: application/json\" -H \"Origin: http://localhost:5173\" -o /tmp/off_final.json)",
+      "Bash(python3 -c \":*)",
+      "Bash(lsof -i :5173)",
+      "Bash(node --input-type=module --eval \":*)",
+      "Bash(lsof -i :5173 -i :3000 -i :4173)",
+      "Bash(npx vite build --mode development)",
+      "Bash(node_modules/.bin/vite build)",
+      "Bash(/opt/homebrew/bin/node /opt/homebrew/bin/npx vite build)",
+      "Bash(node --version)",
+      "Bash(node node_modules/.bin/vite build)",
+      "Bash(echo \"exit:$?\")"
+    ]
+  }
+}
