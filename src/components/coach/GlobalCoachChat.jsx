@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import ReactMarkdown from 'react-markdown';
-import api from '@/api/axios';
+import aiApi from '@/api/aiAxios';
 
 const THREAD_STORAGE_KEY = 'nexus_global_chat_threads_v1';
 
@@ -79,7 +79,9 @@ export default function GlobalCoachChat({
   isOpen,
   onClose,
   context = 'General',
-  coachStyle = 'motivational'
+  coachStyle = 'motivational',
+  prefill = '',
+  onPrefillConsumed,
 }) {
   const showToolTrace = Boolean(import.meta.env.DEV);
   const [selectedAgentType, setSelectedAgentType] = useState(() => getDefaultAgentType(context));
@@ -123,7 +125,7 @@ export default function GlobalCoachChat({
     let cancelled = false;
     const loadMemories = async () => {
       try {
-        const { data } = await api.get('/chat/summaries', {
+        const { data } = await aiApi.get('/chat/summaries', {
           params: { agentType: selectedAgentType },
         });
         if (!cancelled) {
@@ -150,6 +152,14 @@ export default function GlobalCoachChat({
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Handle prefill from swipe-to-swap or other triggers
+  useEffect(() => {
+    if (isOpen && prefill) {
+      setInput(prefill);
+      if (onPrefillConsumed) onPrefillConsumed();
+    }
+  }, [isOpen, prefill]);
 
   const handleSend = async () => {
     if (!input.trim() || isTyping) return;
@@ -183,7 +193,7 @@ export default function GlobalCoachChat({
     setIsTyping(true);
 
     try {
-      const { data } = await api.post('/chat/response', {
+      const { data } = await aiApi.post('/chat/response', {
         messages: outgoingMessages,
         context: structuredContext,
         personaId,

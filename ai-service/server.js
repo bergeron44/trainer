@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const connectDB = require('./config/db');
+const { requestContext } = require('./middleware/requestContextMiddleware');
 
 dotenv.config();
 
@@ -9,6 +10,7 @@ const app = express();
 
 app.use(cors());
 app.use(express.json());
+app.use(requestContext);
 
 connectDB();
 
@@ -16,6 +18,7 @@ connectDB();
 app.use('/ai/meal', require('./routes/mealRoutes'));
 app.use('/ai/workout', require('./routes/workoutRoutes'));
 app.use('/ai/food', require('./routes/foodRoutes'));
+app.use('/ai/chat', require('./routes/chatRoutes'));
 
 // Health check
 app.get('/', (req, res) => {
@@ -27,6 +30,9 @@ app.get('/', (req, res) => {
             'POST /ai/meal/next',
             'POST /ai/workout/daily',
             'POST /ai/food/lookup',
+            'POST /ai/chat/response',
+            'GET  /ai/chat/summaries',
+            'POST /ai/chat/summaries',
         ]
     });
 });

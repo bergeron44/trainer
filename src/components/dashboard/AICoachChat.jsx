@@ -4,7 +4,7 @@ import { X, Send, Loader2, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import api from '@/api/axios';
+import aiApi from '@/api/aiAxios';
 import ReactMarkdown from 'react-markdown';
 import { useTranslation } from 'react-i18next';
 
@@ -173,7 +173,7 @@ export default function AICoachChat({
     setIsLoading(true);
 
     try {
-      const { data } = await api.post('/chat/response', {
+      const { data } = await aiApi.post('/chat/response', {
         messages: outgoingMessages,
         context: structuredContext,
         personaId,
