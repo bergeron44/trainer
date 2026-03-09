@@ -518,7 +518,7 @@ export default function NutritionDemo() {
                   ? t('nutrition.trackingOnlyModeTitle', 'Tracking-only mode is active')
                   : currentPeriodHasAIMeal
                     ? t('nutrition.aiMealAlreadySaved', 'AI meal already saved for this meal period')
-                  : t('nutrition.aiPowered', 'AI Powered')}
+                    : t('nutrition.aiPowered', 'AI Powered')}
               </p>
             </div>
           </div>
@@ -682,6 +682,16 @@ export default function NutritionDemo() {
                               <p className="text-xs text-gray-500 mt-1">
                                 {meal.total_calories || 0} {t('common.kcal', 'kcal')} • P:{meal.total_protein || 0} C:{meal.total_carbs || 0} F:{meal.total_fat || 0}
                               </p>
+                              {Array.isArray(meal.foods) && meal.foods.length > 0 && (
+                                <div className="mt-2 space-y-1">
+                                  {meal.foods.map((food, foodIndex) => (
+                                    <p key={`${meal._id}-food-${foodIndex}`} className="text-xs text-gray-400">
+                                      {food.name}
+                                      {food.portion ? ` • ${food.portion}` : ''}
+                                    </p>
+                                  ))}
+                                </div>
+                              )}
                             </div>
                             <span className="text-[10px] uppercase tracking-wide text-gray-500">
                               {meal.source || 'manual'}

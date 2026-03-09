@@ -28,6 +28,7 @@ const ChatGenerateOptionsSchema = z.object({
     maxTokens: z.number().int().positive().optional(),
     topP: z.number().min(0).max(1).optional(),
     stop: z.array(z.string().min(1)).optional(),
+    responseFormat: z.enum(['text', 'json_object']).optional(),
 }).optional();
 
 const ChatGenerateInputSchema = z.object({

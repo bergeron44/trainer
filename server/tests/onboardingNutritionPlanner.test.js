@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 
 const User = require('../models/User');
 const NutritionMenu = require('../models/NutritionMenu');
+const onboardingNutritionMenuBuilder = require('../utils/onboardingNutritionMenuBuilder');
 const { runOnboardingNutritionPlannerSafely } = require('../controllers/userController');
 const {
     AUTO_GENERATED_ONBOARDING_MENU_NOTE,
@@ -28,6 +29,7 @@ test('runOnboardingNutritionPlannerSafely creates a real AI menu when only legac
     const originalCountDocuments = NutritionMenu.countDocuments;
     const originalFind = NutritionMenu.find;
     const originalInsertMany = NutritionMenu.insertMany;
+    const originalBuildOnboardingAiNutritionMenu = onboardingNutritionMenuBuilder.buildOnboardingAiNutritionMenu;
 
     try {
         let saveCalls = 0;
@@ -58,6 +60,64 @@ test('runOnboardingNutritionPlannerSafely creates a real AI menu when only legac
             insertedDocs = docs;
             return docs;
         };
+        onboardingNutritionMenuBuilder.buildOnboardingAiNutritionMenu = async () => ({
+            menuEntries: [
+                {
+                    date: new Date('2026-03-09T00:00:00.000Z'),
+                    meal_period: 'Breakfast',
+                    meal_name: 'Breakfast Option A',
+                    source: 'ai',
+                    total_calories: 600,
+                    total_protein: 45,
+                    total_carbs: 55,
+                    total_fat: 18,
+                    note: 'AI onboarding menu via test for 2400 kcal/day',
+                    foods: [{ name: 'Chicken Breast', portion: '180g', calories: 297, protein: 56, carbs: 0, fat: 7 }],
+                },
+                {
+                    date: new Date('2026-03-09T00:00:00.000Z'),
+                    meal_period: 'Lunch',
+                    meal_name: 'Lunch Option A',
+                    source: 'ai',
+                    total_calories: 620,
+                    total_protein: 48,
+                    total_carbs: 60,
+                    total_fat: 18,
+                    note: 'AI onboarding menu via test for 2400 kcal/day',
+                    foods: [{ name: 'Rice Bowl', portion: '320g', calories: 620, protein: 48, carbs: 60, fat: 18 }],
+                },
+                {
+                    date: new Date('2026-03-09T00:00:00.000Z'),
+                    meal_period: 'Pre-Workout Snack',
+                    meal_name: 'Snack Option A',
+                    source: 'ai',
+                    total_calories: 500,
+                    total_protein: 35,
+                    total_carbs: 55,
+                    total_fat: 12,
+                    note: 'AI onboarding menu via test for 2400 kcal/day',
+                    foods: [{ name: 'Greek Yogurt Bowl', portion: '250g', calories: 500, protein: 35, carbs: 55, fat: 12 }],
+                },
+                {
+                    date: new Date('2026-03-09T00:00:00.000Z'),
+                    meal_period: 'Dinner',
+                    meal_name: 'Dinner Option A',
+                    source: 'ai',
+                    total_calories: 680,
+                    total_protein: 52,
+                    total_carbs: 40,
+                    total_fat: 25,
+                    note: 'AI onboarding menu via test for 2400 kcal/day',
+                    foods: [{ name: 'Salmon Plate', portion: '300g', calories: 680, protein: 52, carbs: 40, fat: 25 }],
+                },
+            ],
+            reasoning: {
+                meal_count: 4,
+                option_count: 3,
+            },
+            provider: 'test',
+            model: 'test-model',
+        });
         NutritionMenu.find = () => ({
             select() {
                 return this;
@@ -86,18 +146,20 @@ test('runOnboardingNutritionPlannerSafely creates a real AI menu when only legac
         assert.equal(outcome.triggered, true);
         assert.equal(outcome.status, 'ready');
         assert.equal(outcome.reason, 'ai_menu_generated');
-        assert.ok(insertedDocs.length >= 3);
+        assert.equal(insertedDocs.length, 4);
         assert.equal(insertedDocs.every((doc) => doc.source === 'ai'), true);
         assert.equal(insertedDocs.every((doc) => Array.isArray(doc.foods) && doc.foods.length > 0), true);
         assert.equal(fakeUser.profile.nutrition_plan_status, 'ready');
         assert.equal(fakeUser.profile.nutrition_plan_source, 'agent');
         assert.ok(fakeUser.profile.nutrition_plan_generated_at instanceof Date);
+        assert.equal(fakeUser.profile.meal_frequency, 4);
         assert.equal(saveCalls, 1);
     } finally {
         User.findById = originalFindById;
         NutritionMenu.countDocuments = originalCountDocuments;
         NutritionMenu.find = originalFind;
         NutritionMenu.insertMany = originalInsertMany;
+        onboardingNutritionMenuBuilder.buildOnboardingAiNutritionMenu = originalBuildOnboardingAiNutritionMenu;
     }
 });
 

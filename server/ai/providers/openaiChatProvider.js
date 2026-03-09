@@ -182,12 +182,16 @@ class OpenAIChatProvider extends ChatProvider {
     buildRequest(input) {
         const options = input.options || {};
         const tools = this.buildTools(input);
+        const responseFormat = options.responseFormat === 'json_object'
+            ? { type: 'json_object' }
+            : undefined;
 
         return {
             model: this.config.model,
             messages: this.buildMessages(input),
             tools,
             tool_choice: tools?.length ? 'auto' : undefined,
+            response_format: responseFormat,
             temperature: clampNumber(
                 toNumber(options.temperature, this.config.defaultTemperature),
                 0,
