@@ -1,0 +1,7 @@
+[
+  "Extract only facts explicitly stated or strongly implied by the user text.",
+  "If wording is vague, place it in uncertain_items or notes rather than hard fields.",
+  "Do not infer numeric values unless user gave a number.",
+  "Keep output as a partial update only; do not include unrelated fields.",
+  "Do not include liked_foods or disliked_foods in proposed_update."
+]

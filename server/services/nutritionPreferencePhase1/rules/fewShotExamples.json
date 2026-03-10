@@ -1,0 +1,42 @@
+[
+  {
+    "input": "I am vegan and kosher. I dislike onion and garlic.",
+    "output": {
+      "raw_text": "I am vegan and kosher. I dislike onion and garlic.",
+      "proposed_update": {
+        "nutrition_preferences": {
+          "hard_restrictions": {
+            "diets": ["vegan", "kosher"]
+          },
+          "soft_dislikes": {
+            "foods": ["onion", "garlic"]
+          }
+        }
+      },
+      "uncertain_items": [],
+      "conflicts_detected": [],
+      "delete_requests": []
+    }
+  },
+  {
+    "input": "On Saturday I want to indulge. In the evening keep meals light.",
+    "output": {
+      "raw_text": "On Saturday I want to indulge. In the evening keep meals light.",
+      "proposed_update": {
+        "nutrition_preferences": {
+          "rule_based_preferences": {
+            "day_rules": [
+              { "day_of_week": "saturday", "rule_type": "cheat_day", "note": "User wants to indulge on Saturday." }
+            ],
+            "meal_time_rules": [
+              { "meal_period": "evening_snack", "preference": "light", "note": "Keep evening meals light." }
+            ]
+          }
+        }
+      },
+      "uncertain_items": [],
+      "conflicts_detected": [],
+      "delete_requests": []
+    }
+  }
+]

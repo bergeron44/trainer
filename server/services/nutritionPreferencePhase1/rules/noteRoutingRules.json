@@ -1,0 +1,14 @@
+[
+  {
+    "condition": "ambiguous_diet_statement",
+    "target_field": "nutrition_preferences.hard_restrictions.notes"
+  },
+  {
+    "condition": "ambiguous_meal_timing",
+    "target_field": "nutrition_preferences.rule_based_preferences.notes"
+  },
+  {
+    "condition": "vague_practical_constraint",
+    "target_field": "nutrition_preferences.practical_constraints.notes"
+  }
+]

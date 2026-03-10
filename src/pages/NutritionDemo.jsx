@@ -1,15 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
-import { Flame, Beef, Wheat, Droplet, Target, MessageCircle, ChevronRight, Plus, X, Heart, Utensils } from 'lucide-react';
+import { Flame, Beef, Wheat, Droplet, Target, MessageCircle, ChevronRight, Plus, X, Heart, Utensils, SlidersHorizontal } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import GlobalCoachChat from '@/components/coach/GlobalCoachChat';
 import FoodSwipeGame from '@/components/nutrition/FoodSwipeGame';
 import MealPlanCard from '@/components/nutrition/MealPlanCard';
 import ManualFoodEntry from '@/components/nutrition/ManualFoodEntry';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/lib/AuthContext';
 import api from '@/api/axios';
 import aiApi from '@/api/aiAxios';
+
+/** @type {any} */
+const DialogContentAny = DialogContent;
+/** @type {any} */
+const DialogHeaderAny = DialogHeader;
+/** @type {any} */
+const DialogTitleAny = DialogTitle;
+/** @type {any} */
+const TextareaAny = Textarea;
 
 // --- Coach Logic: Dynamic Meal Periods ---
 const generateCoachPeriods = (goal, dietType, t = null) => {
@@ -86,6 +97,58 @@ const getPeriodId = (hour) => {
   return 'm5';
 };
 
+const detectCountryCodeFromBrowser = () => {
+  try {
+    const locale = String(
+      (typeof navigator !== 'undefined' && navigator.language) ||
+      Intl.DateTimeFormat().resolvedOptions().locale ||
+      ''
+    );
+    const match = locale.match(/[-_]\s*([A-Za-z]{2})\b/);
+    return match ? String(match[1]).toUpperCase() : '';
+  } catch (_) {
+    return '';
+  }
+};
+
+const resolveVisiblePeriodId = (hour, periodDefinitions = []) => {
+  const preferred = getPeriodId(hour);
+  const ids = (periodDefinitions || []).map((period) => period.id).filter(Boolean);
+
+  if (!ids.length) return preferred;
+  if (ids.includes(preferred)) return preferred;
+
+  const safeHour = Math.max(0, Math.min(23, Number(hour) || 0));
+  const bucketIndex = Math.min(
+    Math.floor((safeHour / 24) * ids.length),
+    ids.length - 1
+  );
+
+  return ids[bucketIndex];
+};
+
+const hasUsableMealContent = (meal) => {
+  if (!meal || typeof meal !== 'object') return false;
+
+  const foods = Array.isArray(meal.foods) ? meal.foods : [];
+  const hasNamedFood = foods.some((food) => String(food?.name || '').trim().length > 0);
+  const caloriesFromFoods = foods.reduce((sum, food) => sum + Math.max(0, Number(food?.calories) || 0), 0);
+
+  const totalCalories = Math.max(
+    0,
+    Number(meal.total_calories ?? meal.calories ?? 0) || 0
+  );
+  const macroSum =
+    Math.max(0, Number(meal.total_protein ?? meal.protein ?? 0) || 0) +
+    Math.max(0, Number(meal.total_carbs ?? meal.carbs ?? 0) || 0) +
+    Math.max(0, Number(meal.total_fat ?? meal.fat ?? 0) || 0);
+
+  if (totalCalories > 0) return true;
+  if (caloriesFromFoods > 0) return true;
+  if (hasNamedFood && macroSum > 0) return true;
+  return false;
+};
+
 export default function NutritionDemo() {
   const { user } = useAuth();
   const { t } = useTranslation();
@@ -95,7 +158,23 @@ export default function NutritionDemo() {
   // Swipe game & meal planner state
   const [showSwipeGame, setShowSwipeGame] = useState(false);
   const [showMealPlan, setShowMealPlan] = useState(false);
+  const [showMealRequestDialog, setShowMealRequestDialog] = useState(false);
+  const [mealRequestText, setMealRequestText] = useState('');
+  const [showMealRefineDialog, setShowMealRefineDialog] = useState(false);
+  const [mealRefineText, setMealRefineText] = useState('');
+  const [lastMealRequestContext, setLastMealRequestContext] = useState({ text: '', priority: 'normal' });
+  const [showNutritionPreferencesDialog, setShowNutritionPreferencesDialog] = useState(false);
+  const [nutritionPreferencesNote, setNutritionPreferencesNote] = useState('');
+  const [nutritionPreferencesDraft, setNutritionPreferencesDraft] = useState('');
+  const [structuredNutritionPreferences, setStructuredNutritionPreferences] = useState(null);
+  const [isSavingNutritionPreferences, setIsSavingNutritionPreferences] = useState(false);
+  const [nutritionPreferencesError, setNutritionPreferencesError] = useState('');
+  const [showMealPlanRefreshPrompt, setShowMealPlanRefreshPrompt] = useState(false);
+  const [pendingNutritionPreferences, setPendingNutritionPreferences] = useState(null);
+  const [pendingNutritionPreferencesNote, setPendingNutritionPreferencesNote] = useState('');
   const [currentMeal, setCurrentMeal] = useState(null);
+  const [mealOptions, setMealOptions] = useState([]);
+  const [selectedMealOptionIndex, setSelectedMealOptionIndex] = useState(null);
   const [isMealLoading, setIsMealLoading] = useState(false);
   const [likedFoods, setLikedFoods] = useState([]);
   const [dislikedFoods, setDislikedFoods] = useState([]);
@@ -125,7 +204,7 @@ export default function NutritionDemo() {
           const updated = { ...prev };
           logs.forEach(log => {
             const hour = new Date(log.createdAt || log.date).getHours();
-            const pid = getPeriodId(hour);
+            const pid = resolveVisiblePeriodId(hour, generateCoachPeriods(goal, dietType, t));
             updated[pid] = [...(updated[pid] || []), {
               name: log.meal_name,
               cals: log.calories,
@@ -165,7 +244,8 @@ export default function NutritionDemo() {
   }, { cals: 0, pro: 0, carb: 0, fat: 0 });
 
   // Block AI meal generation if current period already has an AI meal
-  const currentPeriodId = getPeriodId(new Date().getHours());
+  const effectivePeriods = periods.length > 0 ? periods : generateCoachPeriods(goal, dietType, t);
+  const currentPeriodId = resolveVisiblePeriodId(new Date().getHours(), effectivePeriods);
   const currentPeriodHasAIMeal = (loggedFoods[currentPeriodId] || []).some(f => f._aiTime);
 
   const macroCards = [
@@ -237,33 +317,289 @@ export default function NutritionDemo() {
     });
   };
 
+  const fetchAcceptedMealHistory = async () => {
+    try {
+      const res = await api.get('/nutrition/recent-saved', {
+        params: { limit: 20, days: 45 },
+      });
+      const meals = Array.isArray(res?.data?.meals) ? res.data.meals : [];
+      return meals.map((meal) => ({
+        meal_name: String(meal?.meal_name || '').trim(),
+        date: meal?.date || null,
+        calories: Number(meal?.calories) || 0,
+        protein: Number(meal?.protein) || 0,
+        carbs: Number(meal?.carbs) || 0,
+        fat: Number(meal?.fat) || 0,
+        foods: Array.isArray(meal?.foods)
+          ? meal.foods
+            .map((food) => ({
+              name: String(food?.name || '').trim(),
+              portion: String(food?.portion || '').trim(),
+              calories: Number(food?.calories) || 0,
+            }))
+            .filter((food) => food.name)
+          : [],
+      })).filter((meal) => meal.meal_name);
+    } catch (err) {
+      console.warn('Failed to load accepted meal history for AI context:', err?.message || err);
+      return [];
+    }
+  };
+
   // ─── Meal Planner ────────────────────────────────────────
-  const requestMealPlan = async () => {
-    setShowMealPlan(true);
-    setIsMealLoading(true);
-    setCurrentMeal(null);
+  const requestMealPlan = async (
+    mealRequestNote = '',
+    nutritionPreferencesOverride = null,
+    nutritionPreferencesNoteOverride = '',
+    options = {}
+  ) => {
+    const {
+      autoLogToTodaysLog = false,
+      openMealPlanCard = true,
+      mealRequestPriority = 'normal',
+      appendAlternative = false,
+      targetOptions = 1,
+    } = options;
+
+    if (openMealPlanCard) {
+      setShowMealPlan(true);
+      setIsMealLoading(true);
+      if (!appendAlternative) {
+        setCurrentMeal(null);
+        setMealOptions([]);
+        setSelectedMealOptionIndex(null);
+      }
+    }
 
     const now = new Date();
     const mealsEaten = Object.values(loggedFoods).filter(arr => arr.length > 0).length;
 
     try {
-      const res = await aiApi.post('/meal/next', {
+      const acceptedMealHistory = await fetchAcceptedMealHistory();
+      const payload = {
         current_calories_consumed: currentMacros.cals,
         protein_consumed: currentMacros.pro,
         carbs_consumed: currentMacros.carb,
         fat_consumed: currentMacros.fat,
         time_of_day: format(now, 'HH:mm'),
         meal_period: getCurrentMealPeriod(now),
+        day_of_week: format(now, 'EEEE').toLowerCase(),
         meals_eaten_today: mealsEaten,
         total_meals_planned: periods.length,
+        workout_context: {
+          goal: profile.goal || '',
+          experience_level: profile.experience_level || '',
+          workout_days_per_week: profile.workout_days_per_week ?? null,
+          session_duration: profile.session_duration ?? null,
+          environment: profile.environment || '',
+          activity_level: profile.activity_level || '',
+          injuries: profile.injuries || '',
+          workout_plan_status: profile.workout_plan_status || '',
+          workout_plan_source: profile.workout_plan_source || '',
+          has_existing_plan: Boolean(profile.has_existing_plan),
+          trainer_personality: profile.trainer_personality || '',
+        },
+      };
+      if (acceptedMealHistory.length) {
+        payload.accepted_meal_history = acceptedMealHistory;
+      }
+
+      const trimmedMealRequest = String(mealRequestNote || '').trim();
+      const normalizedMealRequestPriority =
+        String(mealRequestPriority || 'normal').toLowerCase() === 'high' ? 'high' : 'normal';
+      if (trimmedMealRequest) {
+        payload.meal_request_note = trimmedMealRequest;
+        payload.meal_request_priority = normalizedMealRequestPriority;
+      }
+      const trimmedNutritionPreferences = String(nutritionPreferencesNoteOverride || nutritionPreferencesNote || '').trim();
+      if (trimmedNutritionPreferences) {
+        payload.nutrition_preferences_note = trimmedNutritionPreferences;
+      }
+      const effectiveStructuredPreferences =
+        nutritionPreferencesOverride && typeof nutritionPreferencesOverride === 'object' && !Array.isArray(nutritionPreferencesOverride)
+          ? nutritionPreferencesOverride
+          : (structuredNutritionPreferences && typeof structuredNutritionPreferences === 'object' && !Array.isArray(structuredNutritionPreferences)
+              ? structuredNutritionPreferences
+              : null);
+      if (effectiveStructuredPreferences) {
+        payload.nutrition_preferences = effectiveStructuredPreferences;
+      }
+
+      const generateSingleMealCandidate = async (requestPayload) => {
+        let meal = null;
+        let usedFallbackGenerator = false;
+        let aiFailureReason = '';
+
+        try {
+          const res = await aiApi.post('/meal/next', requestPayload, { timeout: 20000 });
+          meal = res?.data || null;
+          if (!hasUsableMealContent(meal)) {
+            throw new Error('AI returned an empty meal (0 macros / no valid foods)');
+          }
+        } catch (aiErr) {
+          aiFailureReason = String(
+            aiErr?.response?.data?.message ||
+            aiErr?.response?.data?.error ||
+            aiErr?.message ||
+            'unknown AI error'
+          );
+          console.error('Primary AI meal generator failed, trying backend fallback:', aiErr?.response?.data || aiErr?.message);
+
+          const fallbackPayload = {
+            ...requestPayload,
+            liked_foods: likedFoods || [],
+            disliked_foods: (dislikedFoods || []).map((food) => food?.name || '').filter(Boolean),
+            target_calories: profile?.target_calories || 2000,
+            protein_goal: profile?.protein_goal || 150,
+            carbs_goal: profile?.carbs_goal || 200,
+            fat_goal: profile?.fat_goal || 65,
+            diet_type: dietType,
+            goal,
+          };
+
+          try {
+            const fallbackRes = await api.post('/nutrition/meal-plan', fallbackPayload);
+            meal = fallbackRes?.data || null;
+            usedFallbackGenerator = true;
+          } catch (fallbackErr) {
+            const fallbackReason = String(
+              fallbackErr?.response?.data?.message ||
+              fallbackErr?.response?.data?.error ||
+              fallbackErr?.message ||
+              'unknown fallback error'
+            );
+            throw new Error(`AI failed: ${aiFailureReason}. Fallback failed: ${fallbackReason}`);
+          }
+        }
+
+        if (!meal || typeof meal !== 'object' || !meal.meal_name || !hasUsableMealContent(meal)) {
+          throw new Error('Meal generator did not return a valid meal object');
+        }
+
+        return { meal, usedFallbackGenerator };
+      };
+
+      const { meal: primaryMeal, usedFallbackGenerator: usedFallbackPrimary } = await generateSingleMealCandidate(payload);
+      const generatedMeals = [primaryMeal];
+      let usedFallbackGenerator = usedFallbackPrimary;
+
+      setLastMealRequestContext({
+        text: trimmedMealRequest,
+        priority: normalizedMealRequestPriority,
       });
-      setCurrentMeal(res.data);
+
+      const shouldGenerateTwoOptions = !autoLogToTodaysLog && !appendAlternative && Number(targetOptions) >= 2;
+      if (shouldGenerateTwoOptions) {
+        const alternativePrompt = trimmedMealRequest
+          ? `${trimmedMealRequest}\nPlease provide a distinctly different meal option from the previous one.`
+          : 'Please provide a distinctly different meal option from the previous one.';
+        const secondPayload = {
+          ...payload,
+          meal_request_note: alternativePrompt,
+          meal_request_priority: 'high',
+        };
+
+        try {
+          const { meal: secondMeal, usedFallbackGenerator: usedFallbackSecond } = await generateSingleMealCandidate(secondPayload);
+          usedFallbackGenerator = usedFallbackGenerator || usedFallbackSecond;
+          generatedMeals.push(secondMeal);
+        } catch (secondErr) {
+          console.warn('Failed to generate second option. Continuing with one option.', secondErr?.message || secondErr);
+        }
+      }
+
+      if (autoLogToTodaysLog) {
+        const meal = primaryMeal;
+        const now = new Date();
+        const periodId =
+          resolveVisiblePeriodId(now.getHours(), effectivePeriods) ||
+          effectivePeriods?.[0]?.id ||
+          periods?.[0]?.id ||
+          'breakfast';
+
+        try {
+          await api.post('/nutrition', {
+            meal_name: meal.meal_name,
+            calories: meal.total_calories,
+            protein: meal.total_protein || 0,
+            carbs: meal.total_carbs || 0,
+            fat: meal.total_fat || 0,
+            date: now,
+            foods: (meal.foods || []).map((food) => ({
+              name: food.name,
+              portion: food.portion || '',
+              calories: food.calories,
+            })),
+          });
+        } catch (saveErr) {
+          console.error('Failed to save refreshed meal to DB:', saveErr);
+        }
+
+        setLoggedFoods((prev) => ({
+          ...prev,
+          [periodId]: [
+            ...(prev[periodId] || []).filter((food) => !food._aiTime),
+            {
+              name: meal.meal_name,
+              cals: meal.total_calories,
+              protein: meal.total_protein || 0,
+              carbs: meal.total_carbs || 0,
+              fat: meal.total_fat || 0,
+              _aiTime: now.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }),
+            },
+          ],
+        }));
+        setShowMealPlan(false);
+        setCurrentMeal(null);
+        setMealOptions([]);
+        setSelectedMealOptionIndex(null);
+        window.alert(
+          usedFallbackGenerator
+            ? t('nutrition.todaysLogUpdatedFallbackSuccess', "Today's Log was updated (fallback generator).")
+            : t('nutrition.todaysLogUpdatedSuccess', "Today's Log was updated.")
+        );
+      } else {
+        const firstMeal = generatedMeals[0] || null;
+        setCurrentMeal(firstMeal);
+        if (appendAlternative) {
+          setMealOptions((prev) => {
+            const base = Array.isArray(prev) ? prev : (firstMeal ? [firstMeal] : []);
+            const next = [...base, ...(firstMeal ? [firstMeal] : [])].slice(-3);
+            return next;
+          });
+          setSelectedMealOptionIndex(null);
+        } else {
+          const nextOptions = generatedMeals.slice(0, Math.max(1, Math.min(3, Number(targetOptions) || 1)));
+          setMealOptions(nextOptions);
+          setSelectedMealOptionIndex(nextOptions.length > 1 ? null : 0);
+        }
+      }
     } catch (err) {
+      const failureReason = String(
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.message ||
+        t('nutrition.generateMealFailed', 'Failed to generate meal.')
+      );
       console.error('Failed to generate meal plan:', err.response?.data || err.message);
       // Signal error state so MealPlanCard can show retry
-      setCurrentMeal({ _error: true });
+      if (openMealPlanCard) {
+        setCurrentMeal({ _error: true, error_message: failureReason });
+        setMealOptions([]);
+        setSelectedMealOptionIndex(null);
+        window.alert(
+          t(
+            'nutrition.generateMealFailedDetailed',
+            `Couldn't generate meal right now. ${failureReason}`
+          )
+        );
+      } else {
+        window.alert(t('nutrition.todaysLogUpdatedFailed', "Couldn't update Today's Log. Please try again."));
+      }
     } finally {
-      setIsMealLoading(false);
+      if (openMealPlanCard) {
+        setIsMealLoading(false);
+      }
     }
   };
 
@@ -279,7 +615,7 @@ export default function NutritionDemo() {
   const handleLogMeal = async (meal) => {
     const now = new Date();
     const hour = now.getHours();
-    const periodId = getPeriodId(hour);
+    const periodId = resolveVisiblePeriodId(hour, effectivePeriods);
     console.log(`[LogMeal] time=${now.toLocaleTimeString()} hour=${hour} → periodId=${periodId}`);
 
     // Save to DB
@@ -291,7 +627,7 @@ export default function NutritionDemo() {
         carbs: meal.total_carbs,
         fat: meal.total_fat,
         date: now,
-        foods: meal.foods.map(f => ({ name: f.name, portion: f.portion, calories: f.calories })),
+        foods: (Array.isArray(meal.foods) ? meal.foods : []).map(f => ({ name: f.name, portion: f.portion, calories: f.calories })),
       });
     } catch (err) {
       console.error('Failed to save meal to DB:', err);
@@ -312,12 +648,239 @@ export default function NutritionDemo() {
 
     setShowMealPlan(false);
     setCurrentMeal(null);
+    setMealOptions([]);
+    setSelectedMealOptionIndex(null);
   };
 
   const handleSwipeGameClose = () => {
     setShowSwipeGame(false);
     // Reload preferences after swiping
     loadFoodPreferences();
+  };
+
+  const openMealRequestDialog = () => {
+    setMealRequestText('');
+    setShowMealRequestDialog(true);
+  };
+
+  const openNutritionPreferencesDialog = () => {
+    setNutritionPreferencesDraft('');
+    setNutritionPreferencesError('');
+    setShowNutritionPreferencesDialog(true);
+  };
+
+  const closeMealPlanRefreshPrompt = () => {
+    setShowMealPlanRefreshPrompt(false);
+    setPendingNutritionPreferences(null);
+    setPendingNutritionPreferencesNote('');
+  };
+
+  const handleMealPlanRefreshDecision = (shouldUpdate) => {
+    const nextPreferences = pendingNutritionPreferences;
+    const nextNote = pendingNutritionPreferencesNote;
+    closeMealPlanRefreshPrompt();
+
+    if (!shouldUpdate) return;
+
+    requestMealPlan('', nextPreferences, nextNote, {
+      autoLogToTodaysLog: true,
+      openMealPlanCard: false,
+    });
+  };
+
+  const handleSaveNutritionPreferences = async () => {
+    const trimmed = nutritionPreferencesDraft.trim();
+    setNutritionPreferencesError('');
+
+    if (!trimmed) {
+      setNutritionPreferencesNote('');
+      setShowNutritionPreferencesDialog(false);
+      return;
+    }
+
+    setIsSavingNutritionPreferences(true);
+    try {
+      const countryCode = detectCountryCodeFromBrowser();
+      const runExtractorRequest = async (textValue, options = {}) => {
+        const { confirmConflicts = false } = options;
+        const legacyRes = await api.put('/users/nutrition-preferences/extract', {
+          text: textValue,
+          ...(countryCode ? { country_code: countryCode } : {}),
+          ...(confirmConflicts ? { confirm_conflicts: true } : {}),
+        });
+        return legacyRes?.data || {};
+      };
+
+      let extractorPayload = await runExtractorRequest(trimmed);
+
+      if (extractorPayload?.final_decision) {
+        const decision = String(extractorPayload.final_decision || '').toUpperCase();
+
+        if (decision === 'ASK_USER') {
+          const clarificationQuestion = String(
+            extractorPayload?.clarification_question ||
+            t('nutrition.preferencesNeedClarification', 'Please clarify your preference so I can save it safely.')
+          );
+          const clarificationInput = window.prompt(clarificationQuestion, '');
+
+          if (!clarificationInput || !clarificationInput.trim()) {
+            setNutritionPreferencesError(
+              t('nutrition.preferencesClarificationRequired', 'Clarification is required before saving preferences.')
+            );
+            return;
+          }
+
+          extractorPayload = await runExtractorRequest(`${trimmed} ${clarificationInput.trim()}`);
+        }
+
+        const finalDecision = String(extractorPayload?.final_decision || '').toUpperCase();
+        if (finalDecision !== 'AUTO_SAVE') {
+          setNutritionPreferencesError(
+            String(
+              extractorPayload?.reasons?.[0] ||
+              t('nutrition.preferencesNotSaved', 'Preferences were not saved automatically. Please refine your text.')
+            )
+          );
+          return;
+        }
+      }
+
+      const clarificationQuestions = Array.isArray(extractorPayload?.clarification_questions)
+        ? extractorPayload.clarification_questions
+        : [];
+
+      if (clarificationQuestions.length) {
+        const confirmationStatements = [];
+
+        clarificationQuestions.forEach((question) => {
+          const item = String(question?.item || '').trim();
+          if (!item) return;
+
+          const promptText = String(
+            question?.question ||
+            `You gave conflicting preference for "${item}". Press OK for DISLIKE or Cancel for LIKE.`
+          );
+
+          const defaultResolved = String(question?.resolved_to || '').toLowerCase();
+          const defaultToDislike = defaultResolved === 'dislike';
+
+          const userChoseDislike = window.confirm(
+            `${promptText}\n\nPress OK = DISLIKE\nPress Cancel = LIKE`
+          );
+
+          const finalPreference = userChoseDislike ? 'dislike' : 'like';
+          if (defaultToDislike && !userChoseDislike) {
+            confirmationStatements.push(`I like ${item}.`);
+          } else if (!defaultToDislike && userChoseDislike) {
+            confirmationStatements.push(`I dislike ${item}.`);
+          } else {
+            confirmationStatements.push(`I ${finalPreference} ${item}.`);
+          }
+        });
+
+        if (confirmationStatements.length) {
+          extractorPayload = await runExtractorRequest(
+            confirmationStatements.join(' '),
+            { confirmConflicts: true }
+          );
+        }
+      }
+
+      const updatedNutritionPreferences = extractorPayload?.nutrition_preferences;
+      const validUpdatedPreferences =
+        updatedNutritionPreferences &&
+        typeof updatedNutritionPreferences === 'object' &&
+        !Array.isArray(updatedNutritionPreferences)
+          ? updatedNutritionPreferences
+          : null;
+
+      if (Array.isArray(extractorPayload?.liked_foods)) {
+        setLikedFoods(extractorPayload.liked_foods);
+      }
+      if (Array.isArray(extractorPayload?.disliked_foods)) {
+        setDislikedFoods(extractorPayload.disliked_foods);
+      }
+
+      if (validUpdatedPreferences) {
+        setStructuredNutritionPreferences(validUpdatedPreferences);
+      }
+      setNutritionPreferencesNote(trimmed);
+      setShowNutritionPreferencesDialog(false);
+      setNutritionPreferencesDraft('');
+      setPendingNutritionPreferences(validUpdatedPreferences);
+      setPendingNutritionPreferencesNote(trimmed);
+      setShowMealPlanRefreshPrompt(true);
+    } catch (error) {
+      const backendMessage = error?.response?.data?.message;
+      setNutritionPreferencesError(
+        typeof backendMessage === 'string' && backendMessage
+          ? backendMessage
+          : t('nutrition.preferencesSaveFailed', 'Failed to save nutrition preferences. Please try again.')
+      );
+    } finally {
+      setIsSavingNutritionPreferences(false);
+    }
+  };
+
+  const handleMealRequestSubmit = () => {
+    const requestText = mealRequestText;
+    setShowMealRequestDialog(false);
+    setMealRequestText('');
+    requestMealPlan(requestText, null, '', { mealRequestPriority: 'normal', targetOptions: 2 });
+  };
+
+  const handleMealRecap = (meal) => {
+    if (!meal) return;
+
+    const foods = (Array.isArray(meal.foods) ? meal.foods : [])
+      .map((food) => String(food?.name || '').trim())
+      .filter(Boolean)
+      .slice(0, 5);
+
+    const recapLines = [
+      `${t('nutrition.recapTitle', 'Meal recap')}: ${meal.meal_name || t('nutrition.mealSuggestion', 'Meal suggestion')}`,
+      `${t('common.calories', 'Calories')}: ${meal.total_calories || 0} | ${t('common.protein', 'Protein')}: ${meal.total_protein || 0}g | ${t('common.carbs', 'Carbs')}: ${meal.total_carbs || 0}g | ${t('common.fat', 'Fat')}: ${meal.total_fat || 0}g`,
+      foods.length ? `${t('nutrition.foodsList', 'Foods')}: ${foods.join(', ')}` : '',
+      lastMealRequestContext?.text
+        ? `${t('nutrition.yourRequest', 'Your request')}: ${lastMealRequestContext.text}`
+        : '',
+      lastMealRequestContext?.priority === 'high'
+        ? t('nutrition.highPriorityApplied', 'High-priority request was applied for this generation.')
+        : '',
+    ].filter(Boolean);
+
+    window.alert(recapLines.join('\n'));
+  };
+
+  const handleSelectMealOption = (index) => {
+    const idx = Number(index);
+    if (!Number.isInteger(idx) || idx < 0 || idx >= mealOptions.length) return;
+    setSelectedMealOptionIndex(idx);
+    setCurrentMeal(mealOptions[idx] || null);
+  };
+
+  const openSomethingElseDialog = () => {
+    // Close current meal card so the refine dialog is always visible above overlays
+    setShowMealPlan(false);
+    setMealRefineText('');
+    setShowMealRefineDialog(true);
+  };
+
+  const handleSubmitSomethingElse = () => {
+    const text = mealRefineText.trim();
+    if (!text) {
+      window.alert(t('nutrition.somethingElseValidation', 'Please write what you want to change in the meal.'));
+      return;
+    }
+
+    setShowMealRefineDialog(false);
+    setMealRefineText('');
+
+    requestMealPlan(text, null, '', {
+      mealRequestPriority: 'high',
+      openMealPlanCard: true,
+      appendAlternative: true,
+    });
   };
 
   return (
@@ -343,7 +906,7 @@ export default function NutritionDemo() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.05 }}
-        className="grid grid-cols-2 gap-3 mb-6"
+        className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6"
       >
         <button
           onClick={() => setShowSwipeGame(true)}
@@ -362,9 +925,28 @@ export default function NutritionDemo() {
         </button>
 
         <button
-          onClick={currentPeriodHasAIMeal ? undefined : requestMealPlan}
-          disabled={currentPeriodHasAIMeal}
-          className={`relative overflow-hidden rounded-xl p-4 border bg-gradient-to-br from-[#1A1A1A] to-[#0D0D0D] transition-all group ${currentPeriodHasAIMeal ? 'border-[#2A2A2A] opacity-50 cursor-not-allowed' : 'border-[#2A2A2A] hover:border-[#00F2FF]/30'}`}
+          onClick={openNutritionPreferencesDialog}
+          className="relative overflow-hidden rounded-xl p-4 border border-[#2A2A2A] bg-gradient-to-br from-[#1A1A1A] to-[#0D0D0D] hover:border-[#CCFF00]/40 transition-all group"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-[#CCFF00]/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+              <SlidersHorizontal className="w-5 h-5 text-[#CCFF00]" />
+            </div>
+            <div className="text-left">
+              <p className="text-sm font-semibold text-white">{t('nutrition.tellMeWhatYouLike', 'Tell Me What You Like')}</p>
+              <p className="text-xs text-gray-500">
+                {nutritionPreferencesNote
+                  ? t('nutrition.preferencesSaved', 'Saved')
+                  : t('nutrition.setNutritionPriorities', 'Set nutrition priorities')}
+              </p>
+            </div>
+          </div>
+          <div className="absolute -bottom-2 -right-2 text-4xl opacity-10 group-hover:opacity-20 transition-opacity">🥗</div>
+        </button>
+
+        <button
+          onClick={openMealRequestDialog}
+          className="relative overflow-hidden rounded-xl p-4 border bg-gradient-to-br from-[#1A1A1A] to-[#0D0D0D] transition-all group border-[#2A2A2A] hover:border-[#00F2FF]/30"
         >
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-[#00F2FF]/10 flex items-center justify-center group-hover:scale-110 transition-transform">
@@ -374,7 +956,7 @@ export default function NutritionDemo() {
               <p className="text-sm font-semibold text-white">{t('nutrition.planMeal', 'Plan Meal')}</p>
               <p className="text-xs text-gray-500">
                 {currentPeriodHasAIMeal
-                  ? t('nutrition.mealAlreadyGenerated', 'Already done for now')
+                  ? t('nutrition.mealWillReplaceCurrent', 'Will replace current AI meal')
                   : t('nutrition.aiPowered', 'AI Powered')}
               </p>
             </div>
@@ -599,13 +1181,178 @@ export default function NutritionDemo() {
         {showMealPlan && (
           <MealPlanCard
             meal={currentMeal}
+            mealOptions={mealOptions}
+            selectedOptionIndex={selectedMealOptionIndex}
+            onSelectOption={handleSelectMealOption}
             isLoading={isMealLoading}
-            onClose={() => { setShowMealPlan(false); setCurrentMeal(null); }}
-            onRefresh={requestMealPlan}
+            onClose={() => {
+              setShowMealPlan(false);
+              setCurrentMeal(null);
+              setMealOptions([]);
+              setSelectedMealOptionIndex(null);
+            }}
+            onRefresh={() => requestMealPlan(
+              lastMealRequestContext?.text || '',
+              null,
+              '',
+              { mealRequestPriority: lastMealRequestContext?.priority || 'normal' }
+            )}
             onLogMeal={handleLogMeal}
+            onRecap={handleMealRecap}
+            onSomethingElse={openSomethingElseDialog}
           />
         )}
       </AnimatePresence>
+
+      <Dialog open={showNutritionPreferencesDialog} onOpenChange={setShowNutritionPreferencesDialog}>
+        <DialogContentAny className="bg-[#0A0A0A] border border-[#2A2A2A] text-white">
+          <DialogHeaderAny>
+            <DialogTitleAny>{t('nutrition.tellMeWhatYouLike', 'Tell Me What You Like')}</DialogTitleAny>
+          </DialogHeaderAny>
+
+          <div className="space-y-3">
+            <p className="text-sm text-gray-400">
+              {t('nutrition.tellMeWhatYouLikePrompt', 'Tell the coach what is important to you in nutrition (for example: high protein, low sugar, quick meals, budget-friendly).')}
+            </p>
+            <TextareaAny
+              value={nutritionPreferencesDraft}
+              onChange={(e) => setNutritionPreferencesDraft(e.target.value)}
+              placeholder={t('nutrition.tellMeWhatYouLikePlaceholder', 'e.g., I want high-protein meals, low sugar, easy prep, and foods that keep me full for long.')}
+              className="min-h-[120px] bg-[#1A1A1A] border-[#2A2A2A] text-white placeholder:text-gray-500"
+            />
+
+            {nutritionPreferencesError ? (
+              <p className="text-sm text-red-400">{nutritionPreferencesError}</p>
+            ) : null}
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowNutritionPreferencesDialog(false)}
+                className="flex-1 h-10 rounded-md border border-[#2A2A2A] text-white hover:bg-[#1A1A1A] transition-colors"
+              >
+                {t('common.cancel', 'Cancel')}
+              </button>
+              <button
+                onClick={handleSaveNutritionPreferences}
+                disabled={isSavingNutritionPreferences}
+                className="flex-1 h-10 rounded-md gradient-cyan text-black font-semibold disabled:opacity-60"
+              >
+                {isSavingNutritionPreferences
+                  ? t('common.loading', 'Loading...')
+                  : t('common.save', 'Save')}
+              </button>
+            </div>
+          </div>
+        </DialogContentAny>
+      </Dialog>
+
+      <Dialog
+        open={showMealPlanRefreshPrompt}
+        onOpenChange={(isOpen) => {
+          if (!isOpen) {
+            closeMealPlanRefreshPrompt();
+          } else {
+            setShowMealPlanRefreshPrompt(true);
+          }
+        }}
+      >
+        <DialogContentAny className="bg-[#0A0A0A] border border-[#2A2A2A] text-white">
+          <DialogHeaderAny>
+            <DialogTitleAny>{t('nutrition.updateMealPlanTitle', 'Update Meal Plan')}</DialogTitleAny>
+          </DialogHeaderAny>
+
+          <div className="space-y-4">
+            <p className="text-sm text-gray-300">
+              {t('nutrition.updateMealPlanQuestion', 'Do you want to update your meal plan?')}
+            </p>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => handleMealPlanRefreshDecision(false)}
+                className="flex-1 h-10 rounded-md border border-[#2A2A2A] text-white hover:bg-[#1A1A1A] transition-colors"
+              >
+                {t('common.no', 'No')}
+              </button>
+              <button
+                onClick={() => handleMealPlanRefreshDecision(true)}
+                className="flex-1 h-10 rounded-md gradient-cyan text-black font-semibold"
+              >
+                {t('nutrition.updateTodaysLog', "Yes, update Today's Log")}
+              </button>
+            </div>
+          </div>
+        </DialogContentAny>
+      </Dialog>
+
+      <Dialog open={showMealRequestDialog} onOpenChange={setShowMealRequestDialog}>
+        <DialogContentAny className="bg-[#0A0A0A] border border-[#2A2A2A] text-white">
+          <DialogHeaderAny>
+            <DialogTitleAny>{t('nutrition.planMeal', 'Plan Meal')}</DialogTitleAny>
+          </DialogHeaderAny>
+
+          <div className="space-y-3">
+            <p className="text-sm text-gray-400">
+              {t('nutrition.mealRequestPrompt', 'Describe what meal you want.')}
+            </p>
+            <TextareaAny
+              value={mealRequestText}
+              onChange={(e) => setMealRequestText(e.target.value)}
+              placeholder={t('nutrition.mealRequestPlaceholder', 'e.g., Light savory meal with high protein, low carbs, and around 500 calories.')}
+              className="min-h-[110px] bg-[#1A1A1A] border-[#2A2A2A] text-white placeholder:text-gray-500"
+            />
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowMealRequestDialog(false)}
+                className="flex-1 h-10 rounded-md border border-[#2A2A2A] text-white hover:bg-[#1A1A1A] transition-colors"
+              >
+                {t('common.cancel', 'Cancel')}
+              </button>
+              <button
+                onClick={handleMealRequestSubmit}
+                className="flex-1 h-10 rounded-md gradient-cyan text-black font-semibold"
+              >
+                {t('nutrition.generateMeal', 'Generate Meal')}
+              </button>
+            </div>
+          </div>
+        </DialogContentAny>
+      </Dialog>
+
+      <Dialog open={showMealRefineDialog} onOpenChange={setShowMealRefineDialog}>
+        <DialogContentAny className="bg-[#0A0A0A] border border-[#2A2A2A] text-white">
+          <DialogHeaderAny>
+            <DialogTitleAny>{t('nutrition.somethingElse', 'Something else')}</DialogTitleAny>
+          </DialogHeaderAny>
+
+          <div className="space-y-3">
+            <p className="text-sm text-gray-400">
+              {t('nutrition.somethingElsePrompt', 'Add more details about the meal you want. This request will be treated as high priority.')}
+            </p>
+            <TextareaAny
+              value={mealRefineText}
+              onChange={(e) => setMealRefineText(e.target.value)}
+              placeholder={t('nutrition.somethingElsePlaceholder', 'e.g., I want something warm, savory, with tofu and very low fat.')}
+              className="min-h-[110px] bg-[#1A1A1A] border-[#2A2A2A] text-white placeholder:text-gray-500"
+            />
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowMealRefineDialog(false)}
+                className="flex-1 h-10 rounded-md border border-[#2A2A2A] text-white hover:bg-[#1A1A1A] transition-colors"
+              >
+                {t('common.cancel', 'Cancel')}
+              </button>
+              <button
+                onClick={handleSubmitSomethingElse}
+                className="flex-1 h-10 rounded-md gradient-cyan text-black font-semibold"
+              >
+                {t('nutrition.generateAlternativeMeal', 'Generate another meal')}
+              </button>
+            </div>
+          </div>
+        </DialogContentAny>
+      </Dialog>
     </div>
   );
 }

@@ -1,0 +1,17 @@
+[
+  {
+    "pattern": "try not to eat too many carbs",
+    "action": "mark_uncertain",
+    "route_to": "nutrition_preferences.rule_based_preferences.notes"
+  },
+  {
+    "pattern": "sometimes",
+    "action": "mark_uncertain",
+    "route_to": "nutrition_preferences.rule_based_preferences.notes"
+  },
+  {
+    "pattern": "if possible",
+    "action": "mark_uncertain",
+    "route_to": "nutrition_preferences.soft_likes.notes"
+  }
+]

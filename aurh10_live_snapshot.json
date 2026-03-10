@@ -1,0 +1,195 @@
+{
+  "_id": "69a46ed9c44fe169df2d0eac",
+  "name": "אורי",
+  "email": "aurh10@gmail.com",
+  "profile": {
+    "age": 30,
+    "gender": "male",
+    "height": 179,
+    "weight": 88,
+    "goal": "recomp",
+    "body_fat_percentage": 25,
+    "injuries": "לא",
+    "experience_level": "intermediate",
+    "workout_days_per_week": 4,
+    "session_duration": 60,
+    "environment": "commercial_gym",
+    "diet_type": "vegan",
+    "activity_level": "sedentary",
+    "sleep_hours": 7.5,
+    "motivation_source": "לא יודע",
+    "tdee": 2225,
+    "target_calories": 2225,
+    "protein_goal": 176,
+    "carbs_goal": 241,
+    "fat_goal": 62,
+    "plan_choice": "ai",
+    "custom_plan": [],
+    "trainer_personality": "drill_sergeant_coach",
+    "onboarding_completed": true,
+    "has_existing_plan": false,
+    "workout_plan_status": "pending",
+    "workout_plan_source": "agent"
+  },
+  "liked_foods": [
+    {
+      "name": "Watercress",
+      "image": "https://spoonacular.com/cdn/ingredients_500x500/watercress.jpg",
+      "calories": 11,
+      "protein": 2,
+      "carbs": 1,
+      "fat": 0,
+      "_id": "69ac3345de0502a443f8c826"
+    },
+    {
+      "name": "Cabbage",
+      "image": "https://spoonacular.com/cdn/ingredients_500x500/cabbage.jpg",
+      "calories": 25,
+      "protein": 1,
+      "carbs": 6,
+      "fat": 0,
+      "_id": "69ac3346de0502a443f8c82c"
+    },
+    {
+      "name": "Guava",
+      "image": "https://spoonacular.com/cdn/ingredients_500x500/guava.jpg",
+      "calories": 68,
+      "protein": 3,
+      "carbs": 14,
+      "fat": 1,
+      "_id": "69ac3347de0502a443f8c834"
+    },
+    {
+      "name": "Peach",
+      "image": "https://spoonacular.com/cdn/ingredients_500x500/peaches.jpg",
+      "calories": 39,
+      "protein": 1,
+      "carbs": 10,
+      "fat": 0,
+      "_id": "69ac334bde0502a443f8c84a"
+    },
+    {
+      "name": "Swiss Chard",
+      "image": "https://spoonacular.com/cdn/ingredients_500x500/swiss-chard.jpg",
+      "calories": 19,
+      "protein": 2,
+      "carbs": 4,
+      "fat": 0,
+      "_id": "69ac334cde0502a443f8c858"
+    },
+    {
+      "name": "Hazelnuts",
+      "image": "https://spoonacular.com/cdn/ingredients_500x500/hazelnuts.jpg",
+      "calories": 628,
+      "protein": 15,
+      "carbs": 17,
+      "fat": 61,
+      "_id": "69ac334ede0502a443f8c87a"
+    },
+    {
+      "name": "Kidney Beans",
+      "image": "https://spoonacular.com/cdn/ingredients_500x500/kidney-beans.jpg",
+      "calories": 127,
+      "protein": 9,
+      "carbs": 23,
+      "fat": 1,
+      "_id": "69ac335dde0502a443f8c8b4"
+    },
+    {
+      "name": "בשבת ג חנון",
+      "_id": "69adb9ff9db2167c6d6fdeab"
+    },
+    {
+      "name": "קוסקוס",
+      "_id": "69adc24b298c68145b06e0fa"
+    }
+  ],
+  "disliked_foods": [
+    {
+      "name": "Beef Jerky",
+      "_id": "69ac3349de0502a443f8c83e"
+    },
+    {
+      "name": "Beef Tenderloin",
+      "_id": "69ac334dde0502a443f8c868"
+    },
+    {
+      "name": "אבוקדו",
+      "_id": "69ad76f5b3915262b02a1a74"
+    }
+  ],
+  "nutrition_preferences": {
+    "hard_restrictions": {
+      "diets": [
+        "vegan"
+      ]
+    },
+    "soft_likes": {
+      "foods": [
+        "עגבניה",
+        "אורז וקוסקוס",
+        "בננה",
+        "ג חנון",
+        "קוסקוס",
+        "ביסלי"
+      ],
+      "notes": "User expressed positive preferences with ambiguous food names."
+    },
+    "soft_dislikes": {
+      "foods": [
+        "שוקולד",
+        "אבוקדו",
+        "טופו"
+      ]
+    },
+    "budget_preferences": {
+      "currency": "USD"
+    },
+    "rule_based_preferences": {
+      "day_rules": [
+        {
+          "day_of_week": "sunday",
+          "rule_type": "custom",
+          "note": "אני רוצה לאכול טופו ביום ראשון",
+          "_id": "69adf5ea398182674db8b8a9"
+        }
+      ],
+      "time_context_notes": [
+        {
+          "day_of_week": "friday",
+          "meal_period": "lunch",
+          "note": "אני אוהב לאכול קוסקוס בשישי בצהריים",
+          "_id": "69adf5ea398182674db8b8aa"
+        },
+        {
+          "day_of_week": "sunday",
+          "meal_period": "any",
+          "note": "אני רוצה לאכול טופו ביום ראשון",
+          "_id": "69adf5ea398182674db8b8ab"
+        }
+      ],
+      "time_notes": {
+        "by_day": {
+          "sunday": "אני רוצה לאכול טופו ביום ראשון",
+          "monday": "",
+          "tuesday": "",
+          "wednesday": "",
+          "thursday": "",
+          "friday": "אני אוהב לאכול קוסקוס בשישי בצהריים",
+          "saturday": ""
+        },
+        "by_meal_period": {
+          "breakfast": "",
+          "lunch": "אני אוהב לאכול קוסקוס בשישי בצהריים",
+          "afternoon_snack": "",
+          "dinner": "",
+          "evening_snack": ""
+        }
+      },
+      "notes": "User mentioned timing/day-specific rules."
+    }
+  },
+  "createdAt": "2026-03-01T16:52:41.330Z",
+  "updatedAt": "2026-03-08T22:19:22.294Z",
+  "__v": 18
+}

@@ -4,7 +4,7 @@ import { createPageUrl } from '@/utils';
 import { motion } from 'framer-motion';
 import {
   User, Scale, Ruler, Target, Calendar, Clock,
-  Dumbbell, Utensils, Moon, LogOut,
+  Dumbbell, Utensils, Moon, LogOut, KeyRound,
   Edit2, RefreshCw, Sparkles, Flame, Zap, Skull
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -14,12 +14,38 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/lib/AuthContext';
 
+/** @type {any} */
+const DialogContentAny = DialogContent;
+/** @type {any} */
+const DialogHeaderAny = DialogHeader;
+/** @type {any} */
+const DialogTitleAny = DialogTitle;
+/** @type {any} */
+const InputAny = Input;
+/** @type {any} */
+const SelectAny = Select;
+/** @type {any} */
+const SelectTriggerAny = SelectTrigger;
+/** @type {any} */
+const SelectValueAny = SelectValue;
+/** @type {any} */
+const SelectContentAny = SelectContent;
+/** @type {any} */
+const SelectItemAny = SelectItem;
+
 export default function Profile() {
   const navigate = useNavigate();
-  const { user, updateProfile, logout } = useAuth();
+  const { user, updateProfile, logout, changePassword } = useAuth();
   const { t } = useTranslation();
   const [editField, setEditField] = useState(null);
-  const [editValue, setEditValue] = useState('');
+  const [editValue, setEditValue] = useState(/** @type {string | number} */(''));
+  const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [passwordSuccess, setPasswordSuccess] = useState('');
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
 
   const profile = user?.profile;
 
@@ -46,6 +72,60 @@ export default function Profile() {
 
   const handleLogout = () => {
     logout();
+  };
+
+  const resetPasswordDialogState = () => {
+    setCurrentPassword('');
+    setNewPassword('');
+    setConfirmNewPassword('');
+    setPasswordError('');
+    setPasswordSuccess('');
+    setIsUpdatingPassword(false);
+  };
+
+  const handlePasswordDialogOpenChange = (isOpen) => {
+    setIsPasswordDialogOpen(isOpen);
+    if (!isOpen) {
+      resetPasswordDialogState();
+    }
+  };
+
+  const handleChangePassword = async () => {
+    setPasswordError('');
+    setPasswordSuccess('');
+
+    if (!currentPassword || !newPassword || !confirmNewPassword) {
+      setPasswordError(t('profile.passwordAllFieldsRequired', 'Please fill in all password fields.'));
+      return;
+    }
+
+    if (newPassword !== confirmNewPassword) {
+      setPasswordError(t('profile.passwordMismatch', 'New password and confirmation do not match.'));
+      return;
+    }
+
+    setIsUpdatingPassword(true);
+    try {
+      await changePassword(currentPassword, newPassword);
+      setPasswordSuccess(t('profile.passwordUpdatedSuccess', 'Password updated successfully.'));
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmNewPassword('');
+    } catch (error) {
+      const status = error?.response?.status;
+      const responseMessage = error?.response?.data?.message;
+      const fallbackMessage = t('profile.passwordUpdateFailed', 'Failed to update password. Please try again.');
+
+      if (status === 401) {
+        setPasswordError(t('profile.currentPasswordIncorrect', 'Current password is incorrect.'));
+      } else if (typeof responseMessage === 'string' && responseMessage.trim()) {
+        setPasswordError(responseMessage);
+      } else {
+        setPasswordError(fallbackMessage);
+      }
+    } finally {
+      setIsUpdatingPassword(false);
+    }
   };
 
   const goalLabels = {
@@ -99,6 +179,7 @@ export default function Profile() {
     );
   }
 
+  /** @type {any[]} */
   const profileSections = [
     {
       title: t('coach.aiCoach', 'AI Coach'),
@@ -258,6 +339,15 @@ export default function Profile() {
         </Button>
 
         <Button
+          onClick={() => handlePasswordDialogOpenChange(true)}
+          variant="outline"
+          className="w-full h-12 bg-transparent border-[#2A2A2A] text-white hover:bg-[#1A1A1A] hover:text-white"
+        >
+          <KeyRound className="w-4 h-4 mr-2" />
+          {t('profile.changePassword', 'Change Password')}
+        </Button>
+
+        <Button
           onClick={handleLogout}
           variant="outline"
           className="w-full h-12 bg-transparent border-red-500/30 text-red-500 hover:bg-red-500/10 hover:text-red-400"
@@ -268,28 +358,90 @@ export default function Profile() {
       </motion.div>
 
 
+      <Dialog open={isPasswordDialogOpen} onOpenChange={handlePasswordDialogOpenChange}>
+        <DialogContentAny className="bg-[#0A0A0A] border border-[#2A2A2A] text-white">
+          <DialogHeaderAny>
+            <DialogTitleAny>{t('profile.changePassword', 'Change Password')}</DialogTitleAny>
+          </DialogHeaderAny>
+
+          <div className="mt-4 space-y-3">
+            <InputAny
+              type="password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              placeholder={t('profile.currentPassword', 'Current Password')}
+              className="bg-[#1A1A1A] border-[#2A2A2A] text-white"
+            />
+
+            <InputAny
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder={t('profile.newPassword', 'New Password')}
+              className="bg-[#1A1A1A] border-[#2A2A2A] text-white"
+            />
+
+            <InputAny
+              type="password"
+              value={confirmNewPassword}
+              onChange={(e) => setConfirmNewPassword(e.target.value)}
+              placeholder={t('profile.confirmNewPassword', 'Confirm New Password')}
+              className="bg-[#1A1A1A] border-[#2A2A2A] text-white"
+            />
+
+            {passwordError ? (
+              <p className="text-sm text-red-400">{passwordError}</p>
+            ) : null}
+
+            {passwordSuccess ? (
+              <p className="text-sm text-[#00F2FF]">{passwordSuccess}</p>
+            ) : null}
+
+            <div className="flex gap-3 mt-4">
+              <Button
+                variant="outline"
+                onClick={() => handlePasswordDialogOpenChange(false)}
+                className="flex-1 bg-transparent border-[#2A2A2A] text-white hover:bg-[#1A1A1A]"
+              >
+                {t('common.cancel', 'Cancel')}
+              </Button>
+              <Button
+                onClick={handleChangePassword}
+                disabled={isUpdatingPassword}
+                className="flex-1 gradient-cyan text-black disabled:opacity-60"
+              >
+                {isUpdatingPassword
+                  ? t('profile.updatingPassword', 'Updating...')
+                  : t('profile.updatePassword', 'Update Password')}
+              </Button>
+            </div>
+          </div>
+        </DialogContentAny>
+      </Dialog>
+
+
 
       {/* Edit Dialog */}
       <Dialog open={!!editField} onOpenChange={() => setEditField(null)}>
-        <DialogContent className="bg-[#0A0A0A] border border-[#2A2A2A] text-white">
-          <DialogHeader>
-            <DialogTitle>{t('common.edit', 'Edit')} {profileSections.flatMap(s => s.items).find(i => i.key === editField)?.label}</DialogTitle>
-          </DialogHeader>
+        <DialogContentAny className="bg-[#0A0A0A] border border-[#2A2A2A] text-white">
+          <DialogHeaderAny>
+            <DialogTitleAny>{t('common.edit', 'Edit')} {profileSections.flatMap(s => s.items).find(i => i.key === editField)?.label}</DialogTitleAny>
+          </DialogHeaderAny>
 
           <div className="mt-4">
             {profileSections.flatMap(s => s.items).find(i => i.key === editField)?.type === 'select' ? (
-              <Select value={String(editValue)} onValueChange={setEditValue}>
-                <SelectTrigger className="bg-[#1A1A1A] border-[#2A2A2A]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-[#1A1A1A] border-[#2A2A2A]">
+              <SelectAny value={String(editValue)} onValueChange={setEditValue}>
+                <SelectTriggerAny className="bg-[#1A1A1A] border-[#2A2A2A]">
+                  <SelectValueAny />
+                </SelectTriggerAny>
+                <SelectContentAny className="bg-[#1A1A1A] border-[#2A2A2A]">
                   {profileSections.flatMap(s => s.items).find(i => i.key === editField)?.options?.map(([value, label]) => (
-                    <SelectItem key={value} value={value}>{label}</SelectItem>
+                    <SelectItemAny key={value} value={value}>{label}</SelectItemAny>
                   ))}
-                </SelectContent>
-              </Select>
+                </SelectContentAny>
+              </SelectAny>
             ) : (
-              <Input
+              <InputAny
                 type="number"
                 value={editValue}
                 onChange={(e) => setEditValue(e.target.value ? Number(e.target.value) : '')}
@@ -313,7 +465,7 @@ export default function Profile() {
               </Button>
             </div>
           </div>
-        </DialogContent>
+        </DialogContentAny>
       </Dialog>
     </div>
   );

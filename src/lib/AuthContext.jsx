@@ -85,6 +85,15 @@ export const AuthProvider = ({ children }) => {
     }
   }
 
+  const changePassword = async (currentPassword, newPassword) => {
+    try {
+      const { data } = await api.put('/users/change-password', { currentPassword, newPassword });
+      return data;
+    } catch (error) {
+      throw error;
+    }
+  };
+
   const navigateToLogin = () => {
     window.location.href = '/Login';
   };
@@ -100,6 +109,7 @@ export const AuthProvider = ({ children }) => {
       register,
       logout,
       updateProfile,
+      changePassword,
       checkUserAuth,
       navigateToLogin
     }}>
