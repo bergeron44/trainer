@@ -4,6 +4,7 @@ const { createWorkoutTools } = require('./handlers/workoutsTools');
 const { createUserTools } = require('./handlers/userTools');
 const { createNutritionTools } = require('./handlers/nutritionTools');
 const { createMealsTools } = require('./handlers/mealsTools');
+const { createMenuPlanTools } = require('./handlers/menuPlanTools');
 const ToolExecutionAudit = require('../../models/ToolExecutionAudit');
 const ToolIdempotencyRecord = require('../../models/ToolIdempotencyRecord');
 const Workout = require('../../models/Workout');
@@ -11,6 +12,7 @@ const WorkoutLog = require('../../models/WorkoutLog');
 const Exercise = require('../../models/Exercise');
 const User = require('../../models/User');
 const NutritionLog = require('../../models/NutritionLog');
+const MealPlan = require('../../models/MealPlan');
 
 function createDefaultToolRegistry({ models = {} } = {}) {
     const registry = new ToolRegistry();
@@ -20,6 +22,7 @@ function createDefaultToolRegistry({ models = {} } = {}) {
         Exercise: models.Exercise || Exercise,
         User: models.User || User,
         NutritionLog: models.NutritionLog || NutritionLog,
+        MealPlan: models.MealPlan || MealPlan,
     };
 
     const tools = [
@@ -27,6 +30,7 @@ function createDefaultToolRegistry({ models = {} } = {}) {
         ...createUserTools({ models: resolvedModels }),
         ...createNutritionTools({ models: resolvedModels }),
         ...createMealsTools({ models: resolvedModels }),
+        ...createMenuPlanTools({ models: resolvedModels }),
     ];
 
     for (const tool of tools) {
@@ -57,4 +61,5 @@ module.exports = {
     ToolExecutor,
     createDefaultToolRegistry,
     createToolExecutor,
+    createMenuPlanTools,
 };

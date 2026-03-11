@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
-import { Flame, Beef, Wheat, Droplet, Target, MessageCircle, ChevronRight, Plus, X, Heart, Utensils } from 'lucide-react';
+import { Flame, Beef, Wheat, Droplet, Target, MessageCircle, ChevronRight, Plus, X, Heart, Utensils, ChevronDown, CheckCircle2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import GlobalCoachChat from '@/components/coach/GlobalCoachChat';
 import FoodSwipeGame from '@/components/nutrition/FoodSwipeGame';
@@ -107,14 +107,19 @@ export default function NutritionDemo() {
   const [activeSearchPeriod, setActiveSearchPeriod] = useState(null);
   const [loggedFoods, setLoggedFoods] = useState({});
   const [periods, setPeriods] = useState([]);
+  const [activeMealPlan, setActiveMealPlan] = useState(null);
+  const [selectedPlanMeal, setSelectedPlanMeal] = useState(null); // meal detail sheet
 
   useEffect(() => {
     setPeriods(generateCoachPeriods(goal, dietType, t));
   }, [goal, dietType, t]);
 
-  // Load food preferences and today's saved meals on mount
+  // Load food preferences, today's saved meals, and active meal plan on mount
   useEffect(() => {
     loadFoodPreferences();
+    api.get('/nutrition/menu/active')
+      .then(res => { if (res.data) setActiveMealPlan(res.data); })
+      .catch(() => {});
     const todayStr = format(new Date(), 'yyyy-MM-dd');
     api.get(`/nutrition/date/${todayStr}`)
       .then(res => {
@@ -464,7 +469,27 @@ export default function NutritionDemo() {
         <div className="space-y-4">
           {periods.map((period, index) => {
             const periodFoods = loggedFoods[period.id] || [];
-            const inspirations = getInspirationsForPeriod(dietType);
+
+            // Group plan meals by meal_type; fall back to grouping by sets of 4 (index-based)
+            const allPlanMeals = activeMealPlan?.meals || [];
+            // Collect all unique meal_types in order they appear
+            const mealTypeOrder = [];
+            allPlanMeals.forEach(m => {
+              if (m.meal_type && !mealTypeOrder.includes(m.meal_type)) mealTypeOrder.push(m.meal_type);
+            });
+            // If meal_types are present, group by them; otherwise chunk by 4
+            let planMealOptions = [];
+            if (mealTypeOrder.length > 0) {
+              const typeForThisSlot = mealTypeOrder[index];
+              planMealOptions = typeForThisSlot
+                ? allPlanMeals.filter(m => m.meal_type === typeForThisSlot)
+                : [];
+            } else if (allPlanMeals.length > 0) {
+              // Fallback: each group of 4 maps to a period slot
+              const chunk = allPlanMeals.slice(index * 4, index * 4 + 4);
+              planMealOptions = chunk;
+            }
+            const hasPlanOptions = planMealOptions.length > 0;
 
             const pCals = periodFoods.reduce((sum, f) => sum + (f.cals || 0), 0);
 
@@ -506,16 +531,30 @@ export default function NutritionDemo() {
                   </div>
                 )}
 
-                {/* Inspirations Carousel */}
-                {periodFoods.length === 0 && (
+                {/* AI Plan Options — scrollable carousel of 4 choices */}
+                {periodFoods.length === 0 && hasPlanOptions && (
                   <div className="mb-3">
-                    <p className="text-xs text-gray-500 mb-2">{t('nutrition.ideasToHitMacros', 'Ideas to hit your macros:')}</p>
-                    <div className="flex overflow-x-auto snap-x gap-2 pb-2 scrollbar-none">
-                      {inspirations.map((insp, i) => (
-                        <div key={i} className="snap-start shrink-0 w-48 bg-[#2A2A2A] rounded-lg p-2 text-xs border border-transparent hover:border-[#00F2FF]/30 transition-all cursor-pointer">
-                          <p className="text-gray-300 font-medium truncate">{String(t(`nutrition.inspirations.${insp.name}`, insp.name))}</p>
-                          <p className="text-gray-500 mt-1">{insp.cals} {t('common.kcal', 'kcal')} • {insp.protein}g {t('common.protein', 'Protein')}</p>
-                        </div>
+                    <p className="text-xs text-[#00F2FF]/70 mb-2">✦ Your plan — pick one:</p>
+                    <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none snap-x">
+                      {planMealOptions.map((meal, optIdx) => (
+                        <button
+                          key={optIdx}
+                          onClick={() => setSelectedPlanMeal(meal)}
+                          className="snap-start shrink-0 w-48 text-left bg-[#2A2A2A] rounded-lg p-3 border border-[#00F2FF]/20 hover:border-[#00F2FF]/50 transition-all group"
+                        >
+                          <p className="text-white font-medium text-xs leading-tight line-clamp-2">{meal.meal_name}</p>
+                          {meal.foods && meal.foods.length > 0 && (
+                            <p className="text-gray-600 text-xs mt-1 truncate">
+                              {meal.foods.map(f => f.name).join(' · ')}
+                            </p>
+                          )}
+                          <p className="text-gray-400 text-xs mt-1.5">
+                            {meal.calories || 0} kcal · P:{meal.protein || 0}g
+                          </p>
+                          <p className="text-[#00F2FF]/50 text-xs mt-1 group-hover:text-[#00F2FF] transition-colors">
+                            Tap for details →
+                          </p>
+                        </button>
                       ))}
                     </div>
                   </div>
@@ -604,6 +643,116 @@ export default function NutritionDemo() {
             onRefresh={requestMealPlan}
             onLogMeal={handleLogMeal}
           />
+        )}
+      </AnimatePresence>
+
+      {/* Plan Meal Detail Sheet */}
+      <AnimatePresence>
+        {selectedPlanMeal && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSelectedPlanMeal(null)}
+              className="fixed inset-0 bg-black/60 z-40"
+            />
+            <motion.div
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              className="fixed bottom-0 left-0 right-0 z-50 bg-[#111] rounded-t-2xl border-t border-[#2A2A2A] max-h-[80vh] overflow-y-auto"
+            >
+              {/* Handle */}
+              <div className="flex justify-center pt-3 pb-1">
+                <div className="w-10 h-1 rounded-full bg-[#3A3A3A]" />
+              </div>
+
+              <div className="px-5 pb-8">
+                {/* Header */}
+                <div className="flex items-start justify-between mb-4 pt-2">
+                  <div>
+                    <p className="text-xs text-[#00F2FF]/70 mb-1">✦ Your plan</p>
+                    <h3 className="text-xl font-bold text-white">{selectedPlanMeal.meal_name}</h3>
+                    {selectedPlanMeal.meal_type && (
+                      <p className="text-xs text-gray-500 capitalize mt-0.5">{selectedPlanMeal.meal_type.replace(/_/g, ' ')}</p>
+                    )}
+                  </div>
+                  <button onClick={() => setSelectedPlanMeal(null)} className="p-2 text-gray-500 hover:text-white">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Macro summary */}
+                <div className="grid grid-cols-4 gap-2 mb-5">
+                  {[
+                    { label: 'Calories', value: selectedPlanMeal.calories || 0, unit: '', color: '#00F2FF' },
+                    { label: 'Protein', value: selectedPlanMeal.protein || 0, unit: 'g', color: '#CCFF00' },
+                    { label: 'Carbs', value: selectedPlanMeal.carbs || 0, unit: 'g', color: '#FF6B6B' },
+                    { label: 'Fat', value: selectedPlanMeal.fat || 0, unit: 'g', color: '#FFD93D' },
+                  ].map(m => (
+                    <div key={m.label} className="bg-[#1A1A1A] rounded-xl p-2 text-center border border-[#2A2A2A]">
+                      <p className="text-base font-bold" style={{ color: m.color }}>{m.value}{m.unit}</p>
+                      <p className="text-[10px] text-gray-500 mt-0.5">{m.label}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Foods list */}
+                {selectedPlanMeal.foods && selectedPlanMeal.foods.length > 0 && (
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Foods</p>
+                    <div className="space-y-2">
+                      {selectedPlanMeal.foods.map((food, i) => (
+                        <div key={i} className="flex justify-between items-center bg-[#1A1A1A] rounded-lg px-3 py-2.5 border border-[#2A2A2A]">
+                          <div>
+                            <p className="text-sm text-white font-medium">{food.name}</p>
+                            {food.portion && <p className="text-xs text-gray-500">{food.portion}</p>}
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm text-gray-300">{food.calories || 0} kcal</p>
+                            <p className="text-xs text-gray-600">P:{food.protein || 0} C:{food.carbs || 0} F:{food.fat || 0}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Log this meal button */}
+                <button
+                  onClick={() => {
+                    const periodId = getPeriodId(new Date().getHours());
+                    setLoggedFoods(prev => ({
+                      ...prev,
+                      [periodId]: [...(prev[periodId] || []), {
+                        name: selectedPlanMeal.meal_name,
+                        cals: selectedPlanMeal.calories || 0,
+                        protein: selectedPlanMeal.protein || 0,
+                        carbs: selectedPlanMeal.carbs || 0,
+                        fat: selectedPlanMeal.fat || 0,
+                      }]
+                    }));
+                    api.post('/nutrition', {
+                      meal_name: selectedPlanMeal.meal_name,
+                      calories: selectedPlanMeal.calories || 0,
+                      protein: selectedPlanMeal.protein || 0,
+                      carbs: selectedPlanMeal.carbs || 0,
+                      fat: selectedPlanMeal.fat || 0,
+                      date: new Date(),
+                      foods: (selectedPlanMeal.foods || []).map(f => ({ name: f.name, portion: f.portion || '', calories: f.calories || 0 })),
+                    }).catch(() => {});
+                    setSelectedPlanMeal(null);
+                  }}
+                  className="w-full mt-5 h-12 gradient-cyan text-black font-semibold rounded-xl flex items-center justify-center gap-2"
+                >
+                  <CheckCircle2 className="w-5 h-5" />
+                  Log This Meal
+                </button>
+              </div>
+            </motion.div>
+          </>
         )}
       </AnimatePresence>
     </div>

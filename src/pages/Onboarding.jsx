@@ -8,6 +8,9 @@ import CoachStyleSelector from '@/components/coach/CoachStyleSelector';
 import CoachSummary from '@/components/onboarding/CoachSummary';
 import BodyFatSelector from '@/components/onboarding/BodyFatSelector';
 import PlanChoice from '@/components/onboarding/PlanChoice.jsx';
+import MenuChoice from '@/components/onboarding/MenuChoice.jsx';
+import MenuAIPreferences from '@/components/onboarding/MenuAIPreferences.jsx';
+import MenuManual from '@/components/onboarding/MenuManual.jsx';
 import { Loader2 } from 'lucide-react';
 
 const QUESTIONS = [
@@ -157,12 +160,15 @@ export default function Onboarding() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { register, user, updateProfile } = useAuth();
-  const [phase, setPhase] = useState('welcome'); // welcome, questions, plan_choice, plan_import, coach_selection, summary, account_setup
+  const [phase, setPhase] = useState('welcome'); // welcome, questions, plan_choice, plan_import, menu_choice, menu_ai_preferences, menu_manual, coach_selection, summary, account_setup
   const [currentStep, setCurrentStep] = useState(0);
   const [answers, setAnswers] = useState({});
   const [coachStyle, setCoachStyle] = useState(null);
   const [planChoice, setPlanChoice] = useState(null); // 'ai' or 'existing'
   const [customPlan, setCustomPlan] = useState(null);
+  const [menuChoice, setMenuChoice] = useState(null); // 'ai' | 'manual' | 'tracking_only'
+  const [menuAIPreferences, setMenuAIPreferences] = useState(null); // { likes, dislikes }
+  const [manualMenu, setManualMenu] = useState(null); // [{ name, foods }]
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Load saved progress
@@ -245,11 +251,11 @@ export default function Onboarding() {
     if (currentStep < QUESTIONS.length - 1) {
       setCurrentStep(prev => prev + 1);
     } else {
-      // Show plan choice for intermediate/advanced users
+      // Show plan choice for intermediate/advanced users, otherwise go straight to menu
       if (answers.experience_level === 'intermediate' || answers.experience_level === 'advanced') {
         setPhase('plan_choice');
       } else {
-        setPhase('coach_selection');
+        setPhase('menu_choice');
       }
     }
   };
@@ -268,11 +274,7 @@ export default function Onboarding() {
   };
 
   const handleComplete = () => {
-    if (user) {
-      handleFinalSubmit();
-    } else {
-      setPhase('account_setup');
-    }
+    handleFinalSubmit();
   };
 
   const handleFinalSubmit = async () => {
@@ -297,6 +299,9 @@ export default function Onboarding() {
       coach_style: coachStyle,
       plan_choice: planChoice || 'ai',
       custom_plan: customPlan,
+      menu_choice: menuChoice || 'tracking_only',
+      menu_ai_preferences: menuAIPreferences,
+      manual_menu: manualMenu,
       onboarding_completed: true,
       onboarding_date: new Date().toISOString()
     };
@@ -411,7 +416,7 @@ export default function Onboarding() {
           if (choice === 'existing') {
             setPhase('plan_import');
           } else {
-            setPhase('coach_selection');
+            setPhase('menu_choice');
           }
         }}
         onBack={() => setPhase('questions')}
@@ -427,11 +432,62 @@ export default function Onboarding() {
         <PlanImportComponent
           onComplete={(plan) => {
             setCustomPlan(plan);
-            setPhase('coach_selection');
+            setPhase('menu_choice');
           }}
           onBack={() => setPhase('plan_choice')}
         />
       </React.Suspense>
+    );
+  }
+
+  // Menu Choice Phase (all users)
+  if (phase === 'menu_choice') {
+    return (
+      <MenuChoice
+        onSelect={(choice) => {
+          setMenuChoice(choice);
+          if (choice === 'ai') {
+            setPhase('menu_ai_preferences');
+          } else if (choice === 'manual') {
+            setPhase('menu_manual');
+          } else {
+            setPhase(user ? 'coach_selection' : 'account_setup');
+          }
+        }}
+        onBack={() => {
+          if (answers.experience_level === 'intermediate' || answers.experience_level === 'advanced') {
+            setPhase(planChoice === 'existing' ? 'plan_import' : 'plan_choice');
+          } else {
+            setPhase('questions');
+          }
+        }}
+      />
+    );
+  }
+
+  // Menu AI Preferences Phase
+  if (phase === 'menu_ai_preferences') {
+    return (
+      <MenuAIPreferences
+        onComplete={(prefs) => {
+          setMenuAIPreferences(prefs);
+          setPhase(user ? 'coach_selection' : 'account_setup');
+        }}
+        onBack={() => setPhase('menu_choice')}
+      />
+    );
+  }
+
+  // Menu Manual Entry Phase
+  if (phase === 'menu_manual') {
+    return (
+      <MenuManual
+        onComplete={(meals) => {
+          setManualMenu(meals);
+          setPhase(user ? 'coach_selection' : 'account_setup');
+        }}
+        onBack={() => setPhase('menu_choice')}
+      />
     );
   }
 
@@ -458,6 +514,7 @@ export default function Onboarding() {
 
   // Account Setup Phase
   if (phase === 'account_setup') {
+    const canContinue = answers.name && answers.email && answers.password && answers.password.length >= 6;
     return (
       <div className="min-h-screen flex flex-col items-center justify-center px-6">
         <motion.div
@@ -465,7 +522,8 @@ export default function Onboarding() {
           animate={{ opacity: 1, y: 0 }}
           className="w-full max-w-md mx-auto bg-[#1A1A1A] p-8 rounded-2xl border border-[#2A2A2A]"
         >
-          <h2 className="text-2xl font-bold mb-6 text-center">{t('onboarding.createYourAccount')}</h2>
+          <h2 className="text-2xl font-bold mb-2 text-center">{t('onboarding.createYourAccount')}</h2>
+          <p className="text-gray-500 text-sm text-center mb-6">{t('onboarding.almostThere', 'Almost there! Create your account to save your plan.')}</p>
 
           <div className="space-y-4">
             <div>
@@ -499,18 +557,30 @@ export default function Onboarding() {
                 value={answers.password || ''}
                 onChange={(e) => setAnswers(prev => ({ ...prev, password: e.target.value }))}
               />
+              <p className="text-xs text-gray-600 mt-1">Minimum 6 characters</p>
             </div>
 
-            <div className="pt-4">
+            <div className="pt-4 flex gap-3">
               <button
-                onClick={handleFinalSubmit}
-                disabled={!answers.name || !answers.email || !answers.password}
-                className={`w-full h-12 rounded-xl font-semibold transition-all ${answers.name && answers.email && answers.password
+                onClick={() => {
+                  // Go back to the correct menu sub-phase
+                  if (menuChoice === 'ai') setPhase('menu_ai_preferences');
+                  else if (menuChoice === 'manual') setPhase('menu_manual');
+                  else setPhase('menu_choice');
+                }}
+                className="flex-1 h-12 rounded-xl font-semibold bg-transparent border border-[#2A2A2A] text-white hover:bg-[#1A1A1A] transition-colors"
+              >
+                {t('common.back')}
+              </button>
+              <button
+                onClick={() => setPhase('coach_selection')}
+                disabled={!canContinue}
+                className={`flex-1 h-12 rounded-xl font-semibold transition-all ${canContinue
                   ? 'gradient-cyan text-black'
                   : 'bg-[#2A2A2A] text-gray-500 cursor-not-allowed'
                   }`}
               >
-                {t('register.createAccount')}
+                {t('common.continue')}
               </button>
             </div>
           </div>

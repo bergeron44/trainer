@@ -1,4 +1,4 @@
-const ChatBrainService = require('./chatBrainService');
+const BaseLLMRequest = require('./requests/baseLLMRequest');
 const User = require('../models/User');
 const Workout = require('../models/Workout');
 
@@ -21,7 +21,7 @@ function sanitizeErrorMessage(error) {
     return message.length > 400 ? `${message.slice(0, 397)}...` : message;
 }
 
-class OnboardingWorkoutPlannerService {
+class OnboardingWorkoutPlannerService extends BaseLLMRequest {
     constructor({
         chatBrainService,
         userModel = User,
@@ -29,26 +29,19 @@ class OnboardingWorkoutPlannerService {
         logger = console,
         enabled,
     } = {}) {
-        this.logger = logger;
+        super({
+            chatBrainService,
+            agentType: 'coach',
+            personaId: 'scientist_coach',
+            temperature: 0.2,
+            maxToolCalls: parseIntOrFallback(process.env.ONBOARDING_AI_PLANNER_MAX_TOOL_CALLS, DEFAULT_MAX_TOOL_CALLS),
+            maxToolIterations: parseIntOrFallback(process.env.ONBOARDING_AI_PLANNER_MAX_ITERATIONS, DEFAULT_MAX_TOOL_ITERATIONS),
+            retryAttempts: parseIntOrFallback(process.env.ONBOARDING_AI_PLANNER_RETRY_ATTEMPTS, DEFAULT_RETRY_ATTEMPTS),
+            logger,
+        });
         this.UserModel = userModel;
         this.WorkoutModel = workoutModel;
         this.enabled = enabled ?? parseBoolean(process.env.ONBOARDING_AI_PLANNER_ENABLED, true);
-        this.chatBrainService = chatBrainService || new ChatBrainService({
-            config: {
-                maxToolCallsPerResponse: parseIntOrFallback(
-                    process.env.ONBOARDING_AI_PLANNER_MAX_TOOL_CALLS,
-                    DEFAULT_MAX_TOOL_CALLS
-                ),
-                maxToolIterations: parseIntOrFallback(
-                    process.env.ONBOARDING_AI_PLANNER_MAX_ITERATIONS,
-                    DEFAULT_MAX_TOOL_ITERATIONS
-                ),
-                retryAttempts: parseIntOrFallback(
-                    process.env.ONBOARDING_AI_PLANNER_RETRY_ATTEMPTS,
-                    DEFAULT_RETRY_ATTEMPTS
-                ),
-            },
-        });
     }
 
     isEnabled() {
@@ -63,7 +56,7 @@ class OnboardingWorkoutPlannerService {
         return true;
     }
 
-    getPlannerToolAllowlist() {
+    getToolAllowlist() {
         return [
             'user_get_profile',
             'workouts_get_user_workouts',
@@ -74,7 +67,7 @@ class OnboardingWorkoutPlannerService {
         ];
     }
 
-    buildPlannerSystemPrompt({ requestId }) {
+    buildSystemPrompt({ requestId }) {
         return [
             'You are the onboarding workout planning agent.',
             'You must call user_get_profile first before creating workouts.',
@@ -89,47 +82,34 @@ class OnboardingWorkoutPlannerService {
         ].join('\n');
     }
 
-    async generatePlan({ userId, requestId, trigger }) {
-        const result = await this.chatBrainService.generateResponse({
-            userId,
-            agentType: 'coach',
-            personaId: 'scientist_coach',
-            system: this.buildPlannerSystemPrompt({ requestId }),
-            messages: [{
-                role: 'user',
-                content: 'Create my personalized onboarding workout plan now.',
-            }],
-            context: {
-                workflow: 'onboarding_workout_planner',
-                trigger: trigger || 'unknown',
-            },
-            metadata: {
-                requestId,
-                workflow: 'onboarding_workout_planner',
-            },
-            options: {
-                temperature: 0.2,
-            },
-            persistSummary: false,
-            memoryLimit: 0,
-            enableTools: true,
-            toolAllowlist: this.getPlannerToolAllowlist(),
-        });
+    buildUserPrompt() {
+        return 'Create my personalized onboarding workout plan now.';
+    }
 
-        const createdCount = Array.isArray(result.toolTrace)
+    validateResult(result) {
+        const count = Array.isArray(result.toolTrace)
             ? result.toolTrace.filter(
                 (item) => item?.ok && item?.toolName === 'workouts_create_workout'
             ).length
             : 0;
-
-        if (createdCount < 1) {
+        if (count < 1) {
             throw new Error('Planner did not create workouts.');
         }
+    }
 
+    getContext({ trigger }) {
         return {
-            ...result,
-            createdCount,
+            workflow: 'onboarding_workout_planner',
+            trigger: trigger || 'unknown',
         };
+    }
+
+    async generatePlan({ userId, requestId, trigger }) {
+        const result = await this.execute({ userId, requestId, trigger });
+        const createdCount = result.toolTrace.filter(
+            (item) => item?.ok && item?.toolName === 'workouts_create_workout'
+        ).length;
+        return { ...result, createdCount };
     }
 
     async ensurePlanForUser({

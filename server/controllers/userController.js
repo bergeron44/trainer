@@ -3,8 +3,11 @@ const bcrypt = require('bcryptjs');
 const asyncHandler = require('express-async-handler');
 const User = require('../models/User');
 const OnboardingWorkoutPlannerService = require('../services/onboardingWorkoutPlannerService');
+const OnboardingMenuPlannerService = require('../services/onboardingMenuPlannerService');
+const MealPlan = require('../models/MealPlan');
 
 const onboardingWorkoutPlannerService = new OnboardingWorkoutPlannerService();
+const onboardingMenuPlannerService = new OnboardingMenuPlannerService();
 
 const generateToken = (id) => {
     return jwt.sign({ id }, process.env.JWT_SECRET, {
@@ -14,6 +17,7 @@ const generateToken = (id) => {
 
 function normalizeIncomingProfile(profile = {}) {
     const normalized = { ...(profile || {}) };
+
     const planChoice = String(normalized.plan_choice || '').trim().toLowerCase();
     if (planChoice === 'existing') {
         normalized.workout_plan_status = 'skipped';
@@ -22,6 +26,23 @@ function normalizeIncomingProfile(profile = {}) {
     if (planChoice === 'ai' && normalized.onboarding_completed === true) {
         normalized.workout_plan_status = normalized.workout_plan_status || 'pending';
     }
+
+    const menuChoice = String(normalized.menu_choice || '').trim().toLowerCase();
+    if (menuChoice === 'tracking_only') {
+        normalized.menu_plan_status = 'skipped';
+    } else if (menuChoice === 'ai' && normalized.onboarding_completed === true) {
+        normalized.menu_plan_status = normalized.menu_plan_status || 'pending';
+    }
+    // 'manual' stays pending; saveManualMenuSafely() will set it to 'ready'
+
+    // Strip null/undefined nested objects — Mongoose can't cast them
+    if (!normalized.menu_ai_preferences || typeof normalized.menu_ai_preferences !== 'object') {
+        delete normalized.menu_ai_preferences;
+    }
+    if (!Array.isArray(normalized.manual_menu) || normalized.manual_menu.length === 0) {
+        delete normalized.manual_menu;
+    }
+
     return normalized;
 }
 
@@ -39,10 +60,69 @@ async function runOnboardingPlannerSafely({ userId, requestId, trigger }) {
             trigger,
             message: error?.message,
         });
-        return {
-            triggered: false,
-            status: 'failed_to_start',
-        };
+        return { triggered: false, status: 'failed_to_start' };
+    }
+}
+
+async function runOnboardingMenuPlannerSafely({ userId, requestId, trigger }) {
+    try {
+        return await onboardingMenuPlannerService.ensurePlanForUser({
+            userId,
+            requestId,
+            trigger,
+        });
+    } catch (error) {
+        console.error('userController.onboardingMenuPlanner error:', {
+            userId,
+            requestId,
+            trigger,
+            message: error?.message,
+        });
+        return { triggered: false, status: 'failed_to_start' };
+    }
+}
+
+async function saveManualMenuSafely({ userId, profile }) {
+    if (!userId || !profile) return;
+    const menuChoice = String(profile.menu_choice || '').trim().toLowerCase();
+    if (menuChoice !== 'manual') return;
+
+    const manualMenu = profile.manual_menu;
+    if (!Array.isArray(manualMenu) || manualMenu.length === 0) return;
+
+    try {
+        // Archive any existing manual plan for this user
+        await MealPlan.updateMany(
+            { user: userId, source: 'manual', archived: false },
+            { $set: { archived: true } }
+        );
+
+        await MealPlan.create({
+            user: userId,
+            source: 'manual',
+            meals: manualMenu.map((m) => ({
+                meal_name: m.name || 'Meal',
+                foods: m.foods
+                    ? [{ name: m.foods }]
+                    : [],
+            })),
+            archived: false,
+        });
+
+        await require('../models/User').findByIdAndUpdate(userId, {
+            $set: {
+                'profile.has_existing_menu': true,
+                'profile.menu_plan_status': 'ready',
+                'profile.menu_plan_source': 'manual',
+                'profile.menu_plan_error': undefined,
+                'profile.menu_plan_generated_at': new Date(),
+            },
+        });
+    } catch (error) {
+        console.error('userController.saveManualMenu error:', {
+            userId,
+            message: error?.message,
+        });
     }
 }
 
@@ -77,6 +157,12 @@ const registerUser = asyncHandler(async (req, res) => {
             requestId: req.requestId,
             trigger: 'register',
         });
+        await runOnboardingMenuPlannerSafely({
+            userId: user.id,
+            requestId: req.requestId,
+            trigger: 'register',
+        });
+        await saveManualMenuSafely({ userId: user.id, profile: user.profile });
 
         const latestUser = await User.findById(user.id);
         res.status(201).json({
@@ -153,6 +239,12 @@ const updateProfile = asyncHandler(async (req, res) => {
         requestId: req.requestId,
         trigger: 'update_profile',
     });
+    await runOnboardingMenuPlannerSafely({
+        userId: user.id,
+        requestId: req.requestId,
+        trigger: 'update_profile',
+    });
+    await saveManualMenuSafely({ userId: user.id, profile: user.profile });
 
     const updatedUser = await User.findById(user.id);
 
