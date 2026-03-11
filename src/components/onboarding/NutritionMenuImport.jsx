@@ -4,8 +4,9 @@ import { ChevronLeft, Plus, Trash2, Check } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { getImportMealPeriodOptions } from '@/lib/nutritionMealPeriods';
 
-const PERIODS = ['Breakfast', 'Lunch', 'Snack', 'Dinner', 'Evening Snack'];
+const PERIODS = getImportMealPeriodOptions();
 
 function createEmptyEntry(defaultPeriod = 'Breakfast') {
   return {

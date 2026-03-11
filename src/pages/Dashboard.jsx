@@ -32,6 +32,8 @@ export default function Dashboard() {
   const [planStatus, setPlanStatus] = useState('pending');
   const [planError, setPlanError] = useState('');
   const [isRetryingPlan, setIsRetryingPlan] = useState(false);
+  const [nutritionPlanStatus, setNutritionPlanStatus] = useState('pending');
+  const [nutritionPlanError, setNutritionPlanError] = useState('');
 
   useEffect(() => {
     if (isLoadingAuth) return;
@@ -46,6 +48,8 @@ export default function Dashboard() {
     setProfile(profileData);
     setPlanStatus(profileData.workout_plan_status || 'pending');
     setPlanError(profileData.workout_plan_error || '');
+    setNutritionPlanStatus(profileData.nutrition_plan_status || 'pending');
+    setNutritionPlanError(profileData.nutrition_plan_error || '');
 
     const initWorkouts = async () => {
       try {
@@ -134,8 +138,10 @@ export default function Dashboard() {
   useEffect(() => {
     const shouldPollForPlan = !isLoadingAuth
       && user?.profile
-      && ['pending', 'generating'].includes(user.profile.workout_plan_status)
-      && user.profile.plan_choice !== 'existing';
+      && (
+        (['pending', 'generating'].includes(user.profile.workout_plan_status) && user.profile.plan_choice !== 'existing')
+        || ['pending', 'generating'].includes(user.profile.nutrition_plan_status)
+      );
 
     if (!shouldPollForPlan) return undefined;
 
@@ -430,6 +436,38 @@ export default function Dashboard() {
               />
             ))}
           </div>
+        </motion.div>
+      )}
+
+      {/* ── Nutrition Plan Status Banner ── */}
+      {['pending', 'generating'].includes(nutritionPlanStatus) && (
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.22 }}
+          className="mt-4 bg-[#111] rounded-2xl p-4 border border-[#1E1E1E] text-sm text-center space-y-1"
+        >
+          <p className="text-[#CCFF00]">
+            {t('dashboard.nutritionPlanGeneratingMsg', 'Your AI nutrition plan is generating. This may take a moment.')}
+          </p>
+          {nutritionPlanError ? (
+            <p className="text-xs text-[#CCFF00]/70">{nutritionPlanError}</p>
+          ) : null}
+        </motion.div>
+      )}
+      {nutritionPlanStatus === 'failed' && (
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.22 }}
+          className="mt-4 bg-[#111] rounded-2xl p-4 border border-[#1E1E1E] text-sm text-center space-y-1"
+        >
+          <p className="text-red-400">
+            {t('dashboard.nutritionPlanFailedMsg', 'AI nutrition plan generation failed.')}
+          </p>
+          {nutritionPlanError ? (
+            <p className="text-xs text-red-300/70">{nutritionPlanError}</p>
+          ) : null}
         </motion.div>
       )}
 

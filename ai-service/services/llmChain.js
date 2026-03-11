@@ -14,6 +14,7 @@ const MODEL_ORDER = [
     'gpt-4o',
     'gemini-2.5-flash',
 ];
+const DEFAULT_TIMEOUT_MS = Number.parseInt(process.env.LLM_API_TIMEOUT_MS || '', 10) || 20000;
 
 function getClient() {
     const apiKey = process.env.LLM_API_KEY;
@@ -26,22 +27,30 @@ function getClient() {
  * @param {string} system - System prompt
  * @param {string} userMsg - User message
  * @param {number} maxTokens - Max tokens to generate
+ * @param {object} options - Request options
  */
-async function callWithFallback(system, userMsg, maxTokens = 1024) {
+async function callWithFallback(system, userMsg, maxTokens = 1024, options = {}) {
     const client = getClient();
     const errors = [];
 
     for (const model of MODEL_ORDER) {
         try {
             console.log(`[LLM] 🔄 Trying ${model}...`);
-            const res = await client.chat.completions.create({
+            const request = {
                 model,
                 max_tokens: maxTokens,
+                temperature: options.temperature ?? 0.2,
                 messages: [
                     { role: 'system', content: system },
                     { role: 'user', content: userMsg },
                 ],
-            });
+                timeout: options.timeoutMs || DEFAULT_TIMEOUT_MS,
+            };
+            if (options.responseFormat) {
+                request.response_format = options.responseFormat;
+            }
+
+            const res = await client.chat.completions.create(request);
             const text = res.choices[0].message.content;
             console.log(`[LLM] ✅ Success with ${model}`);
             return { text, provider: model };

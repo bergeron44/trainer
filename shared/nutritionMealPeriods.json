@@ -1,0 +1,24 @@
+{
+  "canonicalByMealCount": {
+    "2": ["First Meal", "Final Feast"],
+    "3": ["Morning Fuel", "Midday Recharger", "Evening Recovery"],
+    "4": ["Breakfast", "Lunch", "Pre-Workout Snack", "Dinner"],
+    "5": ["Early Kickoff", "Mid-Morning Snack", "Lunch", "Afternoon Fuel", "Dinner"],
+    "6": ["Early Kickoff", "Mid-Morning Snack", "Lunch", "Afternoon Fuel", "Dinner", "Evening Snack"]
+  },
+  "aliasesByCanonical": {
+    "First Meal": ["First Meal", "Breakfast", "Brunch"],
+    "Final Feast": ["Final Feast", "Dinner", "Supper", "Last Meal"],
+    "Morning Fuel": ["Morning Fuel", "Breakfast", "First Meal"],
+    "Midday Recharger": ["Midday Recharger", "Lunch", "Midday Meal"],
+    "Evening Recovery": ["Evening Recovery", "Dinner", "Supper", "Evening Meal"],
+    "Breakfast": ["Breakfast", "Early Breakfast"],
+    "Lunch": ["Lunch", "Midday Meal"],
+    "Pre-Workout Snack": ["Pre-Workout Snack", "Pre Workout Snack", "Snack", "Afternoon Snack", "Midday Snack"],
+    "Dinner": ["Dinner", "Supper", "Evening Meal"],
+    "Early Kickoff": ["Early Kickoff", "Breakfast", "First Meal", "Early Breakfast"],
+    "Mid-Morning Snack": ["Mid-Morning Snack", "Mid Morning Snack", "Morning Snack", "Snack"],
+    "Afternoon Fuel": ["Afternoon Fuel", "Afternoon Snack", "Snack", "Pre-Workout Snack", "Pre Workout Snack", "Evening Snack"],
+    "Evening Snack": ["Evening Snack", "Late Snack", "Night Snack", "Post-Dinner Snack"]
+  }
+}

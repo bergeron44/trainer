@@ -2,6 +2,141 @@ const asyncHandler = require('express-async-handler');
 const { callWithFallback } = require('../services/llmChain');
 const { buildMealSystem, buildMealUserMessage } = require('../prompts/mealPrompt');
 
+const STRUCTURED_RESPONSE_OPTIONS = {
+    responseFormat: { type: 'json_object' },
+    timeoutMs: Number.parseInt(process.env.MEAL_LLM_TIMEOUT_MS || '', 10) || 20000,
+    temperature: 0.2,
+};
+
+function stripMarkdownFences(text = '') {
+    return String(text || '')
+        .replace(/```json\s*/gi, '')
+        .replace(/```\s*/g, '')
+        .trim();
+}
+
+function parseJsonResponse(text = '') {
+    const cleaned = stripMarkdownFences(text);
+    const candidates = [];
+    const pushCandidate = (value) => {
+        if (!value || candidates.includes(value)) return;
+        candidates.push(value);
+    };
+
+    pushCandidate(cleaned);
+
+    const firstBrace = cleaned.indexOf('{');
+    const lastBrace = cleaned.lastIndexOf('}');
+    if (firstBrace >= 0 && lastBrace > firstBrace) {
+        pushCandidate(cleaned.slice(firstBrace, lastBrace + 1));
+    }
+
+    let lastError;
+    for (const candidate of candidates) {
+        try {
+            return JSON.parse(candidate);
+        } catch (error) {
+            lastError = error;
+        }
+
+        try {
+            return JSON.parse(candidate.replace(/,\s*([}\]])/g, '$1'));
+        } catch (error) {
+            lastError = error;
+        }
+    }
+
+    throw lastError || new Error('Failed to parse meal JSON response.');
+}
+
+function normalizeMacro(value) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? Math.max(0, Math.round(parsed)) : 0;
+}
+
+function validateFoods(foods) {
+    if (!Array.isArray(foods) || foods.length === 0) {
+        throw new Error('Meal response must include at least one food.');
+    }
+
+    return foods.map((food) => {
+        const name = String(food?.name || '').trim();
+        if (!name) {
+            throw new Error('Meal response contains a food without a name.');
+        }
+        return {
+            name,
+            portion: String(food?.portion || '').trim(),
+            calories: normalizeMacro(food?.calories),
+            protein: normalizeMacro(food?.protein),
+            carbs: normalizeMacro(food?.carbs),
+            fat: normalizeMacro(food?.fat),
+        };
+    });
+}
+
+function validateMealPayload(payload = {}) {
+    const mealName = String(payload?.meal_name || '').trim();
+    if (!mealName) {
+        throw new Error('Meal response is missing meal_name.');
+    }
+
+    return {
+        meal_name: mealName,
+        foods: validateFoods(payload?.foods),
+        total_calories: normalizeMacro(payload?.total_calories),
+        total_protein: normalizeMacro(payload?.total_protein),
+        total_carbs: normalizeMacro(payload?.total_carbs),
+        total_fat: normalizeMacro(payload?.total_fat),
+        coach_note: String(payload?.coach_note || '').trim(),
+    };
+}
+
+function buildRepairPrompt({ originalUserMessage, invalidResponse, error }) {
+    return [
+        originalUserMessage,
+        '',
+        'Your previous response was not valid strict JSON for the required meal schema.',
+        `Validation error: ${String(error?.message || 'unknown error').slice(0, 200)}`,
+        'Return the full response again as strict JSON only.',
+        'Do not include markdown, comments, trailing commas, or extra text.',
+        'Previous invalid response:',
+        String(invalidResponse || '').slice(0, 1200),
+    ].join('\n');
+}
+
+async function generateStructuredMeal({ systemPrompt, userMessage, maxTokens }) {
+    const firstAttempt = await callWithFallback(
+        systemPrompt,
+        userMessage,
+        maxTokens,
+        STRUCTURED_RESPONSE_OPTIONS
+    );
+
+    try {
+        return {
+            meal: validateMealPayload(parseJsonResponse(firstAttempt.text)),
+            provider: firstAttempt.provider,
+        };
+    } catch (firstError) {
+        const repairedAttempt = await callWithFallback(
+            systemPrompt,
+            buildRepairPrompt({
+                originalUserMessage: userMessage,
+                invalidResponse: firstAttempt.text,
+                error: firstError,
+            }),
+            maxTokens,
+            STRUCTURED_RESPONSE_OPTIONS
+        );
+
+        return {
+            meal: validateMealPayload(parseJsonResponse(repairedAttempt.text)),
+            provider: repairedAttempt.provider,
+        };
+    }
+}
+
 /**
  * @desc    Generate next meal using LLM
  * @route   POST /ai/meal/next
@@ -49,16 +184,19 @@ const generateNextMeal = asyncHandler(async (req, res) => {
         meals_remaining,
     });
 
-    const { text, provider } = await callWithFallback(systemPrompt, userMessage, 800);
-
-    // Parse JSON — strip markdown code fences if model added them
     let meal;
+    let provider;
     try {
-        const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-        meal = JSON.parse(cleaned);
-    } catch (err) {
-        res.status(500);
-        throw new Error(`LLM returned invalid JSON: ${text.slice(0, 200)}`);
+        const result = await generateStructuredMeal({
+            systemPrompt,
+            userMessage,
+            maxTokens: 800,
+        });
+        meal = result.meal;
+        provider = result.provider;
+    } catch (error) {
+        res.status(502);
+        throw new Error(`LLM returned invalid structured meal response: ${String(error?.message || '').slice(0, 200)}`);
     }
 
     res.json({ ...meal, _provider: provider });
@@ -100,15 +238,19 @@ Respond ONLY with this exact JSON structure (no markdown, no extra text):
   "coach_note": "משפט קצר בעברית על הארוחה"
 }`;
 
-    const { text, provider } = await callWithFallback(systemPrompt, userMessage, 800);
-
     let meal;
+    let provider;
     try {
-        const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-        meal = JSON.parse(cleaned);
-    } catch (err) {
-        res.status(500);
-        throw new Error(`LLM returned invalid JSON: ${text.slice(0, 200)}`);
+        const result = await generateStructuredMeal({
+            systemPrompt,
+            userMessage,
+            maxTokens: 800,
+        });
+        meal = result.meal;
+        provider = result.provider;
+    } catch (error) {
+        res.status(502);
+        throw new Error(`LLM returned invalid structured meal response: ${String(error?.message || '').slice(0, 200)}`);
     }
 
     res.json({ ...meal, _provider: provider });

@@ -172,3 +172,78 @@ test('ChatBrainService passes tool allowlist to tool executor', async () => {
     assert.equal(result.response, 'Planner completed.');
     assert.deepEqual(capturedAllowlist, ['user_get_profile', 'workouts_create_workout']);
 });
+
+test('ChatBrainService forces a final answer when tool budget is exhausted', async () => {
+    const providerInputs = [];
+    let providerRound = 0;
+
+    const service = new ChatBrainService({
+        provider: {
+            async generateSafe(input) {
+                providerInputs.push(input);
+                providerRound += 1;
+
+                if (providerRound === 1) {
+                    return {
+                        text: '',
+                        toolCalls: [
+                            { id: 'tool-call-1', name: 'user_get_profile', arguments: {} },
+                            { id: 'tool-call-2', name: 'nutrition_get_logs', arguments: {} },
+                        ],
+                        provider: 'mock',
+                        model: 'mock-model',
+                        finishReason: 'tool_calls',
+                    };
+                }
+
+                assert.equal(Array.isArray(input.tools) ? input.tools.length : 0, 0);
+                assert.match(input.messages[input.messages.length - 1].content, /tool call budget is exhausted/i);
+                return {
+                    text: 'I used the profile data I already fetched and cannot call more tools in this turn.',
+                    provider: 'mock',
+                    model: 'mock-model',
+                    finishReason: 'stop',
+                };
+            },
+        },
+        toolExecutor: {
+            listToolsForModel() {
+                return [
+                    { name: 'user_get_profile', description: 'Get profile.', inputSchema: { type: 'object', properties: {} } },
+                    { name: 'nutrition_get_logs', description: 'Get logs.', inputSchema: { type: 'object', properties: {} } },
+                ];
+            },
+            async executeToolCalls({ toolCalls }) {
+                assert.equal(toolCalls.length, 1);
+                assert.equal(toolCalls[0].name, 'user_get_profile');
+                return [
+                    {
+                        ok: true,
+                        toolName: 'user_get_profile',
+                        toolCallId: toolCalls[0].id,
+                        data: { profile: { goal: 'muscle_gain' } },
+                        error: null,
+                    },
+                ];
+            },
+        },
+        chatSummaryModel: buildSummaryModel(),
+        config: {
+            maxToolIterations: 4,
+            maxToolCallsPerResponse: 1,
+            retryAttempts: 1,
+        },
+    });
+
+    const result = await service.generateResponse({
+        userId: 'u1',
+        prompt: 'Update my workout and nutrition plan',
+        persistSummary: false,
+    });
+
+    assert.equal(providerInputs.length, 2);
+    assert.equal(result.response, 'I used the profile data I already fetched and cannot call more tools in this turn.');
+    assert.equal(result.meta.toolCallsExecuted, 1);
+    assert.equal(result.meta.toolBudgetExhausted, true);
+    assert.equal(result.meta.toolLoopStopReason, 'tool_budget_exhausted');
+});

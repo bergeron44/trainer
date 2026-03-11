@@ -394,6 +394,24 @@ class ChatBrainService {
         throw lastError;
     }
 
+    async forceFinalToolLoopAnswer({ providerPayload, workingMessages, reason }) {
+        const guidance = reason === 'tool_budget_exhausted'
+            ? 'Tool call budget is exhausted. Reply directly using the tool results already collected. If something is still missing, say that explicitly without asking for more tools.'
+            : 'You cannot call additional tools in this response. Reply directly using the information already available, and clearly note any missing data.';
+
+        return this.generateWithRetry({
+            ...providerPayload,
+            messages: [
+                ...workingMessages,
+                {
+                    role: 'user',
+                    content: guidance,
+                },
+            ],
+            tools: [],
+        });
+    }
+
     async runToolLoop({ providerPayload, input }) {
         const toolsEnabled = this.config.toolsEnabled && input.enableTools !== false;
         const toolDefinitions = toolsEnabled
@@ -404,6 +422,11 @@ class ChatBrainService {
         let workingMessages = providerPayload.messages;
         const toolTrace = [];
         let totalToolCalls = 0;
+        const toolLoopMeta = {
+            budgetExhausted: false,
+            iterationLimitReached: false,
+            stopReason: 'completed',
+        };
 
         for (let round = 1; round <= this.config.maxToolIterations; round += 1) {
             providerResult = await this.generateWithRetry({
@@ -421,16 +444,30 @@ class ChatBrainService {
                 : [];
 
             if (!requestedCalls.length) {
+                toolLoopMeta.stopReason = 'assistant_response';
                 break;
             }
 
             const remainingCalls = this.config.maxToolCallsPerResponse - totalToolCalls;
             if (remainingCalls <= 0) {
+                toolLoopMeta.budgetExhausted = true;
+                toolLoopMeta.stopReason = 'tool_budget_exhausted';
+                providerResult = await this.forceFinalToolLoopAnswer({
+                    providerPayload,
+                    workingMessages,
+                    reason: 'tool_budget_exhausted',
+                });
                 break;
             }
 
-            // Keep one provider round available for a final natural-language answer.
             if (round >= this.config.maxToolIterations) {
+                toolLoopMeta.iterationLimitReached = true;
+                toolLoopMeta.stopReason = 'tool_iteration_limit_reached';
+                providerResult = await this.forceFinalToolLoopAnswer({
+                    providerPayload,
+                    workingMessages,
+                    reason: 'tool_iteration_limit_reached',
+                });
                 break;
             }
 
@@ -468,11 +505,26 @@ class ChatBrainService {
             }));
 
             workingMessages = [...workingMessages, assistantToolMessage, ...toolMessages];
+
+            if (
+                requestedCalls.length > remainingCalls
+                || totalToolCalls >= this.config.maxToolCallsPerResponse
+            ) {
+                toolLoopMeta.budgetExhausted = true;
+                toolLoopMeta.stopReason = 'tool_budget_exhausted';
+                providerResult = await this.forceFinalToolLoopAnswer({
+                    providerPayload,
+                    workingMessages,
+                    reason: 'tool_budget_exhausted',
+                });
+                break;
+            }
         }
 
         return {
             providerResult,
             toolTrace,
+            toolLoopMeta,
         };
     }
 
@@ -526,7 +578,7 @@ class ChatBrainService {
             await this.hooks.beforeGenerate(providerPayload);
         }
 
-        const { providerResult, toolTrace } = await this.runToolLoop({
+        const { providerResult, toolTrace, toolLoopMeta } = await this.runToolLoop({
             providerPayload,
             input,
         });
@@ -538,7 +590,10 @@ class ChatBrainService {
             });
         }
 
-        const responseText = String(providerResult?.text || '').trim() || 'Done.';
+        const responseText = String(providerResult?.text || '').trim()
+            || ((toolLoopMeta?.budgetExhausted || toolLoopMeta?.iterationLimitReached)
+                ? 'I reached the tool-call limit before finishing. Please try again.'
+                : 'Done.');
 
         const shouldPersist = input.persistSummary !== false;
         if (shouldPersist) {
@@ -565,6 +620,9 @@ class ChatBrainService {
                 memoryUsed: memories.length,
                 messageCount: normalizedMessages.length,
                 toolCallsExecuted: toolTrace.length,
+                toolBudgetExhausted: Boolean(toolLoopMeta?.budgetExhausted),
+                toolIterationLimitReached: Boolean(toolLoopMeta?.iterationLimitReached),
+                toolLoopStopReason: toolLoopMeta?.stopReason || 'completed',
             },
         };
     }

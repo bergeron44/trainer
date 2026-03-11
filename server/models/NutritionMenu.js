@@ -39,6 +39,11 @@ const nutritionMenuSchema = mongoose.Schema({
         carbs: Number,
         fat: Number,
     }],
+    import_origin: {
+        type: String,
+        enum: ['onboarding_custom_menu'],
+    },
+    import_signature: String,
     archived: {
         type: Boolean,
         default: false,

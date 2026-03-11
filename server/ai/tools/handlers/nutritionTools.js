@@ -1,6 +1,7 @@
 const { z } = require('zod');
 const User = require('../../../models/User');
 const NutritionLog = require('../../../models/NutritionLog');
+const NutritionMenu = require('../../../models/NutritionMenu');
 const { ToolExecutionError } = require('../toolSchemas');
 
 const nutritionTargetPatchSchema = z.object({
@@ -52,6 +53,32 @@ const setDailyTargetsInputSchema = z.object({
     ].some((item) => item !== undefined),
     'At least one daily target field is required.'
 );
+
+const menuEntryFoodSchema = z.object({
+    name: z.string().min(1).max(120),
+    portion: z.string().min(1).max(60).optional(),
+    calories: z.number().nonnegative().max(5000).optional(),
+    protein: z.number().nonnegative().max(1000).optional(),
+    carbs: z.number().nonnegative().max(1000).optional(),
+    fat: z.number().nonnegative().max(1000).optional(),
+}).strict();
+
+const getMenuEntriesInputSchema = z.object({
+    meal_period: z.string().min(1).max(80).optional(),
+    limit: z.number().int().min(1).max(100).optional(),
+}).strict();
+
+const createMenuEntryInputSchema = z.object({
+    meal_period: z.string().min(1).max(80),
+    meal_name: z.string().min(1).max(160),
+    total_calories: z.number().min(1).max(10000),
+    total_protein: z.number().nonnegative().max(1500).optional(),
+    total_carbs: z.number().nonnegative().max(1500).optional(),
+    total_fat: z.number().nonnegative().max(1500).optional(),
+    foods: z.array(menuEntryFoodSchema).max(12).optional(),
+    note: z.string().max(500).optional(),
+    idempotencyKey: z.string().min(1).max(128),
+}).strict();
 
 const logIntakeInputSchema = z.object({
     date: z.string().datetime().optional(),
@@ -402,6 +429,124 @@ function createNutritionTools({ models = {} } = {}) {
                     changedFields: ['nutrition_log'],
                     data: {
                         created: sanitizeNutritionLog(log),
+                    },
+                };
+            },
+        },
+        {
+            name: 'nutrition_get_menu_entries',
+            description: 'Get the nutrition menu entries saved for the authenticated user. Use this to review the meal plan that has been created.',
+            readWriteMode: 'read',
+            idempotent: false,
+            timeoutMs: 6000,
+            inputSchema: getMenuEntriesInputSchema,
+            jsonSchema: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                    meal_period: { type: 'string', minLength: 1, maxLength: 80 },
+                    limit: { type: 'integer', minimum: 1, maximum: 100 },
+                },
+            },
+            async handler({ args, context }) {
+                ensureUserId(context.userId);
+
+                const query = { user: context.userId, archived: { $ne: true } };
+                if (args.meal_period) {
+                    query.meal_period = args.meal_period;
+                }
+
+                const entries = await NutritionMenu.find(query)
+                    .sort({ meal_period: 1, createdAt: 1 })
+                    .limit(args.limit || 50)
+                    .lean();
+
+                return {
+                    data: {
+                        count: entries.length,
+                        entries: entries.map((e) => ({
+                            id: String(e._id),
+                            meal_period: e.meal_period,
+                            meal_name: e.meal_name,
+                            total_calories: e.total_calories,
+                            total_protein: e.total_protein,
+                            total_carbs: e.total_carbs,
+                            total_fat: e.total_fat,
+                            source: e.source,
+                        })),
+                    },
+                };
+            },
+        },
+        {
+            name: 'nutrition_create_menu_entry',
+            description: 'Create a nutrition menu entry for the authenticated user. Use this to save planned meals to the nutrition menu.',
+            readWriteMode: 'write',
+            idempotent: true,
+            timeoutMs: 7000,
+            inputSchema: createMenuEntryInputSchema,
+            jsonSchema: {
+                type: 'object',
+                additionalProperties: false,
+                required: ['meal_period', 'meal_name', 'total_calories', 'idempotencyKey'],
+                properties: {
+                    idempotencyKey: { type: 'string', minLength: 1, maxLength: 128 },
+                    meal_period: { type: 'string', minLength: 1, maxLength: 80 },
+                    meal_name: { type: 'string', minLength: 1, maxLength: 160 },
+                    total_calories: { type: 'number', minimum: 1, maximum: 10000 },
+                    total_protein: { type: 'number', minimum: 0, maximum: 1500 },
+                    total_carbs: { type: 'number', minimum: 0, maximum: 1500 },
+                    total_fat: { type: 'number', minimum: 0, maximum: 1500 },
+                    note: { type: 'string', maxLength: 500 },
+                    foods: {
+                        type: 'array',
+                        maxItems: 12,
+                        items: {
+                            type: 'object',
+                            additionalProperties: false,
+                            required: ['name'],
+                            properties: {
+                                name: { type: 'string', minLength: 1, maxLength: 120 },
+                                portion: { type: 'string', minLength: 1, maxLength: 60 },
+                                calories: { type: 'number', minimum: 0, maximum: 5000 },
+                                protein: { type: 'number', minimum: 0, maximum: 1000 },
+                                carbs: { type: 'number', minimum: 0, maximum: 1000 },
+                                fat: { type: 'number', minimum: 0, maximum: 1000 },
+                            },
+                        },
+                    },
+                },
+            },
+            async handler({ args, context }) {
+                ensureUserId(context.userId);
+
+                const entry = await NutritionMenu.create({
+                    user: context.userId,
+                    meal_period: args.meal_period,
+                    meal_name: args.meal_name,
+                    total_calories: args.total_calories,
+                    total_protein: args.total_protein,
+                    total_carbs: args.total_carbs,
+                    total_fat: args.total_fat,
+                    foods: args.foods || [],
+                    note: args.note,
+                    source: 'ai',
+                    archived: false,
+                });
+
+                return {
+                    changedFields: ['nutrition_menu'],
+                    data: {
+                        created: {
+                            id: String(entry._id),
+                            meal_period: entry.meal_period,
+                            meal_name: entry.meal_name,
+                            total_calories: entry.total_calories,
+                            total_protein: entry.total_protein,
+                            total_carbs: entry.total_carbs,
+                            total_fat: entry.total_fat,
+                            source: entry.source,
+                        },
                     },
                 };
             },

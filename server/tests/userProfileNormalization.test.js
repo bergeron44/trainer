@@ -1,7 +1,10 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { normalizeIncomingProfile } = require('../controllers/userController');
+const {
+    normalizeIncomingProfile,
+    prepareProfileForAsyncPlanners,
+} = require('../controllers/userController');
 
 test('normalizeIncomingProfile marks nutrition existing choice as skipped/manual', () => {
     const normalized = normalizeIncomingProfile({
@@ -58,4 +61,25 @@ test('normalizeIncomingProfile defaults unknown trainer_personality to drill_ser
     });
 
     assert.equal(normalized.trainer_personality, 'drill_sergeant_coach');
+});
+
+test('prepareProfileForAsyncPlanners marks imported existing nutrition menus as pending', () => {
+    const prepared = prepareProfileForAsyncPlanners({
+        profile: normalizeIncomingProfile({
+            onboarding_completed: true,
+            nutrition_plan_choice: 'existing',
+        }),
+        shouldTriggerNutritionPlanner: true,
+        incomingCustomNutritionMenu: [
+            {
+                meal_period: 'Breakfast',
+                meal_name: 'Egg Bowl',
+                total_calories: 450,
+            },
+        ],
+    });
+
+    assert.equal(prepared.nutrition_plan_status, 'pending');
+    assert.equal(prepared.nutrition_plan_source, 'manual');
+    assert.equal(prepared.nutrition_plan_error, undefined);
 });

@@ -8,37 +8,63 @@ import FoodSwipeGame from '@/components/nutrition/FoodSwipeGame';
 import MealPlanCard from '@/components/nutrition/MealPlanCard';
 import ManualFoodEntry from '@/components/nutrition/ManualFoodEntry';
 import { useAuth } from '@/lib/AuthContext';
+import {
+  getCanonicalMealPeriods,
+  resolvePeriodFromValue,
+  resolvePeriodIdForDate,
+  resolvePeriodLabelForDate,
+} from '@/lib/nutritionMealPeriods';
 import api from '@/api/axios';
 import aiApi from '@/api/aiAxios';
 
 // --- Coach Logic: Dynamic Meal Periods ---
-const generateCoachPeriods = (goal, dietType, t = null) => {
-  let numMeals = 5;
-  if (goal === 'muscle_gain') numMeals = 6;
-  if (goal === 'weight_loss') numMeals = 3;
-  if (dietType === 'keto') numMeals = Math.max(2, numMeals - 1);
-  numMeals = Math.max(2, Math.min(7, numMeals));
-
-  const periods = [];
-  if (numMeals === 2) {
-    periods.push({ id: 'm1', label: t ? t('nutrition.meals.firstMeal', 'First Meal') : 'First Meal' }, { id: 'm2', label: t ? t('nutrition.meals.finalFeast', 'Final Feast') : 'Final Feast' });
-  } else if (numMeals === 3) {
-    periods.push({ id: 'm1', label: t ? t('nutrition.meals.morningFuel', 'Morning Fuel') : 'Morning Fuel' }, { id: 'm2', label: t ? t('nutrition.meals.middayRecharger', 'Midday Recharger') : 'Midday Recharger' }, { id: 'm3', label: t ? t('nutrition.meals.eveningRecovery', 'Evening Recovery') : 'Evening Recovery' });
-  } else if (numMeals === 4) {
-    periods.push({ id: 'm1', label: t ? t('nutrition.breakfast', 'Breakfast') : 'Breakfast' }, { id: 'm2', label: t ? t('nutrition.lunch', 'Lunch') : 'Lunch' }, { id: 'm3', label: t ? t('nutrition.meals.preWorkoutSnack', 'Pre-Workout Snack') : 'Pre-Workout Snack' }, { id: 'm4', label: t ? t('nutrition.dinner', 'Dinner') : 'Dinner' });
-  } else if (numMeals >= 5) {
-    periods.push({ id: 'm1', label: t ? t('nutrition.meals.earlyKickoff', 'Early Kickoff') : 'Early Kickoff' }, { id: 'm2', label: t ? t('nutrition.meals.midMorningSnack', 'Mid-Morning Snack') : 'Mid-Morning Snack' }, { id: 'm3', label: t ? t('nutrition.lunch', 'Lunch') : 'Lunch' }, { id: 'm4', label: t ? t('nutrition.meals.afternoonFuel', 'Afternoon Fuel') : 'Afternoon Fuel' });
-    if (numMeals >= 6) periods.push({ id: 'm5', label: t ? t('nutrition.dinner', 'Dinner') : 'Dinner' });
-    if (numMeals === 7) {
-      periods.push({ id: 'm6', label: t ? t('nutrition.meals.postWorkoutShake', 'Post-Workout Shake') : 'Post-Workout Shake' });
-      periods.push({ id: 'm7', label: t ? t('nutrition.meals.lateNightCasein', 'Late Night Casein') : 'Late Night Casein' });
-    } else if (numMeals === 6) {
-      periods.push({ id: 'm6', label: t ? t('nutrition.meals.eveningSnack', 'Evening Snack') : 'Evening Snack' });
-    } else {
-      periods.push({ id: 'm5', label: t ? t('nutrition.dinner', 'Dinner') : 'Dinner' });
-    }
+const generateCoachPeriods = (goal, dietType, mealFrequency, t = null) => {
+  const explicitMealFrequency = Number.parseInt(mealFrequency, 10);
+  let numMeals = Number.isFinite(explicitMealFrequency) ? explicitMealFrequency : 5;
+  if (!Number.isFinite(explicitMealFrequency)) {
+    if (goal === 'muscle_gain') numMeals = 6;
+    if (goal === 'weight_loss') numMeals = 3;
+    if (dietType === 'keto') numMeals = Math.max(2, numMeals - 1);
   }
-  return periods;
+  numMeals = Math.max(2, Math.min(6, numMeals));
+
+  const translatePeriodLabel = (label) => {
+    switch (label) {
+      case 'First Meal':
+        return t ? t('nutrition.meals.firstMeal', 'First Meal') : label;
+      case 'Final Feast':
+        return t ? t('nutrition.meals.finalFeast', 'Final Feast') : label;
+      case 'Morning Fuel':
+        return t ? t('nutrition.meals.morningFuel', 'Morning Fuel') : label;
+      case 'Midday Recharger':
+        return t ? t('nutrition.meals.middayRecharger', 'Midday Recharger') : label;
+      case 'Evening Recovery':
+        return t ? t('nutrition.meals.eveningRecovery', 'Evening Recovery') : label;
+      case 'Breakfast':
+        return t ? t('nutrition.breakfast', 'Breakfast') : label;
+      case 'Lunch':
+        return t ? t('nutrition.lunch', 'Lunch') : label;
+      case 'Pre-Workout Snack':
+        return t ? t('nutrition.meals.preWorkoutSnack', 'Pre-Workout Snack') : label;
+      case 'Dinner':
+        return t ? t('nutrition.dinner', 'Dinner') : label;
+      case 'Early Kickoff':
+        return t ? t('nutrition.meals.earlyKickoff', 'Early Kickoff') : label;
+      case 'Mid-Morning Snack':
+        return t ? t('nutrition.meals.midMorningSnack', 'Mid-Morning Snack') : label;
+      case 'Afternoon Fuel':
+        return t ? t('nutrition.meals.afternoonFuel', 'Afternoon Fuel') : label;
+      case 'Evening Snack':
+        return t ? t('nutrition.meals.eveningSnack', 'Evening Snack') : label;
+      default:
+        return label;
+    }
+  };
+
+  return getCanonicalMealPeriods(numMeals).map((label, index) => ({
+    id: `m${index + 1}`,
+    label: translatePeriodLabel(label),
+  }));
 };
 
 const DIET_TIPS = {
@@ -54,17 +80,6 @@ const GOAL_LABELS = {
   recomp: 'Maintenance',
   athletic_performance: 'Athletic Performance'
 };
-
-// Map hour → period ID
-const getPeriodId = (hour) => {
-  if (hour < 10) return 'm1';
-  if (hour < 13) return 'm2';
-  if (hour < 16) return 'm3';
-  if (hour < 19) return 'm4';
-  return 'm5';
-};
-
-const normalizePeriodValue = (value) => String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
 
 export default function NutritionDemo() {
   const { user } = useAuth();
@@ -83,6 +98,7 @@ export default function NutritionDemo() {
   const profile = user?.profile || {};
   const dietType = profile.diet_type || 'everything';
   const goal = profile.goal || 'recomp';
+  const mealFrequency = profile.meal_frequency;
   const nutritionPlanChoice = profile.nutrition_plan_choice;
   const isTrackingOnlyMode = nutritionPlanChoice === 'tracking_only';
 
@@ -92,34 +108,25 @@ export default function NutritionDemo() {
   const [periods, setPeriods] = useState([]);
 
   useEffect(() => {
-    setPeriods(generateCoachPeriods(goal, dietType, t));
-  }, [goal, dietType, t]);
+    setPeriods(generateCoachPeriods(goal, dietType, mealFrequency, t));
+  }, [goal, dietType, mealFrequency, t]);
 
   const resolvePeriodForLog = (log) => {
-    const periodValue = String(log?.meal_period || '').trim();
-    if (periodValue) {
-      const byId = periods.find((p) => p.id === periodValue);
-      if (byId) return byId.id;
-      const byLabel = periods.find((p) => p.label === periodValue);
-      if (byLabel) return byLabel.id;
+    const resolvedPeriod = resolvePeriodFromValue(log?.meal_period, periods);
+    if (resolvedPeriod) {
+      return resolvedPeriod.id;
     }
 
-    const fallbackByHour = getPeriodId(new Date(log?.date || log?.createdAt || Date.now()).getHours());
-    if (periods.some((p) => p.id === fallbackByHour)) return fallbackByHour;
-    return periods[0]?.id || 'm1';
+    if (String(log?.meal_period || '').trim()) {
+      const byId = periods.find((p) => p.id === String(log.meal_period).trim());
+      if (byId) return byId.id;
+    }
+
+    return resolvePeriodIdForDate(periods, log?.date || log?.createdAt || Date.now());
   };
 
   const resolvePeriodForMenuEntry = (entry) => {
-    const periodValue = normalizePeriodValue(entry?.meal_period);
-    if (!periodValue) return null;
-
-    const byId = periods.find((period) => normalizePeriodValue(period.id) === periodValue);
-    if (byId) return byId.id;
-
-    const byLabel = periods.find((period) => normalizePeriodValue(period.label) === periodValue);
-    if (byLabel) return byLabel.id;
-
-    return null;
+    return resolvePeriodFromValue(entry?.meal_period, periods)?.id || null;
   };
 
   const loadTodaysLogs = async () => {
@@ -223,7 +230,7 @@ export default function NutritionDemo() {
   }, { cals: 0, pro: 0, carb: 0, fat: 0 });
 
   // Block AI meal generation if current period already has an AI meal
-  const currentPeriodId = getPeriodId(new Date().getHours());
+  const currentPeriodId = resolvePeriodIdForDate(periods, new Date());
   const currentPeriodHasAIMeal = (loggedFoods[currentPeriodId] || []).some((f) => f.source === 'ai');
 
   const macroCards = [
@@ -344,7 +351,7 @@ export default function NutritionDemo() {
         carbs_consumed: currentMacros.carb,
         fat_consumed: currentMacros.fat,
         time_of_day: format(now, 'HH:mm'),
-        meal_period: getCurrentMealPeriod(now),
+        meal_period: resolvePeriodLabelForDate(periods, now),
         meals_eaten_today: mealsEaten,
         total_meals_planned: periods.length,
       });
@@ -358,19 +365,9 @@ export default function NutritionDemo() {
     }
   };
 
-  const getCurrentMealPeriod = (now) => {
-    const hour = now.getHours();
-    if (hour < 10) return 'Breakfast';
-    if (hour < 13) return 'Lunch';
-    if (hour < 16) return 'Afternoon Snack';
-    if (hour < 20) return 'Dinner';
-    return 'Evening Snack';
-  };
-
   const handleLogMeal = async (meal) => {
     const now = new Date();
-    const hour = now.getHours();
-    const periodId = getPeriodId(hour);
+    const periodId = resolvePeriodIdForDate(periods, now);
     let createdLog = null;
     try {
       createdLog = await saveTrackingEntry({
