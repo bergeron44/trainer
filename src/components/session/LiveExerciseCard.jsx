@@ -52,7 +52,7 @@ export default function LiveExerciseCard({
     setTimeElapsed(0);
     setRestMode(true);
     setRestTime(exercise.rest_seconds || 60);
-    onSetComplete(exercise.id, completedSets + 1);
+    onSetComplete(exercise.id, completedSets + 1, currentWeight, parseInt(currentReps) || 0);
   };
 
   const handleStartPause = () => {

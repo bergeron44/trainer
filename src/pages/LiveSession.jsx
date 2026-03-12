@@ -133,7 +133,7 @@ export default function LiveSession() {
     return () => clearInterval(interval);
   }, [sessionStartTime]);
 
-  const handleSetComplete = useCallback((exerciseId, setNumber) => {
+  const handleSetComplete = useCallback((exerciseId, setNumber, weightUsed, repsUsed) => {
     const newCompletedSets = { ...completedSets, [exerciseId]: setNumber };
     setCompletedSets(newCompletedSets);
 
@@ -143,7 +143,9 @@ export default function LiveSession() {
 
     // Update stats
     const exercise = workout?.exercises.find(e => e.id === exerciseId);
-    const addedVolume = exercise ? (exercise.weight || 0) * (parseInt(exercise.reps) || 0) : 0;
+    const weight = weightUsed ?? exercise?.weight ?? 0;
+    const reps = repsUsed ?? parseInt(exercise?.reps) ?? 0;
+    const addedVolume = weight * reps;
     if (exercise) {
       setSessionStats(prev => ({
         ...prev,
@@ -152,13 +154,13 @@ export default function LiveSession() {
       }));
     }
 
-    // Log set to DB (fire and forget)
+    // Log set to DB (fire and forget) — uses actual weight from card UI
     if (sessionDbId && exercise) {
       api.post(`/workouts/session/${sessionDbId}/log`, {
         exercise_name: exercise.name,
         set_number: setNumber,
-        reps_completed: parseInt(exercise.reps) || 0,
-        weight_used: exercise.weight || 0,
+        reps_completed: reps,
+        weight_used: weight,
       }).catch(err => console.error('Failed to log set:', err));
     }
 

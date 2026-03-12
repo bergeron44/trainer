@@ -3,10 +3,9 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import api from '@/api/axios';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import {
-  Check, X, ChevronDown,
-  SkipForward, Sparkles, Timer, Dumbbell, AlertCircle, Play, Pause, RotateCcw
+  Check, X, ChevronDown, Sparkles, Timer, Dumbbell, AlertCircle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from 'react-i18next';
@@ -381,10 +380,21 @@ export default function WorkoutSession() {
 
   // ── Handlers ──
   const handleCompleteSet = (exerciseId) => {
-    setCompletedSets(prev => ({
-      ...prev,
-      [exerciseId]: (prev[exerciseId] || 0) + 1
-    }));
+    const newCount = (completedSets[exerciseId] || 0) + 1;
+    setCompletedSets(prev => ({ ...prev, [exerciseId]: newCount }));
+
+    // Log set to DB (fire and forget)
+    if (sessionDbId && workout) {
+      const exercise = workout.exercises.find(ex => ex.id === exerciseId);
+      if (exercise) {
+        api.post(`/workouts/session/${sessionDbId}/log`, {
+          exercise_name: exercise.name,
+          set_number: newCount,
+          reps_completed: parseInt(exercise.reps) || 0,
+          weight_used: exercise.weight || 0,
+        }).catch(err => console.error('Failed to log set:', err));
+      }
+    }
   };
 
   const handleFinishWorkout = async () => {

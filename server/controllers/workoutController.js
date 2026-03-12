@@ -434,16 +434,17 @@ const logExerciseSet = asyncHandler(async (req, res) => {
         throw new Error('exercise_name, set_number, reps_completed, and weight_used are required');
     }
 
-    const log = await WorkoutLog.create({
+    const logFields = {
         user: req.user.id,
-        workout_id: session.workout_id,
         exercise_name,
         set_number,
         reps_completed,
         weight_used,
         date: new Date(),
         rpe: rpe || undefined,
-    });
+    };
+    if (session.workout_id) logFields.workout_id = session.workout_id;
+    const log = await WorkoutLog.create(logFields);
 
     res.status(201).json(log);
 });
