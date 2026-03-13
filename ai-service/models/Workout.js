@@ -1,7 +1,11 @@
 const mongoose = require('mongoose');
 
 const workoutSchema = mongoose.Schema({
-    user: { type: mongoose.Schema.Types.ObjectId, required: true, ref: 'User' },
+    user: {
+        type: mongoose.Schema.Types.ObjectId,
+        required: true,
+        ref: 'User'
+    },
     date: { type: Date, required: true },
     muscle_group: { type: String, required: true },
     exercises: [{
@@ -13,11 +17,21 @@ const workoutSchema = mongoose.Schema({
         rest_seconds: Number,
         notes: String
     }],
-    status: { type: String, enum: ['planned', 'in_progress', 'completed'], default: 'planned' },
+    status: {
+        type: String,
+        enum: ['planned', 'in_progress', 'completed'],
+        default: 'planned'
+    },
+    archived: {
+        type: Boolean,
+        default: false
+    },
     duration_minutes: Number,
     total_volume: Number,
     notes: String
-}, { timestamps: true });
+}, {
+    timestamps: true
+});
 
 const Workout = mongoose.model('Workout', workoutSchema);
 module.exports = Workout;

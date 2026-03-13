@@ -4,7 +4,7 @@ const {
     extractNutritionPreferences,
     extractNutritionPreferencesPhase1
 } = require('../controllers/userController');
-const { protect } = require('../middleware/authMiddleware');
+const { protect } = require('../middleware/auth');
 
 router.put('/nutrition-preferences/extract', protect, extractNutritionPreferences);
 router.put('/nutrition-preferences/extract-phase1', protect, extractNutritionPreferencesPhase1);

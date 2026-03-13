@@ -1,4 +1,5 @@
-const BaseLLMRequest = require('./requests/baseLLMRequest');
+const axios = require('axios');
+const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const MealPlan = require('../models/MealPlan');
 
@@ -21,27 +22,26 @@ function sanitizeErrorMessage(error) {
     return message.length > 400 ? `${message.slice(0, 397)}...` : message;
 }
 
-class OnboardingMenuPlannerService extends BaseLLMRequest {
+/**
+ * Mint a short-lived JWT for internal server → ai-service calls.
+ * The ai-service auth middleware verifies it the same way as user tokens.
+ */
+function mintServiceToken(userId) {
+    return jwt.sign({ id: userId }, process.env.JWT_SECRET, { expiresIn: '10m' });
+}
+
+class OnboardingMenuPlannerService {
     constructor({
-        chatBrainService,
         userModel = User,
         mealPlanModel = MealPlan,
         logger = console,
         enabled,
     } = {}) {
-        super({
-            chatBrainService,
-            agentType: 'nutritionist',
-            personaId: 'nutritionist',
-            temperature: 0.7,
-            maxToolCalls: parseIntOrFallback(process.env.ONBOARDING_AI_MENU_PLANNER_MAX_TOOL_CALLS, DEFAULT_MAX_TOOL_CALLS),
-            maxToolIterations: parseIntOrFallback(process.env.ONBOARDING_AI_MENU_PLANNER_MAX_ITERATIONS, DEFAULT_MAX_TOOL_ITERATIONS),
-            retryAttempts: parseIntOrFallback(process.env.ONBOARDING_AI_MENU_PLANNER_RETRY_ATTEMPTS, DEFAULT_RETRY_ATTEMPTS),
-            logger,
-        });
         this.UserModel = userModel;
         this.MealPlanModel = mealPlanModel;
         this.enabled = enabled ?? parseBoolean(process.env.ONBOARDING_AI_MENU_PLANNER_ENABLED, true);
+        this.logger = logger;
+        this.aiServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:5002';
     }
 
     isEnabled() {
@@ -88,33 +88,49 @@ class OnboardingMenuPlannerService extends BaseLLMRequest {
         ].join('\n');
     }
 
-    buildUserPrompt() {
-        return 'Create my personalized daily meal plan now.';
-    }
+    async generatePlan({ userId, requestId, trigger, user }) {
+        const token = mintServiceToken(userId);
 
-    validateResult(result) {
-        const saved = Array.isArray(result.toolTrace)
+        const { data: result } = await axios.post(
+            `${this.aiServiceUrl}/ai/chat/response`,
+            {
+                agentType: 'nutritionist',
+                personaId: 'nutritionist',
+                system: this.buildSystemPrompt({ requestId, user }),
+                messages: [{
+                    role: 'user',
+                    content: 'Create my personalized daily meal plan now.',
+                }],
+                context: {
+                    workflow: 'onboarding_menu_planner',
+                    trigger: trigger || 'unknown',
+                },
+                metadata: {
+                    requestId,
+                    workflow: 'onboarding_menu_planner',
+                },
+                options: { temperature: 0.2 },
+                persistSummary: false,
+                memoryLimit: 0,
+                enableTools: true,
+                toolAllowlist: this.getToolAllowlist(),
+            },
+            {
+                headers: { Authorization: `Bearer ${token}` },
+                timeout: 120000,
+            }
+        );
+
+        const savedCount = Array.isArray(result.toolTrace)
             ? result.toolTrace.filter(
                 (item) => item?.ok && item?.toolName === 'menu_plan_save'
             ).length
             : 0;
-        if (saved < 1) {
+
+        if (savedCount < 1) {
             throw new Error('Menu planner did not save a plan.');
         }
-    }
 
-    getContext({ trigger }) {
-        return {
-            workflow: 'onboarding_menu_planner',
-            trigger: trigger || 'unknown',
-        };
-    }
-
-    async generatePlan({ userId, requestId, trigger, user }) {
-        const result = await this.execute({ userId, requestId, trigger, user });
-        const savedCount = result.toolTrace.filter(
-            (item) => item?.ok && item?.toolName === 'menu_plan_save'
-        ).length;
         return { ...result, savedCount };
     }
 

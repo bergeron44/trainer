@@ -322,6 +322,7 @@ const fetchFoods = asyncHandler(async (req, res) => {
 module.exports = {
     getNutritionLogs,
     logMeal,
+    getRecentSavedMeals,
     getLogsByDate,
     generateMealPlan,
     fetchFoods,

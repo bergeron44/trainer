@@ -8,7 +8,7 @@ const workoutLogSchema = mongoose.Schema({
     },
     workout_id: {
         type: mongoose.Schema.Types.ObjectId,
-        required: true,
+        required: false,
         ref: 'Workout'
     },
     exercise_name: { type: String, required: true },
