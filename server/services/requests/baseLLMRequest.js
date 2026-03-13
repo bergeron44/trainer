@@ -9,6 +9,7 @@ class BaseLLMRequest {
         maxToolCalls,
         maxToolIterations,
         retryAttempts,
+        maxSystemChars,
         logger = console,
     } = {}) {
         this.logger = logger;
@@ -20,6 +21,7 @@ class BaseLLMRequest {
                 maxToolCallsPerResponse: maxToolCalls,
                 maxToolIterations,
                 retryAttempts,
+                maxSystemChars,
             },
         });
     }
