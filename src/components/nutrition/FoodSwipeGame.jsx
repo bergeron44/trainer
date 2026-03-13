@@ -448,9 +448,14 @@ export default function FoodSwipeGame({ onClose, existingLiked = [], existingDis
             exit={{ opacity: 0 }}
         >
             <div className="flex items-center justify-between px-4 py-3 shrink-0">
-                <span className="text-sm text-gray-500 w-16">{swipedCount}/{Math.min(SESSION_LIMIT, sessionTotal)}</span>
+                <button
+                    onClick={() => onCloseRef.current?.()}
+                    className="text-sm text-gray-400 hover:text-white transition-colors w-16 text-left"
+                >
+                    {t('common.back', 'Back')}
+                </button>
                 <h2 className="text-lg font-bold text-white">{t('nutrition.rateYourFood', 'Rate Your Food')} 💘</h2>
-                <div className="w-16" />
+                <span className="text-sm text-gray-500 w-16 text-right">{swipedCount}/{Math.min(SESSION_LIMIT, sessionTotal)}</span>
             </div>
 
             <div className="flex-1 relative mx-4 mt-2 max-w-sm w-full self-center">

@@ -31,6 +31,28 @@ const getActiveMealPlan = asyncHandler(async (req, res) => {
     res.status(200).json(plan || null);
 });
 
+const toFiniteNumber = (value) => {
+    const num = Number(value);
+    return Number.isFinite(num) ? num : 0;
+};
+
+const sanitizeFoodName = (value) => String(value || '').trim();
+
+const isLikelyFoodToken = (name) => {
+    if (!name) return false;
+    const normalized = name.replace(/\s+/g, ' ').trim();
+    if (!normalized) return false;
+    const words = normalized.split(' ').filter(Boolean);
+    return words.length <= 4;
+};
+
+const hasAnyNutritionSignal = (food = {}) => {
+    return toFiniteNumber(food.calories) > 0 ||
+        toFiniteNumber(food.protein) > 0 ||
+        toFiniteNumber(food.carbs) > 0 ||
+        toFiniteNumber(food.fat) > 0;
+};
+
 // @desc    Get nutrition logs
 // @route   GET /api/nutrition
 // @access  Private
@@ -71,6 +93,48 @@ const getLogsByDate = asyncHandler(async (req, res) => {
     });
 
     res.status(200).json(logs);
+});
+
+// @desc    Get recent saved meals (accepted history for meal planner context)
+// @route   GET /api/nutrition/recent-saved
+// @access  Private
+const getRecentSavedMeals = asyncHandler(async (req, res) => {
+    const limitRaw = parseInt(String(req.query.limit || '20'), 10);
+    const daysRaw = parseInt(String(req.query.days || '45'), 10);
+    const limit = Math.max(1, Math.min(100, Number.isFinite(limitRaw) ? limitRaw : 20));
+    const days = Math.max(1, Math.min(365, Number.isFinite(daysRaw) ? daysRaw : 45));
+
+    const start = new Date();
+    start.setDate(start.getDate() - days);
+
+    const logs = await NutritionLog.find({
+        user: req.user.id,
+        createdAt: { $gte: start }
+    })
+        .sort({ createdAt: -1 })
+        .limit(limit);
+
+    const meals = logs.map((log) => ({
+        id: String(log._id),
+        date: log.date || log.createdAt,
+        meal_name: log.meal_name || '',
+        calories: toFiniteNumber(log.calories),
+        protein: toFiniteNumber(log.protein),
+        carbs: toFiniteNumber(log.carbs),
+        fat: toFiniteNumber(log.fat),
+        foods: Array.isArray(log.foods)
+            ? log.foods.map((food) => ({
+                name: sanitizeFoodName(food?.name),
+                portion: String(food?.portion || '').trim(),
+                calories: toFiniteNumber(food?.calories),
+                protein: toFiniteNumber(food?.protein),
+                carbs: toFiniteNumber(food?.carbs),
+                fat: toFiniteNumber(food?.fat),
+            })).filter((food) => food.name)
+            : [],
+    }));
+
+    res.status(200).json({ meals });
 });
 
 // @desc    Generate a meal plan (mock — rule-based, ready for LLM swap)
@@ -131,7 +195,31 @@ const generateMealPlan = asyncHandler(async (req, res) => {
     };
 
     // Pick foods from liked_foods (or fallback generic)
-    const pool = liked_foods.length > 0 ? liked_foods : [
+    const dislikedNames = new Set(
+        (Array.isArray(disliked_foods) ? disliked_foods : [])
+            .map((name) => String(name || '').trim().toLowerCase())
+            .filter(Boolean)
+    );
+
+    const sanitizedLikedFoods = (Array.isArray(liked_foods) ? liked_foods : [])
+        .map((food) => {
+            const normalized = {
+                name: sanitizeFoodName(food?.name),
+                calories: toFiniteNumber(food?.calories),
+                protein: toFiniteNumber(food?.protein),
+                carbs: toFiniteNumber(food?.carbs),
+                fat: toFiniteNumber(food?.fat),
+            };
+            return normalized;
+        })
+        .filter((food) =>
+            food.name &&
+            isLikelyFoodToken(food.name) &&
+            !dislikedNames.has(food.name.toLowerCase()) &&
+            hasAnyNutritionSignal(food)
+        );
+
+    const pool = sanitizedLikedFoods.length > 0 ? sanitizedLikedFoods : [
         { name: 'Grilled Chicken Breast', calories: 165, protein: 31, carbs: 0, fat: 3.6 },
         { name: 'Brown Rice', calories: 123, protein: 2.7, carbs: 26, fat: 1 },
         { name: 'Steamed Broccoli', calories: 55, protein: 3.7, carbs: 11, fat: 0.6 },
@@ -144,6 +232,7 @@ const generateMealPlan = asyncHandler(async (req, res) => {
 
     for (const food of shuffled) {
         if (selected.length >= 3) break;
+        if (!hasAnyNutritionSignal(food)) continue;
         if (total.calories + (food.calories || 0) > target_per_meal.calories * 1.3) continue;
 
         const portion = Math.min(
@@ -235,6 +324,7 @@ module.exports = {
     getNutritionLogs,
     logMeal,
     getLogsByDate,
+    getRecentSavedMeals,
     generateMealPlan,
     fetchFoods,
     retryOnboardingMenuPlan,

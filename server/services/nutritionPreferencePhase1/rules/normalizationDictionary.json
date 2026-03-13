@@ -1,0 +1,36 @@
+{
+  "diets": {
+    "veganism": "vegan",
+    "plant based": "vegan",
+    "plant-based": "vegan",
+    "veg": "vegetarian",
+    "pescetarian": "pescatarian",
+    "gluten free": "gluten_free",
+    "lactose free": "lactose_free",
+    "dairy free": "lactose_free"
+  },
+  "cuisines": {
+    "med": "mediterranean",
+    "middle eastern": "middle_eastern",
+    "japaneese": "japanese",
+    "mex": "mexican"
+  },
+  "meal_periods": {
+    "morning": "breakfast",
+    "afternoon": "afternoon_snack",
+    "evening": "evening_snack",
+    "night": "evening_snack"
+  },
+  "meal_preferences": {
+    "protein rich": "high_protein",
+    "high-protein": "high_protein",
+    "low carbs": "low_carb",
+    "light meal": "light"
+  },
+  "day_rule_types": {
+    "cheat": "cheat_day",
+    "cheat meal": "cheat_day",
+    "more budget": "budget_flex",
+    "fast day": "fasting"
+  }
+}

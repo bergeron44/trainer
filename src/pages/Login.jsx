@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Loader2 } from 'lucide-react';
+import { Loader2, X } from 'lucide-react';
 import { createPageUrl } from '@/utils';
 import { useTranslation } from 'react-i18next';
 
@@ -12,6 +12,12 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  const [showForgotModal, setShowForgotModal] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotMessage, setForgotMessage] = useState(null);
+  const [forgotError, setForgotError] = useState(null);
 
   const { login } = useAuth();
   const navigate = useNavigate();
@@ -27,6 +33,29 @@ export default function Login() {
       setError(err?.response?.data?.message || err.message || t('login.loginFailed'));
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async (e) => {
+    e.preventDefault();
+    setForgotLoading(true);
+    setForgotError(null);
+    setForgotMessage(null);
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || '/api'}/users/forgot-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: forgotEmail })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to reset password');
+      }
+      setForgotMessage(data.message);
+    } catch (err) {
+      setForgotError(err.message);
+    } finally {
+      setForgotLoading(false);
     }
   };
 
@@ -90,6 +119,16 @@ export default function Login() {
           </button>
         </form>
 
+        <div className="mt-4 text-center">
+          <button
+            type="button"
+            onClick={() => setShowForgotModal(true)}
+            className="text-sm text-gray-400 hover:text-[#00F2FF] transition-colors"
+          >
+            Forgot Password?
+          </button>
+        </div>
+
         <div className="mt-8 text-center">
           <p className="text-gray-400 text-sm">
             {t('login.noAccount')}{' '}
@@ -102,6 +141,65 @@ export default function Login() {
           </p>
         </div>
       </motion.div>
+
+      {/* Forgot Password Modal */}
+      {showForgotModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="w-full max-w-sm bg-[#1A1A1A] border border-[#333] rounded-2xl p-6 relative shadow-2xl"
+          >
+            <button
+              onClick={() => {
+                setShowForgotModal(false);
+                setForgotMessage(null);
+                setForgotError(null);
+                setForgotEmail('');
+              }}
+              className="absolute top-4 right-4 text-gray-400 hover:text-white transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <h2 className="text-xl font-bold text-white mb-2">Reset Password</h2>
+            <p className="text-sm text-gray-400 mb-6">
+              Enter your email address and we'll send you a new temporary password.
+            </p>
+
+            {forgotMessage && (
+              <div className="mb-4 p-3 bg-green-500/10 border border-green-500/50 rounded-lg text-green-500 text-sm">
+                {forgotMessage}
+              </div>
+            )}
+
+            {forgotError && (
+              <div className="mb-4 p-3 bg-red-500/10 border border-red-500/50 rounded-lg text-red-500 text-sm">
+                {forgotError}
+              </div>
+            )}
+
+            <form onSubmit={handleForgotPassword} className="space-y-4">
+              <div>
+                <input
+                  type="email"
+                  value={forgotEmail}
+                  onChange={(e) => setForgotEmail(e.target.value)}
+                  className="w-full bg-[#121212] border border-[#333] rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-[#00F2FF] focus:ring-1 focus:ring-[#00F2FF] transition-all"
+                  placeholder={t('login.emailPlaceholder')}
+                  required
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={forgotLoading || !forgotEmail}
+                className="w-full h-11 rounded-xl font-semibold bg-[#2A2A2A] text-white hover:bg-[#333] disabled:opacity-50 flex items-center justify-center transition-colors"
+              >
+                {forgotLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Send New Password'}
+              </button>
+            </form>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }

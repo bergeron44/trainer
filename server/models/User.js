@@ -1,6 +1,13 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
+const WEEK_DAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+const MEAL_PERIODS = ['breakfast', 'lunch', 'afternoon_snack', 'dinner', 'evening_snack'];
+const TIME_CONTEXT_DAY_VALUES = [...WEEK_DAYS, 'any'];
+const TIME_CONTEXT_MEAL_VALUES = [...MEAL_PERIODS, 'any'];
+const DAY_RULE_TYPES = ['cheat_day', 'budget_flex', 'fasting', 'custom'];
+const MEAL_PREFERENCE_TYPES = ['light', 'moderate', 'heavy', 'high_protein', 'low_carb'];
+
 const userSchema = mongoose.Schema({
     name: { type: String, required: true },
     email: { type: String, required: true, unique: true },
@@ -111,6 +118,87 @@ const userSchema = mongoose.Schema({
         carbs: Number,
         fat: Number
     }],
+    nutrition_preferences: {
+        hard_restrictions: {
+            diets: [{
+                type: String,
+                enum: ['vegan', 'vegetarian', 'pescatarian', 'kosher', 'halal', 'gluten_free', 'lactose_free']
+            }],
+            allergies: [String],
+            medical_restrictions: [String],
+            forbidden_ingredients: [String],
+            notes: String
+        },
+        soft_likes: {
+            cuisines: [String],
+            foods: [String],
+            notes: String
+        },
+        soft_dislikes: {
+            cuisines: [String],
+            foods: [String],
+            notes: String
+        },
+        budget_preferences: {
+            currency: { type: String, default: 'USD' },
+            daily_budget: Number,
+            weekly_budget: Number,
+            expensive_days: [{
+                day_of_week: { type: String, enum: WEEK_DAYS },
+                budget_cap: Number,
+                note: String
+            }],
+            notes: String
+        },
+        rule_based_preferences: {
+            cheat_meals_per_week: { type: Number, min: 0, max: 21 },
+            cheat_days: [{ type: String, enum: WEEK_DAYS }],
+            day_rules: [{
+                day_of_week: { type: String, enum: WEEK_DAYS },
+                rule_type: { type: String, enum: DAY_RULE_TYPES },
+                note: String
+            }],
+            meal_time_rules: [{
+                meal_period: { type: String, enum: MEAL_PERIODS },
+                preference: { type: String, enum: MEAL_PREFERENCE_TYPES },
+                max_calories: Number,
+                note: String
+            }],
+            time_context_notes: [{
+                day_of_week: { type: String, enum: TIME_CONTEXT_DAY_VALUES, default: 'any' },
+                meal_period: { type: String, enum: TIME_CONTEXT_MEAL_VALUES, default: 'any' },
+                note: String
+            }],
+            time_notes: {
+                by_day: {
+                    sunday: { type: String, default: '' },
+                    monday: { type: String, default: '' },
+                    tuesday: { type: String, default: '' },
+                    wednesday: { type: String, default: '' },
+                    thursday: { type: String, default: '' },
+                    friday: { type: String, default: '' },
+                    saturday: { type: String, default: '' }
+                },
+                by_meal_period: {
+                    breakfast: { type: String, default: '' },
+                    lunch: { type: String, default: '' },
+                    afternoon_snack: { type: String, default: '' },
+                    dinner: { type: String, default: '' },
+                    evening_snack: { type: String, default: '' }
+                }
+            },
+            special_rules: [String],
+            notes: String
+        },
+        practical_constraints: {
+            max_prep_time_minutes: Number,
+            cooking_skill: { type: String, enum: ['beginner', 'intermediate', 'advanced'] },
+            equipment: [String],
+            meals_per_day: Number,
+            batch_cooking: Boolean,
+            notes: String
+        }
+    },
     disliked_foods: [{
         name: String
     }]

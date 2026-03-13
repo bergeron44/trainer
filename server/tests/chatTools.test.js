@@ -36,6 +36,7 @@ test('createDefaultToolRegistry registers MVP + additional tools', () => {
         'meals_delete_meal',
         'meals_edit_meal',
         'meals_get_user_meals',
+        'menu_plan_save',
         'nutrition_edit_user_data',
         'nutrition_get_user_data',
         'nutrition_log_intake',

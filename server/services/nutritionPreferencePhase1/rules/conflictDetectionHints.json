@@ -1,0 +1,14 @@
+[
+  {
+    "hint_type": "same_message_preference_conflict",
+    "description": "User states both like and dislike for the same food in one message."
+  },
+  {
+    "hint_type": "diet_internal_conflict",
+    "description": "User states strict diet and an incompatible food preference in same message."
+  },
+  {
+    "hint_type": "existing_profile_conflict",
+    "description": "Incoming statement contradicts existing saved preference."
+  }
+]
