@@ -1,6 +1,35 @@
 const asyncHandler = require('express-async-handler');
 const axios = require('axios');
 const NutritionLog = require('../models/NutritionLog');
+const MealPlan = require('../models/MealPlan');
+const OnboardingMenuPlannerService = require('../services/onboardingMenuPlannerService');
+
+const onboardingMenuPlannerService = new OnboardingMenuPlannerService();
+
+// @desc    Retry AI menu plan generation
+// @route   POST /api/nutrition/menu/retry
+// @access  Private
+const retryOnboardingMenuPlan = asyncHandler(async (req, res) => {
+    const outcome = await onboardingMenuPlannerService.ensurePlanForUser({
+        userId: req.user.id,
+        requestId: req.requestId,
+        trigger: 'manual_retry',
+        force: true,
+    });
+    res.status(200).json(outcome);
+});
+
+// @desc    Get the active meal plan for the user (most recent non-archived)
+// @route   GET /api/nutrition/menu/active
+// @access  Private
+const getActiveMealPlan = asyncHandler(async (req, res) => {
+    const plan = await MealPlan.findOne({
+        user: req.user.id,
+        archived: { $ne: true },
+    }).sort({ createdAt: -1 });
+
+    res.status(200).json(plan || null);
+});
 
 const toFiniteNumber = (value) => {
     const num = Number(value);
@@ -298,4 +327,6 @@ module.exports = {
     getRecentSavedMeals,
     generateMealPlan,
     fetchFoods,
+    retryOnboardingMenuPlan,
+    getActiveMealPlan,
 };

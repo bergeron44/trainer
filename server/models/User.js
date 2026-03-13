@@ -85,7 +85,30 @@ const userSchema = mongoose.Schema({
             type: String,
             enum: ['agent', 'legacy', 'manual'],
             default: 'agent'
-        }
+        },
+        menu_choice: {
+            type: String,
+            enum: ['ai', 'manual', 'tracking_only'],
+            default: 'tracking_only',
+        },
+        menu_ai_preferences: { type: mongoose.Schema.Types.Mixed },
+        manual_menu: [{
+            name:  String,
+            foods: String,
+        }],
+        has_existing_menu: { type: Boolean, default: false },
+        menu_plan_status: {
+            type: String,
+            enum: ['pending', 'generating', 'ready', 'failed', 'skipped'],
+            default: 'pending',
+        },
+        menu_plan_error:        String,
+        menu_plan_generated_at: Date,
+        menu_plan_source: {
+            type: String,
+            enum: ['agent', 'manual'],
+            default: 'agent',
+        },
     },
     liked_foods: [{
         name: String,
