@@ -33,7 +33,7 @@ class OnboardingWorkoutPlannerService extends BaseLLMRequest {
             chatBrainService,
             agentType: 'coach',
             personaId: 'scientist_coach',
-            temperature: 0.2,
+            temperature: 0.7,
             maxToolCalls: parseIntOrFallback(process.env.ONBOARDING_AI_PLANNER_MAX_TOOL_CALLS, DEFAULT_MAX_TOOL_CALLS),
             maxToolIterations: parseIntOrFallback(process.env.ONBOARDING_AI_PLANNER_MAX_ITERATIONS, DEFAULT_MAX_TOOL_ITERATIONS),
             retryAttempts: parseIntOrFallback(process.env.ONBOARDING_AI_PLANNER_RETRY_ATTEMPTS, DEFAULT_RETRY_ATTEMPTS),
@@ -58,7 +58,6 @@ class OnboardingWorkoutPlannerService extends BaseLLMRequest {
 
     getToolAllowlist() {
         return [
-            'user_get_profile',
             'workouts_get_user_workouts',
             'workouts_get_workout_types',
             'workouts_get_workout_by_type',
@@ -67,14 +66,17 @@ class OnboardingWorkoutPlannerService extends BaseLLMRequest {
         ];
     }
 
-    buildSystemPrompt({ requestId }) {
+    buildSystemPrompt({ requestId, profile = {} }) {
         return [
             'You are the onboarding workout planning agent.',
-            'You must call user_get_profile first before creating workouts.',
             'You may only use tools made available to you.',
-            'Create a personalized starter plan for the next 14 days based on the user profile.',
+            'Create a personalized starter plan for the next 14 days based on the user profile below.',
             'Respect injuries, environment, experience level, session duration, and weekly frequency.',
             'Do not exceed workout_days_per_week from profile.',
+            '',
+            'USER PROFILE:',
+            JSON.stringify(profile, null, 2),
+            '',
             'Every workouts_create_workout call must include idempotencyKey in this format:',
             `"onboarding-${requestId || 'request'}-workout-<index>"`,
             'Avoid duplicate workouts for the same date/type in this planning run.',
@@ -104,8 +106,8 @@ class OnboardingWorkoutPlannerService extends BaseLLMRequest {
         };
     }
 
-    async generatePlan({ userId, requestId, trigger }) {
-        const result = await this.execute({ userId, requestId, trigger });
+    async generatePlan({ userId, requestId, trigger, profile }) {
+        const result = await this.execute({ userId, requestId, trigger, profile });
         const createdCount = result.toolTrace.filter(
             (item) => item?.ok && item?.toolName === 'workouts_create_workout'
         ).length;
@@ -165,6 +167,7 @@ class OnboardingWorkoutPlannerService extends BaseLLMRequest {
                 userId: String(user._id),
                 requestId,
                 trigger,
+                profile,
             });
             const workoutCount = await this.WorkoutModel.countDocuments({
                 user: user._id,

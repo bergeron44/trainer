@@ -33,7 +33,7 @@ class OnboardingMenuPlannerService extends BaseLLMRequest {
             chatBrainService,
             agentType: 'nutritionist',
             personaId: 'nutritionist',
-            temperature: 0.3,
+            temperature: 0.7,
             maxToolCalls: parseIntOrFallback(process.env.ONBOARDING_AI_MENU_PLANNER_MAX_TOOL_CALLS, DEFAULT_MAX_TOOL_CALLS),
             maxToolIterations: parseIntOrFallback(process.env.ONBOARDING_AI_MENU_PLANNER_MAX_ITERATIONS, DEFAULT_MAX_TOOL_ITERATIONS),
             retryAttempts: parseIntOrFallback(process.env.ONBOARDING_AI_MENU_PLANNER_RETRY_ATTEMPTS, DEFAULT_RETRY_ATTEMPTS),
