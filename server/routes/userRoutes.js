@@ -9,8 +9,7 @@ const {
     addFoodPreference,
     getFoodPreferences,
     getNutritionPreferences,
-    extractNutritionPreferences,
-    extractNutritionPreferencesPhase1,
+// AI extractors removed
     forgotPassword
 } = require('../controllers/userController');
 const { protect } = require('../middleware/authMiddleware');
@@ -21,8 +20,7 @@ router.post('/forgot-password', forgotPassword);
 router.get('/me', protect, getMe);
 router.put('/profile', protect, updateProfile);
 router.put('/change-password', protect, changePassword);
-router.put('/nutrition-preferences/extract', protect, extractNutritionPreferences);
-router.put('/nutrition-preferences/extract-phase1', protect, extractNutritionPreferencesPhase1);
+// AI extractor endpoints removed
 router.get('/nutrition-preferences', protect, getNutritionPreferences);
 router.post('/food-preference', protect, addFoodPreference);
 router.get('/food-preferences', protect, getFoodPreferences);

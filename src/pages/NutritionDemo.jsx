@@ -708,7 +708,7 @@ export default function NutritionDemo() {
       const countryCode = detectCountryCodeFromBrowser();
       const runExtractorRequest = async (textValue, options = {}) => {
         const { confirmConflicts = false } = options;
-        const legacyRes = await api.put('/users/nutrition-preferences/extract', {
+        const legacyRes = await aiApi.put('/users/nutrition-preferences/extract', {
           text: textValue,
           ...(countryCode ? { country_code: countryCode } : {}),
           ...(confirmConflicts ? { confirm_conflicts: true } : {}),

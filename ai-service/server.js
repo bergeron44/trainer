@@ -20,6 +20,7 @@ app.use('/ai/workout', require('./routes/workoutRoutes'));
 app.use('/ai/food', require('./routes/foodRoutes'));
 app.use('/ai/chat', require('./routes/chatRoutes'));
 app.use('/ai/progress', require('./routes/progressRoutes'));
+app.use('/ai/users', require('./routes/userRoutes'));
 
 // Health check
 app.get('/', (req, res) => {
