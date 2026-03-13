@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
-import { Flame, Beef, Wheat, Droplet, Target, MessageCircle, ChevronRight, Plus, X, Heart, Utensils, ChevronDown, CheckCircle2, SlidersHorizontal } from 'lucide-react';
+import { Flame, Beef, Wheat, Droplet, Target, MessageCircle, ChevronRight, Plus, X, Heart, Utensils, CheckCircle2, SlidersHorizontal } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import GlobalCoachChat from '@/components/coach/GlobalCoachChat';
 import FoodSwipeGame from '@/components/nutrition/FoodSwipeGame';
