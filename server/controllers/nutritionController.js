@@ -292,7 +292,6 @@ const generateMealPlan = asyncHandler(async (req, res) => {
         coach_note: notes[goal] || notes.recomp,
     });
 });
-
 // @desc    Proxy OpenFoodFacts search (avoids browser CORS + HTTP2 limits)
 // @route   POST /api/nutrition/foods
 // @access  Private
@@ -324,7 +323,6 @@ module.exports = {
     getNutritionLogs,
     logMeal,
     getLogsByDate,
-    getRecentSavedMeals,
     generateMealPlan,
     fetchFoods,
     retryOnboardingMenuPlan,

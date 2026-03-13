@@ -389,7 +389,7 @@ const getDailyInsights = asyncHandler(async (req, res) => {
     let insights = [];
     try {
         const aiRes = await axios.post(
-            `${AI_URL}/ai/progress-insights`,
+            `${AI_URL}/ai/progress/insights`,
             { snapshot },
             { timeout: 15000 }
         );

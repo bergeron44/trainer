@@ -98,7 +98,7 @@ const deleteWorkout = asyncHandler(async (req, res) => {
         throw new Error('User not authorized');
     }
 
-    await workout.remove();
+    await workout.deleteOne();
 
     res.status(200).json({ id: req.params.id });
 });

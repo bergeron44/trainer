@@ -88,6 +88,8 @@ const generateResponse = asyncHandler(async (req, res) => {
             options,
             persistSummary,
             memoryLimit,
+            enableTools,
+            toolAllowlist,
         } = req.body || {};
 
         const result = await chatBrainService.generateResponse({
@@ -105,6 +107,8 @@ const generateResponse = asyncHandler(async (req, res) => {
             options,
             persistSummary,
             memoryLimit,
+            enableTools,
+            toolAllowlist,
             userId: req.user.id,
         });
 

@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React from 'react';
 import { motion, useMotionValue, useTransform, useAnimation } from 'framer-motion';
 import { ArrowLeftRight } from 'lucide-react';
 import { useTranslation } from 'react-i18next';

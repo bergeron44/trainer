@@ -1,19 +1,17 @@
+<<<<<<< HEAD
 const BaseLLMRequest = require('./requests/baseLLMRequest');
+=======
+const axios = require('axios');
+const jwt = require('jsonwebtoken');
+>>>>>>> 90a8b84 (refactor: migrate AI logic from server to ai-service)
 const User = require('../models/User');
 const Workout = require('../models/Workout');
 
-const DEFAULT_MAX_TOOL_CALLS = 30;
-const DEFAULT_MAX_TOOL_ITERATIONS = 8;
-const DEFAULT_RETRY_ATTEMPTS = 1;
+const DEFAULT_TIMEOUT_MS = 120_000; // 2 min — AI planner can take a while
 
 function parseBoolean(value, fallback = true) {
     if (value === undefined || value === null || value === '') return fallback;
     return String(value).trim().toLowerCase() === 'true';
-}
-
-function parseIntOrFallback(value, fallback) {
-    const parsed = Number.parseInt(value, 10);
-    return Number.isFinite(parsed) ? parsed : fallback;
 }
 
 function sanitizeErrorMessage(error) {
@@ -21,9 +19,20 @@ function sanitizeErrorMessage(error) {
     return message.length > 400 ? `${message.slice(0, 397)}...` : message;
 }
 
+<<<<<<< HEAD
 class OnboardingWorkoutPlannerService extends BaseLLMRequest {
+=======
+/**
+ * Mint a short-lived JWT for internal server → ai-service calls.
+ * The ai-service auth middleware verifies it the same way as user tokens.
+ */
+function mintServiceToken(userId) {
+    return jwt.sign({ id: userId }, process.env.JWT_SECRET, { expiresIn: '10m' });
+}
+
+class OnboardingWorkoutPlannerService {
+>>>>>>> 90a8b84 (refactor: migrate AI logic from server to ai-service)
     constructor({
-        chatBrainService,
         userModel = User,
         workoutModel = Workout,
         logger = console,
@@ -43,6 +52,10 @@ class OnboardingWorkoutPlannerService extends BaseLLMRequest {
         this.UserModel = userModel;
         this.WorkoutModel = workoutModel;
         this.enabled = enabled ?? parseBoolean(process.env.ONBOARDING_AI_PLANNER_ENABLED, true);
+<<<<<<< HEAD
+=======
+        this.aiServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:5002';
+>>>>>>> 90a8b84 (refactor: migrate AI logic from server to ai-service)
     }
 
     isEnabled() {
@@ -85,9 +98,44 @@ class OnboardingWorkoutPlannerService extends BaseLLMRequest {
         ].join('\n');
     }
 
+<<<<<<< HEAD
     buildUserPrompt() {
         return 'Create my personalized onboarding workout plan now.';
     }
+=======
+    async generatePlan({ userId, requestId, trigger }) {
+        const token = mintServiceToken(userId);
+
+        const { data: result } = await axios.post(
+            `${this.aiServiceUrl}/ai/chat/response`,
+            {
+                agentType: 'coach',
+                personaId: 'scientist_coach',
+                system: this.buildPlannerSystemPrompt({ requestId }),
+                messages: [{
+                    role: 'user',
+                    content: 'Create my personalized onboarding workout plan now.',
+                }],
+                context: {
+                    workflow: 'onboarding_workout_planner',
+                    trigger: trigger || 'unknown',
+                },
+                metadata: {
+                    requestId,
+                    workflow: 'onboarding_workout_planner',
+                },
+                options: { temperature: 0.2 },
+                persistSummary: false,
+                memoryLimit: 0,
+                enableTools: true,
+                toolAllowlist: this.getPlannerToolAllowlist(),
+            },
+            {
+                headers: { Authorization: `Bearer ${token}` },
+                timeout: DEFAULT_TIMEOUT_MS,
+            }
+        );
+>>>>>>> 90a8b84 (refactor: migrate AI logic from server to ai-service)
 
     validateResult(result) {
         const count = Array.isArray(result.toolTrace)
@@ -100,11 +148,15 @@ class OnboardingWorkoutPlannerService extends BaseLLMRequest {
         }
     }
 
+<<<<<<< HEAD
     getContext({ trigger }) {
         return {
             workflow: 'onboarding_workout_planner',
             trigger: trigger || 'unknown',
         };
+=======
+        return { ...result, createdCount };
+>>>>>>> 90a8b84 (refactor: migrate AI logic from server to ai-service)
     }
 
     async generatePlan({ userId, requestId, trigger, profile }) {
@@ -122,37 +174,21 @@ class OnboardingWorkoutPlannerService extends BaseLLMRequest {
         force = false,
     }) {
         if (!userId) {
-            return {
-                triggered: false,
-                status: 'skipped',
-                reason: 'missing_user_id',
-            };
+            return { triggered: false, status: 'skipped', reason: 'missing_user_id' };
         }
 
         const user = await this.UserModel.findById(userId);
         if (!user) {
-            return {
-                triggered: false,
-                status: 'skipped',
-                reason: 'user_not_found',
-            };
+            return { triggered: false, status: 'skipped', reason: 'user_not_found' };
         }
 
         const profile = user.profile || {};
         if (!force && !this.shouldGenerateForProfile(profile)) {
-            return {
-                triggered: false,
-                status: 'skipped',
-                reason: 'profile_not_eligible',
-            };
+            return { triggered: false, status: 'skipped', reason: 'profile_not_eligible' };
         }
 
         if (!this.isEnabled()) {
-            return {
-                triggered: false,
-                status: 'skipped',
-                reason: 'planner_disabled',
-            };
+            return { triggered: false, status: 'skipped', reason: 'planner_disabled' };
         }
 
         user.profile = {
@@ -164,12 +200,16 @@ class OnboardingWorkoutPlannerService extends BaseLLMRequest {
         await user.save();
 
         try {
+<<<<<<< HEAD
             const result = await this.generatePlan({
                 userId: String(user._id),
                 requestId,
                 trigger,
                 profile,
             });
+=======
+            const result = await this.generatePlan({ userId: String(user._id), requestId, trigger });
+>>>>>>> 90a8b84 (refactor: migrate AI logic from server to ai-service)
             const workoutCount = await this.WorkoutModel.countDocuments({
                 user: user._id,
                 archived: { $ne: true },
@@ -218,11 +258,7 @@ class OnboardingWorkoutPlannerService extends BaseLLMRequest {
                 error: errorMessage,
             });
 
-            return {
-                triggered: true,
-                status: 'failed',
-                error: errorMessage,
-            };
+            return { triggered: true, status: 'failed', error: errorMessage };
         }
     }
 }

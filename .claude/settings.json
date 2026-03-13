@@ -11,7 +11,9 @@
       "Bash(/opt/homebrew/bin/node /opt/homebrew/bin/npx vite build)",
       "Bash(node --version)",
       "Bash(node node_modules/.bin/vite build)",
-      "Bash(echo \"exit:$?\")"
+      "Bash(echo \"exit:$?\")",
+      "Bash(brew install gh)",
+      "Read(//Users/ronberger/.gemini/antigravity/brain/e5017ddf-b5fc-4bcf-ac7b-aca49dbc79f9/**)"
     ]
   }
 }

@@ -29,11 +29,13 @@ app.get('/', (req, res) => {
         version: '1.0.0',
         endpoints: [
             'POST /ai/meal/next',
+            'POST /ai/meal/from-text',
             'POST /ai/workout/daily',
             'POST /ai/food/lookup',
             'POST /ai/chat/response',
             'GET  /ai/chat/summaries',
             'POST /ai/chat/summaries',
+            'POST /ai/progress/insights',
         ]
     });
 });

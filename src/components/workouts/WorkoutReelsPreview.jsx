@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { X, Dumbbell, ChevronRight } from 'lucide-react';
+import { X, Dumbbell } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import api from '@/api/axios';
 import { getExerciseVideoUrl } from '@/data/exerciseVideos';
