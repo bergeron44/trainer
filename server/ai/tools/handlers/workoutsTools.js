@@ -993,6 +993,158 @@ function createWorkoutTools({ models = {} } = {}) {
                 };
             },
         },
+        {
+            name: 'workouts_propose_sequence',
+            description: 'Propose a repeating workout cycle without saving anything. Use this during planning to define the workout structure and exercises. The plan will be processed and saved by the system.',
+            readWriteMode: 'read',
+            idempotent: false,
+            timeoutMs: 5000,
+            inputSchema: setSequenceInputSchema,
+            jsonSchema: {
+                type: 'object',
+                additionalProperties: false,
+                required: ['sequence'],
+                properties: {
+                    sequence: {
+                        type: 'array',
+                        minItems: 1,
+                        maxItems: 14,
+                        items: {
+                            oneOf: [
+                                {
+                                    type: 'object',
+                                    additionalProperties: false,
+                                    required: ['type', 'name', 'exercises'],
+                                    properties: {
+                                        type: { type: 'string', enum: ['workout'] },
+                                        name: { type: 'string', minLength: 1, maxLength: 120 },
+                                        exercises: {
+                                            type: 'array',
+                                            minItems: 1,
+                                            maxItems: 60,
+                                            items: {
+                                                type: 'object',
+                                                additionalProperties: false,
+                                                required: ['name'],
+                                                properties: {
+                                                    name: { type: 'string', minLength: 1 },
+                                                    sets: { type: 'integer', minimum: 0 },
+                                                    reps: { type: 'string', minLength: 1 },
+                                                    rest_seconds: { type: 'integer', minimum: 0 },
+                                                    notes: { type: 'string', maxLength: 1000 },
+                                                },
+                                            },
+                                        },
+                                    },
+                                },
+                                {
+                                    type: 'object',
+                                    additionalProperties: false,
+                                    required: ['type'],
+                                    properties: {
+                                        type: { type: 'string', enum: ['rest'] },
+                                    },
+                                },
+                            ],
+                        },
+                    },
+                    weeks: { type: 'integer', minimum: 1, maximum: 52 },
+                },
+            },
+            async handler({ args }) {
+                const hasWorkoutStep = args.sequence.some((step) => step.type === 'workout');
+                if (!hasWorkoutStep) {
+                    throw new ToolExecutionError({
+                        code: 'TOOL_VALIDATION_ERROR',
+                        message: 'Sequence must contain at least one workout step.',
+                        status: 400,
+                    });
+                }
+                return {
+                    data: {
+                        proposed: true,
+                        sequence: args.sequence,
+                        weeks: args.weeks || 12,
+                    },
+                };
+            },
+        },
+        {
+            name: 'workouts_submit_corrected_plan',
+            description: 'Submit the final workout sequence after exercise names have been matched to the database. Called by the exercise name resolver.',
+            readWriteMode: 'read',
+            idempotent: false,
+            timeoutMs: 5000,
+            inputSchema: setSequenceInputSchema,
+            jsonSchema: {
+                type: 'object',
+                additionalProperties: false,
+                required: ['sequence'],
+                properties: {
+                    sequence: {
+                        type: 'array',
+                        minItems: 1,
+                        maxItems: 14,
+                        items: {
+                            oneOf: [
+                                {
+                                    type: 'object',
+                                    additionalProperties: false,
+                                    required: ['type', 'name', 'exercises'],
+                                    properties: {
+                                        type: { type: 'string', enum: ['workout'] },
+                                        name: { type: 'string', minLength: 1, maxLength: 120 },
+                                        exercises: {
+                                            type: 'array',
+                                            minItems: 1,
+                                            maxItems: 60,
+                                            items: {
+                                                type: 'object',
+                                                additionalProperties: false,
+                                                required: ['name'],
+                                                properties: {
+                                                    name: { type: 'string', minLength: 1 },
+                                                    sets: { type: 'integer', minimum: 0 },
+                                                    reps: { type: 'string', minLength: 1 },
+                                                    rest_seconds: { type: 'integer', minimum: 0 },
+                                                    notes: { type: 'string', maxLength: 1000 },
+                                                },
+                                            },
+                                        },
+                                    },
+                                },
+                                {
+                                    type: 'object',
+                                    additionalProperties: false,
+                                    required: ['type'],
+                                    properties: {
+                                        type: { type: 'string', enum: ['rest'] },
+                                    },
+                                },
+                            ],
+                        },
+                    },
+                    weeks: { type: 'integer', minimum: 1, maximum: 52 },
+                },
+            },
+            async handler({ args }) {
+                const hasWorkoutStep = args.sequence.some((step) => step.type === 'workout');
+                if (!hasWorkoutStep) {
+                    throw new ToolExecutionError({
+                        code: 'TOOL_VALIDATION_ERROR',
+                        message: 'Sequence must contain at least one workout step.',
+                        status: 400,
+                    });
+                }
+                return {
+                    data: {
+                        accepted: true,
+                        sequence: args.sequence,
+                        weeks: args.weeks || 12,
+                    },
+                };
+            },
+        },
     ];
 }
 
