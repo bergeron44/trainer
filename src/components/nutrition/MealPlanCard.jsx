@@ -175,7 +175,7 @@ export default function MealPlanCard({
                                 className={`py-2.5 rounded-xl border text-sm font-semibold flex items-center justify-center gap-2 transition-colors ${recapDisabled ? 'border-[#2A2A2A] text-gray-600 cursor-not-allowed' : 'border-[#3A3A3A] text-gray-300 hover:bg-[#2A2A2A]'}`}
                             >
                                 <MessageSquareMore className="w-4 h-4" />
-                                {t('nutrition.giveMeRecap', 'Give me recap')}
+                                {t('nutrition.giveMeRecap', 'Give me recapy')}
                             </button>
                             <button
                                 onClick={onSomethingElse}

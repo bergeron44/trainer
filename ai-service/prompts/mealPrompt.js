@@ -5,7 +5,7 @@ const PERSONALITY_DESC = {
 };
 
 const WEEK_DAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-const MEAL_PERIODS = ['breakfast', 'lunch', 'afternoon_snack', 'dinner', 'evening_snack'];
+const MEAL_PERIODS = ['breakfast', 'morning_snack', 'lunch', 'afternoon_snack', 'dinner', 'evening_snack', 'post_workout', 'other'];
 const CONTEXT_NOISE_REGEX = /\b(אני|אוהב|לא אוהב|לאכול|בשבת|ביום|בערב|בבוקר|בצהריים|i|like|dislike|eat|on saturday|breakfast|lunch|dinner|snack|meal)\b/i;
 
 function normalizeDayValue(value) {
@@ -16,9 +16,12 @@ function normalizeDayValue(value) {
 function normalizeMealPeriodValue(value) {
     const raw = String(value || '').trim().toLowerCase();
     if (!raw) return '';
-    const normalized = raw.replace(/\s+/g, '_');
+    const normalized = raw.replace(/[\s-]+/g, '_');
+    if (normalized === 'mid_morning_snack') return 'morning_snack';
     if (normalized === 'afternoon') return 'afternoon_snack';
     if (normalized === 'evening') return 'evening_snack';
+    if (normalized === 'pre_workout_snack') return 'afternoon_snack';
+    if (normalized === 'late_night_casein') return 'evening_snack';
     return MEAL_PERIODS.includes(normalized) ? normalized : '';
 }
 
@@ -248,9 +251,11 @@ function summarizeAcceptedMealHistory(history = []) {
     return entries.length ? entries.join('\n') : '';
 }
 
-function buildMealSystem(user) {
+function buildMealSystem(user, options = {}) {
     const p = user.profile || {};
     const personality = PERSONALITY_DESC[p.trainer_personality] || PERSONALITY_DESC.zen_coach;
+    const appLanguage = String(options.app_language || 'en').toLowerCase() === 'he' ? 'he' : 'en';
+    const responseLanguageLabel = appLanguage === 'he' ? 'Hebrew' : 'English';
 
     return `You are NEXUS, ${personality}.
 
@@ -258,16 +263,26 @@ User profile:
 - Goal: ${p.goal || 'recomp'}
 - Diet: ${p.diet_type || 'everything'}
 - Daily targets: ${p.target_calories || 2000} kcal | ${p.protein_goal || 150}g protein | ${p.carbs_goal || 200}g carbs | ${p.fat_goal || 65}g fat
+- App language: ${responseLanguageLabel}
 
 Rules:
 - Respond ONLY with valid JSON - no markdown, no extra text, no explanation
-- Food names in English
-- coach_note in Hebrew (short, motivational, 1 sentence)
+- Respond in the same language as the app is currently running: ${responseLanguageLabel}
+- Every user-visible text field must be in ${responseLanguageLabel}: meal_name, foods[].name, and coach_note
+- Give very high weight to the user's free-text meal request
+- If the user explicitly asks for a specific ingredient, food, or flavor direction, include it in the meal unless doing so would violate hard restrictions, diet rules, allergies, medical restrictions, or forbidden ingredients
+- Do not ignore the user's free-text request just because another option also fits the macros
 - Choose real foods that fit the user's diet type
+- Obey hard restrictions absolutely. Never include ingredients that conflict with diet, allergies, medical restrictions, or forbidden ingredients
+- If the user is vegan, never include meat, chicken, turkey, fish, seafood, eggs, dairy, honey, gelatin, or any other animal product
+- If the user is vegetarian, never include meat, chicken, turkey, fish, or seafood
+- Training data from the profile/session is important. Use it when deciding meal size, digestion burden, carb level, protein level, meal timing fit, and recovery support
 - Portions must be realistic (grams/units)
 - Never output empty meals: each meal must have realistic calories and macros
 - Never use schedule/context sentences as food names (e.g., do not output phrases like "on saturday ...")
-- If request priority is HIGH, prioritize that request unless it conflicts with hard restrictions`;
+- If request priority is HIGH, prioritize that request unless it conflicts with hard restrictions
+- If a web-search tool is available in your runtime and you genuinely need it to verify an unfamiliar food, ingredient, or localized meal name, you may use it. Otherwise do not mention tools
+- Return exactly this data in JSON: meal_name, foods[] with ingredient name + amount + calories/protein/carbs/fat for each item, total_calories, total_protein, total_carbs, total_fat, coach_note`;
 }
 
 function buildMealUserMessage(data) {
@@ -286,7 +301,12 @@ function buildMealUserMessage(data) {
         meal_request_note = '',
         meal_request_priority = 'normal',
         nutrition_preferences_note = '',
+        app_language = 'en',
+        meal_slot_label = '',
+        meal_slot_id = '',
     } = data;
+    const normalizedAppLanguage = String(app_language || 'en').toLowerCase() === 'he' ? 'he' : 'en';
+    const responseLanguageLabel = normalizedAppLanguage === 'he' ? 'Hebrew' : 'English';
 
     const likedList = liked_foods
         .slice(0, 20)
@@ -310,7 +330,7 @@ function buildMealUserMessage(data) {
     const requestPriority = String(meal_request_priority || 'normal').toLowerCase() === 'high' ? 'high' : 'normal';
     const nutritionPreferences = String(nutrition_preferences_note || '').trim();
     const mealRequestSection = mealRequest
-        ? `\nSpecific request for this meal:\n${mealRequest}\n`
+        ? `\nSpecific request for this meal (give this very high weight):\n${mealRequest}\n`
         : '';
     const requestPrioritySection = mealRequest
         ? `\nRequest priority: ${requestPriority.toUpperCase()}${requestPriority === 'high' ? ' (give this request very high weight unless it conflicts with hard restrictions)' : ''}\n`
@@ -333,26 +353,32 @@ function buildMealUserMessage(data) {
         ? `\nStructured nutrition preferences from profile:\n${structuredPreferences}\n`
         : '';
     const workoutContextSection = workoutSummary
-        ? `\nWorkout context from profile/session:\n${workoutSummary}\n`
+        ? `\nTraining data from profile/session:\n${workoutSummary}\n`
         : '';
     const acceptedMealsSection = acceptedMealsSummary
         ? `\nPrevious meals this user accepted/saved (prefer similar patterns unless user request says otherwise):\n${acceptedMealsSummary}\n`
         : '';
 
     const decisionTabsSection = `\nDecision tabs to read before creating this meal (in order):
-1) Specific request for this meal text
-2) Time context (time_of_day, day_of_week, meal_period)
-3) Hard restrictions (diet, allergies, medical, forbidden ingredients)
-4) Soft likes/dislikes + liked_foods/disliked_foods
-5) Practical constraints (prep time, cooking skill, equipment)
-6) Rule-based preferences (cheat rules, day/meal rules, time notes)
-7) Budget preferences
-8) Workout context + remaining macro targets
-9) Previous accepted meals history\n`;
+1) Specific request for this meal text (highest practical priority unless it conflicts with hard restrictions)
+2) Hard restrictions (allergies, medical restrictions, forbidden ingredients, non-negotiable restrictions)
+3) Diet type (vegan / vegetarian / keto / paleo / everything)
+4) Time context (time_of_day, day_of_week, meal_period)
+5) Soft likes/dislikes + liked_foods/disliked_foods
+6) Practical constraints (prep time, cooking skill, equipment)
+7) Rule-based preferences (cheat rules, day/meal rules, time notes)
+8) Budget preferences
+9) Training data + remaining macro targets
+10) Previous accepted meals history\n`;
+    const slotReferenceSection = meal_slot_label
+        ? `\nExact app slot for this meal:\n- Slot label in app: ${meal_slot_label}\n- Slot id: ${meal_slot_id || 'unknown'}\n- This meal must feel appropriate for that exact slot, not just for a generic meal period.\n`
+        : '';
 
     return `Generate my next meal now.
 
 Time: ${time_of_day} | Day: ${currentDay} | Period: ${meal_period} | Meals remaining today: ${meals_remaining}
+App language for this response: ${responseLanguageLabel}
+You must answer in ${responseLanguageLabel}, because that is the language the app is currently running in.
 
 Remaining macros I still need today:
 - Calories: ${Math.max(0, remaining.calories)} kcal
@@ -369,20 +395,232 @@ My liked foods (prefer these):
 ${likedList || 'Any healthy foods'}
 
 Foods I dislike (avoid): ${dislikedList || 'none'}
-${decisionTabsSection}${timeContextSection}${structuredPreferencesSection}${workoutContextSection}${acceptedMealsSection}${nutritionPreferencesSection}${requestPrioritySection}${mealRequestSection}
+${slotReferenceSection}${decisionTabsSection}${timeContextSection}${structuredPreferencesSection}${workoutContextSection}${acceptedMealsSection}${nutritionPreferencesSection}${requestPrioritySection}${mealRequestSection}
 
 Respond with this exact JSON structure:
 {
-  "meal_name": "Creative name for this meal",
+  "meal_name": "Meal name in ${responseLanguageLabel}",
   "foods": [
-    { "name": "Food name", "portion": "Xg", "calories": 0, "protein": 0, "carbs": 0, "fat": 0 }
+    { "name": "Ingredient name in ${responseLanguageLabel}", "portion": "Exact amount like 120g / 2 slices / 250ml", "calories": 0, "protein": 0, "carbs": 0, "fat": 0 }
   ],
   "total_calories": 0,
   "total_protein": 0,
   "total_carbs": 0,
   "total_fat": 0,
-  "coach_note": "\u05de\u05e9\u05e4\u05d8 \u05de\u05d5\u05d8\u05d9\u05d1\u05e6\u05d9\u05d4 \u05e7\u05e6\u05e8 \u05d1\u05e2\u05d1\u05e8\u05d9\u05ea"
+  "coach_note": "Short motivational sentence in ${responseLanguageLabel}"
+}
+
+Validation before you answer:
+- if the user explicitly asked for a food or ingredient, make sure it appears in the meal unless a hard restriction prevents it
+- foods must contain the actual ingredients of the meal
+- each food item must include a usable amount in portion
+- totals must describe the whole meal
+- do not include any non-vegan ingredient when the diet or hard restrictions require vegan
+- do not include any forbidden ingredient even if it matches liked foods or the specific request`;
+} 
+
+function buildMealRecapSystem(user, options = {}) {
+    const p = user.profile || {};
+    const personality = PERSONALITY_DESC[p.trainer_personality] || PERSONALITY_DESC.zen_coach;
+    const appLanguage = String(options.app_language || 'en').toLowerCase() === 'he' ? 'he' : 'en';
+    const responseLanguageLabel = appLanguage === 'he' ? 'Hebrew' : 'English';
+
+    return `You are NEXUS, ${personality}.
+You are NEXUS, a recipe-book style cooking expert who writes clear, reliable, real-world recipes for this exact meal.
+
+You are turning a selected meal into a practical recipe the user can make.
+
+Rules:
+- Respond ONLY with valid JSON
+- Respond in the same language as the app is currently running: ${responseLanguageLabel}
+- Return only recipe-making content, not nutrition coaching
+- Be practical, concrete, and user-facing
+- Write like a strong recipe author, not like a chatbot
+- The recipe must feel like a real recipe someone can cook from, not a loose suggestion
+- The recipe_guide must teach the user exactly what to do with the ingredients step by step
+- Explain how to handle each important ingredient: wash, peel, cut, soak, marinate, season, mix, cook, rest, chill, assemble, and serve when relevant
+- Include concrete timings, heat level, cookware, order of operations, and doneness cues whenever relevant
+- It is OK if the meal macros are not an exact match to the ideal target; small deviations are normal
+- Do not criticize a meal just because calories or macros are close instead of exact
+- Respect allergies, diet rules, forbidden ingredients, medical restrictions, and practical cooking constraints
+- Infer a realistic detailed preparation from the listed foods if the meal is not fully specified
+- Keep the recipe closely matched to the selected meal. Use the listed meal name and listed foods as the primary source of truth
+- Do not replace the core protein, core carb, or core meal identity unless a restriction makes the original version impossible
+- If the selected meal already has foods listed, build the recipe mainly from those same foods and only add small supporting ingredients when needed for a realistic recipe
+- The ingredients_rubric must include the actual ingredients used for the recipe, with concrete amounts
+- If the selected meal has listed foods, include those foods as the main ingredients of the recipe unless a hard restriction prevents it
+- Do not drift into a different dish just because it sounds tastier or easier
+- Do not explain why the meal fits the plan
+- Do not give motivation or coaching
+- Do not invent medical claims
+- Return only a recipe the user can actually follow from beginning to end`;
+}
+
+function buildMealRecapUserMessage(data) {
+    const {
+        meal = {},
+        current_consumed = {},
+        daily_targets = {},
+        remaining_before_meal = {},
+        updated_macros = {},
+        time_of_day = '12:00',
+        meal_period = 'Lunch',
+        day_of_week = '',
+        nutrition_preferences = {},
+        workout_context = {},
+        accepted_meal_history = [],
+        meal_request_note = '',
+        meal_request_priority = 'normal',
+        previous_recap = '',
+        recap_feedback = '',
+        variation_request = '',
+        app_language = 'en',
+    } = data;
+    const normalizedAppLanguage = String(app_language || 'en').toLowerCase() === 'he' ? 'he' : 'en';
+    const responseLanguageLabel = normalizedAppLanguage === 'he' ? 'Hebrew' : 'English';
+
+    const currentDay = resolveCurrentDay(day_of_week);
+    const currentMealPeriod = normalizeMealPeriodValue(meal_period) || 'lunch';
+    const structuredPreferences = summarizeStructuredNutritionPreferences(nutrition_preferences);
+    const workoutSummary = summarizeWorkoutContext(workout_context);
+    const acceptedMealsSummary = summarizeAcceptedMealHistory(accepted_meal_history);
+    const timeContextSection = buildContextualTimePreferenceSection(nutrition_preferences, {
+        currentDay,
+        currentMealPeriod,
+    });
+
+    const foods = (Array.isArray(meal.foods) ? meal.foods : [])
+        .map((food) => {
+            const name = String(food?.name || '').trim();
+            if (!name) return '';
+            const portion = String(food?.portion || '').trim();
+            const calories = Number(food?.calories) || 0;
+            return portion ? `${portion} ${name} (${calories} kcal)` : `${name} (${calories} kcal)`;
+        })
+        .filter(Boolean)
+        .join('\n');
+
+    const requestText = String(meal_request_note || '').trim();
+    const requestPriority = String(meal_request_priority || 'normal').toLowerCase() === 'high' ? 'HIGH' : 'NORMAL';
+    const previousRecap = String(previous_recap || '').trim();
+    const recapFeedback = String(recap_feedback || '').trim();
+    const variationRequest = String(variation_request || '').trim();
+    const previousRecapSection = previousRecap
+        ? `\nPrevious recap to avoid repeating too closely:\n${previousRecap}\n`
+        : '';
+    const recapFeedbackSection = recapFeedback
+        ? `\nUser feedback about the previous recap:\n${recapFeedback}\n`
+        : '';
+    const variationRequestSection = variationRequest
+        ? `\nAlternate recap request:\n${variationRequest}\n`
+        : '';
+
+    return `Give the user only a recipe for how to make this selected meal.
+
+App language for this response: ${responseLanguageLabel}
+You must answer in ${responseLanguageLabel}, because that is the language the app is currently running in.
+
+Selected meal:
+- name: ${meal.meal_name || 'Meal'}
+- calories: ${Number(meal.total_calories || 0)}
+- protein: ${Number(meal.total_protein || 0)}g
+- carbs: ${Number(meal.total_carbs || 0)}g
+- fat: ${Number(meal.total_fat || 0)}g
+- foods:
+${foods || '- none listed'}
+
+Current context:
+- time: ${time_of_day}
+- day: ${currentDay}
+- meal_period: ${meal_period}
+
+Daily targets:
+- calories: ${Number(daily_targets.calories || 0)}
+- protein: ${Number(daily_targets.protein || 0)}g
+- carbs: ${Number(daily_targets.carbs || 0)}g
+- fat: ${Number(daily_targets.fat || 0)}g
+
+Consumed before this meal:
+- calories: ${Number(current_consumed.calories || 0)}
+- protein: ${Number(current_consumed.protein || 0)}g
+- carbs: ${Number(current_consumed.carbs || 0)}g
+- fat: ${Number(current_consumed.fat || 0)}g
+
+Remaining before this meal:
+- calories: ${Number(remaining_before_meal.calories || 0)}
+- protein: ${Number(remaining_before_meal.protein || 0)}g
+- carbs: ${Number(remaining_before_meal.carbs || 0)}g
+- fat: ${Number(remaining_before_meal.fat || 0)}g
+
+Updated totals after this meal:
+- calories_after_meal: ${Number(updated_macros.consumed_after_meal?.calories || 0)}
+- protein_after_meal: ${Number(updated_macros.consumed_after_meal?.protein || 0)}g
+- carbs_after_meal: ${Number(updated_macros.consumed_after_meal?.carbs || 0)}g
+- fat_after_meal: ${Number(updated_macros.consumed_after_meal?.fat || 0)}g
+- remaining_calories_after_meal: ${Number(updated_macros.remaining_after_meal?.calories || 0)}
+- remaining_protein_after_meal: ${Number(updated_macros.remaining_after_meal?.protein || 0)}g
+- remaining_carbs_after_meal: ${Number(updated_macros.remaining_after_meal?.carbs || 0)}g
+- remaining_fat_after_meal: ${Number(updated_macros.remaining_after_meal?.fat || 0)}g
+
+Structured nutrition preferences:
+${structuredPreferences || 'none'}
+${timeContextSection}
+Workout context:
+${workoutSummary || 'none'}
+
+Recent accepted meals:
+${acceptedMealsSummary || 'none'}
+
+Specific meal request text:
+${requestText || 'none'}
+
+Request priority:
+${requestPriority}
+${previousRecapSection}${recapFeedbackSection}${variationRequestSection}
+
+If a previous recap is provided, return a noticeably different recipe version or preparation angle and avoid repeating the same wording.
+
+Important:
+- The recipe should closely match the selected meal and the user's restrictions
+- Keep the same core meal identity as the selected meal
+- Use the listed foods from the selected meal as the main basis of the recipe
+- Do not swap the main protein or main carb for a different one unless a hard restriction makes that necessary
+- If the selected meal lists ingredients, those ingredients should appear in the ingredients_rubric and be actively used in the recipe_guide
+- The recap should read like a real recipe for this exact meal, not a general meal idea
+- Calories/protein/carbs/fat do NOT need to match the original meal exactly
+- Small ingredient or preparation adjustments are acceptable if they respect the user context
+- Output only recipe-making information, not meal-fit explanations
+- Return a clear ingredients rubric first, then one detailed guide from beginning to end
+- The ingredients rubric must list concrete ingredients and amounts the user should prepare
+- The recipe guide must be detailed and specific, not generic
+- The recipe guide must tell the user exactly what to do, in order, from the first preparation step until serving
+- Explain how to treat the ingredients, not just list actions. For example: how to wash them, how to cut them, when to season them, when to stir them, when to lower or raise heat, and how long each stage should take
+- When useful, describe texture, color, or doneness cues so the user knows when to move to the next step
+- Include timings inside the recipe guide where useful
+- Include soaking, marinating, preheating, baking, resting, chilling, or serving details when relevant
+- Be explicit and practical, for example: "Soak the beans in water for 3 hours" or "Preheat the oven to 190C"
+- Do not return separate notes or separate timing sections
+- Do not write vague phrases like "prepare the ingredients" unless you explain exactly what to do
+- If the meal is mainly raw or assembly-based, explain exactly how to wash, cut, mix, season, chill, and serve it
+- If the meal is cooked, explain the cooking order, cookware, heat level, and timing clearly
+- The user should be able to follow the recipe_guide without guessing missing steps
+- Write the recipe_guide as a clear step-by-step flow inside one string, using numbered steps like "1. ... 2. ... 3. ..."
+- Include what the cook should be doing at each stage, not just the result
+- Mention exact prep actions, cooking actions, waiting actions, and serving actions when relevant
+- If an ingredient needs trimming, peeling, slicing, dicing, rinsing, draining, seasoning, or preheating around it, say so explicitly
+- If the selected meal is simple, still write a complete usable recipe rather than a short summary
+
+Respond with this exact JSON structure:
+{
+  "recipe_title": "Detailed recipe title",
+  "ingredients_rubric": ["Ingredient with amount", "Ingredient with amount"],
+  "recipe_guide": "One detailed recipe guide that explains exactly how to make the meal from beginning to end, including how to handle the ingredients, preparation, cooking, timings, heat, sequencing, and serving."
 }`;
 }
 
-module.exports = { buildMealSystem, buildMealUserMessage };
+module.exports = {
+    buildMealSystem,
+    buildMealUserMessage,
+    buildMealRecapSystem,
+    buildMealRecapUserMessage,
+};

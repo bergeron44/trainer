@@ -1135,3 +1135,231 @@ This file summarizes everything changed today.
   - `node --check server/controllers/userController.js` passed
   - `node --test server/tests/nutritionPreferencesEditorAgent.pipeline.test.js` passed
   - `node --test server/tests/nutritionPreferencesPipelineService.test.js` passed
+
+15) Single Meal Nutrition Agent Prompt Alignment + Search Rule
+
+- Removed the temporary frontend fallback that called the old AI-service meal endpoint.
+  - `src/pages/NutritionDemo.jsx` now sends meal generation only through:
+    - `POST /api/nutrition/meal-plan`
+  - We no longer fall back to `/ai/meal/next` for meal generation.
+
+- Updated the server-side nutrition agent prompt in:
+  - `server/services/singleMealPlannerService.js`
+
+- Goal of the prompt change:
+  - make the nutrition agent receive the same meal-generation prompt structure that the old direct LLM meal flow used before
+  - while keeping the new `BaseLLMRequest` / nutrition-agent architecture
+
+- The single-meal nutrition agent prompt now explicitly includes:
+  - JSON-only response rule
+  - food names in English
+  - Hebrew short `coach_note`
+  - realistic portions and real foods
+  - no empty meals
+  - request-priority behavior
+  - the old decision-tab order:
+    1. specific meal request
+    2. time context
+    3. hard restrictions
+    4. soft likes/dislikes + liked/disliked foods
+    5. practical constraints
+    6. rule-based preferences
+    7. budget preferences
+    8. workout context + remaining macros
+    9. previous accepted meals
+
+- Added explicit web-search behavior to the nutrition agent prompt:
+  - if the task is hard
+  - or the meal idea is weak
+  - or confidence is not high
+  - then the agent may use `nutrition_web_search`
+  - otherwise it should prefer the user snapshot and not search by default
+
+- Enriched the server-side meal context before calling the nutrition agent:
+  - full structured nutrition preferences
+  - liked foods
+  - disliked foods
+  - workout context
+  - accepted meal history
+
+- Updated the single-meal service test in:
+  - `server/tests/singleMealPlannerService.test.js`
+  - to verify:
+    - the nutrition web search allowlist is still enabled
+    - the prompt contains the old meal-generation structure
+    - the low-confidence / hard-task search rule is present
+
+16) Fixed Single-Meal Nutrition Agent 400 Failure More Robustly
+
+- Root issue identified:
+  - the single-meal nutrition agent prompt had become too large and duplicated the same user context in both the system prompt and the user prompt
+  - this made provider-side 400 failures more likely during meal generation
+
+- Updated `server/services/singleMealPlannerService.js` again:
+  - reduced the system prompt so it now contains instructions/rules only
+  - moved the actual user snapshot / meal-generation data to the user prompt
+  - kept the old meal-generation structure and decision order
+  - kept the explicit rule:
+    - if the task is hard or confidence is not high, the nutrition agent may use `nutrition_web_search`
+
+- Added a nutrition-agent internal compact retry path:
+  - if the primary single-meal generation attempt fails with provider 400
+  - the same nutritionist agent retries in a compact mode
+  - compact mode disables tools and uses a shorter prompt
+  - this stays inside the same server-side nutrition-agent architecture
+  - it does NOT fall back to the old AI-service meal generator
+
+- Added a second retry condition:
+  - if the primary response returns invalid JSON / unparseable meal output
+  - the service retries once in compact mode before failing
+
+- Result:
+  - single-meal generation is now more resilient against:
+    - oversized prompt/provider 400 failures
+    - invalid JSON meal responses
+    - tool-related provider fragility
+
+- Updated validation/test coverage:
+  - `server/tests/singleMealPlannerService.test.js` updated to match the new prompt structure
+
+17) Removed Single-Meal Fallback/Retry Path
+
+- Per request, removed the extra single-meal fallback behavior from:
+  - `server/services/singleMealPlannerService.js`
+
+- The single-meal nutrition flow now uses one clean prompt path only:
+  - same nutritionist agent
+  - same meal-generation prompt path
+  - optional `nutrition_web_search` only when needed
+
+- Removed:
+  - compact retry mode
+  - retry-on-provider-400 path inside `SingleMealPlannerService`
+  - retry-on-invalid-JSON path inside `SingleMealPlannerService`
+
+- Also fixed a real bug in the prompt builder:
+  - `buildSystemPrompt()` was referencing `currentMealPeriod` without defining it
+  - this is now resolved by deriving it from `mealContext.meal_period`
+
+- Result:
+  - the meal planner now either succeeds from the main nutrition-agent prompt path or fails honestly
+  - no hidden second generation path exists inside the single-meal service anymore
+
+18) Server Gemini Provider Fixed for Normal Meal Prompt Flow
+
+- Strong root-cause fix applied:
+  - the server-side Gemini provider was using the OpenAI-compatible Gemini endpoint for normal prompt generation
+  - the older working meal flow used direct Gemini generation instead
+
+- Updated `server/ai/providers/geminiChatProvider.js`:
+  - if no tools are requested:
+    - use direct Gemini `generateContent` style request on the server
+  - if tools are requested:
+    - keep the existing OpenAI-compatible path
+
+- Why this matters:
+  - normal single-meal generation is primarily a prompt-generation task
+  - direct Gemini is closer to the older working path and is less likely to reject the request with a generic 400
+
+- Updated `server/controllers/nutritionController.js` meal endpoint:
+  - `POST /api/nutrition/meal-plan` now catches failures and returns structured JSON error details
+  - this prevents the frontend from only seeing generic Axios text like `Request failed with status code 400`
+  - backend now logs:
+    - requestId
+    - userId
+    - status
+    - code
+    - message
+
+- Result:
+  - if meal generation succeeds, it uses the nutrition agent prompt path
+  - if it fails, the frontend should now receive the real backend/provider message instead of a useless generic 400
+
+19) Returned Single-Meal Generation to Old AI-Service Path + Added Optional Online Search
+
+- Per request, single-meal generation was switched back to the old AI-service generator.
+  - `src/pages/NutritionDemo.jsx` now sends meal generation back to:
+    - `POST /ai/meal/next`
+  - It no longer uses the server-side `POST /api/nutrition/meal-plan` path for the main meal-generation UI flow.
+
+- Kept the richer/newer meal prompt context in the old generator path:
+  - structured nutrition preferences
+  - liked/disliked foods
+  - workout context
+  - accepted meal history
+  - meal request text + priority
+  - nutrition preference note
+
+- Updated `ai-service/prompts/mealPrompt.js`:
+  - added explicit instruction that if the task is hard, the meal idea is weak, or confidence is low, and online search grounding is available, the model may use it before answering
+  - also tells the model not to search by default when the user context is already enough
+
+- Updated `ai-service/services/llmChain.js`:
+  - the old Gemini path now uses direct Gemini REST `generateContent`
+  - added optional Google Search grounding support via Gemini tools
+  - when `enableGoogleSearch` is true, the Gemini request includes the search grounding tool
+  - if search is not requested and a proxy client exists, the proxy path can still be used
+
+- Updated `ai-service/controllers/mealController.js`:
+  - `generateNextMeal` now calls the LLM with `enableGoogleSearch: true`
+  - this means the old single-meal generator has access to online search grounding when needed
+
+- Result:
+  - meal generation uses the older working AI-service path again
+  - prompt/context stays rich
+  - Gemini can search online when needed for hard / low-confidence meal generation cases
+
+20) Fixed Local AI Browser Network Path
+
+- Root cause of the latest `Network Error` was likely the frontend calling the AI service directly at:
+  - `http://localhost:5002/ai`
+  from the browser because of `.env.local`
+
+- Updated `src/api/aiAxios.js`:
+  - in local dev (`import.meta.env.DEV`) the frontend now uses:
+    - `/ai`
+  - this goes through Vite's built-in proxy to `localhost:5002`
+  - avoids direct browser cross-origin calls to the AI service port
+
+- Non-dev behavior stays the same:
+  - explicit `VITE_AI_URL` can still be used outside dev
+  - otherwise it falls back to the deployed AI service URL
+
+- Result:
+  - local meal generation / recap calls should now go through the same-origin Vite dev server and proxy cleanly to the AI service
+
+21) Restored Meal Generation To Pre-Agent Path
+
+- Per request, restored the main single-meal generation flow to the way it worked before shifting the request to the server nutrition agent.
+
+- Restored frontend path:
+  - `src/pages/NutritionDemo.jsx` uses the old AI-service meal endpoint for meal generation
+  - `src/api/aiAxios.js` restored to its original base-URL behavior:
+    - `VITE_AI_URL` if defined
+    - otherwise deployed AI service URL
+
+- Restored old AI-service generation internals:
+  - `ai-service/services/llmChain.js` restored to the original implementation
+    - proxy path via `LLM_API_KEY` if available
+    - otherwise direct Gemini via `@google/generative-ai`
+  - removed the newer Google-search-grounding request shape changes from this file
+
+- Restored old meal endpoint behavior:
+  - `ai-service/controllers/mealController.js`
+  - `generateNextMeal` now uses the old direct `callWithFallback(systemPrompt, userMessage, 800)` flow again
+  - removed the extra search-grounding option and extra wrapped error handling
+
+- Restored old meal prompt behavior:
+  - removed the added online-search-specific instructions from `ai-service/prompts/mealPrompt.js`
+
+- Scope:
+  - this restore is for the main meal-generation flow only
+  - unrelated recap / liked meals / other nutrition UI changes were not reverted here
+
+22) Restored Local AI Endpoint Override For Meal Flow
+
+- Restored `.env.local` back to the local AI-service URL:
+  - `VITE_AI_URL=http://localhost:5002/ai`
+
+- This matches the earlier local pre-agent meal-generation setup in the workspace:
+  - frontend -> local ai-service -> old meal generator

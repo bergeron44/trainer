@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { X, Plus, Sparkles, Search, PenLine } from 'lucide-react';
+import { X, Plus, Sparkles, Search, PenLine, Utensils } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import aiApi from '@/api/aiAxios';
 
@@ -27,9 +27,9 @@ const MacroPill = ({ label, value, color }) => (
     </div>
 );
 
-export default function ManualFoodEntry({ periodLabel, onAdd, onAddMeal, onClose }) {
+export default function ManualFoodEntry({ periodLabel, onAdd, onAddMeal, onGenerateMeal, onClose }) {
     const { t } = useTranslation();
-    const [tab, setTab] = useState('list'); // 'list' | 'single' | 'describe'
+    const [tab, setTab] = useState('list'); // 'list' | 'single' | 'describe' | 'generate'
 
     // Single food estimate state
     const [foodName, setFoodName] = useState('');
@@ -43,6 +43,7 @@ export default function ManualFoodEntry({ periodLabel, onAdd, onAddMeal, onClose
     const [generatedMeal, setGeneratedMeal] = useState(null);
     const [isGenerating, setIsGenerating] = useState(false);
     const [generateError, setGenerateError] = useState(false);
+    const [mealRequestText, setMealRequestText] = useState('');
 
     // --- Single food estimate ---
     const handleEstimate = async () => {
@@ -122,6 +123,11 @@ export default function ManualFoodEntry({ periodLabel, onAdd, onAddMeal, onClose
         }
     };
 
+    const handleGenerateSuggestedMeal = () => {
+        if (!onGenerateMeal) return;
+        onGenerateMeal(mealRequestText);
+    };
+
     return (
         <motion.div
             className="fixed inset-0 z-[90] bg-black/60 backdrop-blur-sm flex items-end pb-20"
@@ -170,6 +176,13 @@ export default function ManualFoodEntry({ periodLabel, onAdd, onAddMeal, onClose
                     >
                         <PenLine className="w-3 h-3" />
                         {t('nutrition.describeMeal', 'Describe')}
+                    </button>
+                    <button
+                        onClick={() => setTab('generate')}
+                        className={`flex-1 py-1.5 rounded-md text-xs font-semibold transition-colors flex items-center justify-center gap-1 ${tab === 'generate' ? 'bg-[#00F2FF]/20 text-[#00F2FF]' : 'text-gray-500'}`}
+                    >
+                        <Utensils className="w-3 h-3" />
+                        {t('nutrition.generateMeal', 'Generate')}
                     </button>
                 </div>
 
@@ -353,6 +366,29 @@ export default function ManualFoodEntry({ periodLabel, onAdd, onAddMeal, onClose
                                     </button>
                                 </motion.div>
                             )}
+                        </div>
+                    )}
+
+                    {tab === 'generate' && (
+                        <div className="space-y-3">
+                            <p className="text-xs text-gray-500">
+                                {t('nutrition.generateMealFromSlotHint', 'Generate a full AI meal for this slot using the same meal-planning feature. You can also add a specific request.')}
+                            </p>
+                            <textarea
+                                value={mealRequestText}
+                                onChange={e => setMealRequestText(e.target.value)}
+                                placeholder={t('nutrition.generateMealFromSlotPlaceholder', 'Optional: high protein, quick prep, no tomatoes, something sweet, etc.')}
+                                rows={4}
+                                className="w-full bg-[#111] border border-[#2A2A2A] rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-[#00F2FF]/50 resize-none"
+                            />
+                            <button
+                                onClick={handleGenerateSuggestedMeal}
+                                disabled={!onGenerateMeal}
+                                className="w-full py-2.5 rounded-xl gradient-cyan text-black text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                <Utensils className="w-4 h-4" />
+                                {t('nutrition.generateMealForThisSlot', 'Generate meal for this slot')}
+                            </button>
                         </div>
                     )}
                 </div>

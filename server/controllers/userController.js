@@ -16,6 +16,10 @@ const OnboardingMenuPlannerService = require('../services/onboardingMenuPlannerS
 const MealPlan = require('../models/MealPlan');
 const onboardingMenuPlannerService = new OnboardingMenuPlannerService();
 
+function normalizeEmail(email) {
+    return String(email || '').trim().toLowerCase();
+}
+
 const generateToken = (id) => {
     return jwt.sign({ id }, process.env.JWT_SECRET, {
         expiresIn: '30d',
@@ -175,22 +179,23 @@ function ensureNutritionTimeNotesShape(preferences = {}) {
 // @access  Public
 const registerUser = asyncHandler(async (req, res) => {
     const { name, email, password, profile } = req.body;
+    const normalizedEmail = normalizeEmail(email);
 
-    if (!name || !email || !password) {
+    if (!name || !normalizedEmail || !password) {
         res.status(400);
         throw new Error('Please add all fields');
     }
 
-    const userExists = await User.findOne({ email });
+    const userExists = await User.findOne({ email: normalizedEmail });
 
     if (userExists) {
         res.status(400);
-        throw new Error('User already exists');
+        throw new Error('This email is already signed up. Please log in instead.');
     }
 
     const user = await User.create({
         name,
-        email,
+        email: normalizedEmail,
         password,
         profile: normalizeIncomingProfile(profile),
     });
@@ -228,8 +233,9 @@ const registerUser = asyncHandler(async (req, res) => {
 // @access  Public
 const loginUser = asyncHandler(async (req, res) => {
     const { email, password } = req.body;
+    const normalizedEmail = normalizeEmail(email);
 
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email: normalizedEmail });
 
     if (user && (await user.matchPassword(password))) {
         res.json({

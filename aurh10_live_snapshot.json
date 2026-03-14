@@ -11,25 +11,51 @@
     "body_fat_percentage": 25,
     "injuries": "לא",
     "experience_level": "intermediate",
-    "workout_days_per_week": 4,
+    "workout_days_per_week": 5,
     "session_duration": 60,
     "environment": "commercial_gym",
     "diet_type": "vegan",
     "activity_level": "sedentary",
     "sleep_hours": 7.5,
-    "motivation_source": "לא יודע",
+    "motivation_source": "בריאות",
     "tdee": 2225,
     "target_calories": 2225,
     "protein_goal": 176,
     "carbs_goal": 241,
     "fat_goal": 62,
+    "coach_style": "spicy",
     "plan_choice": "ai",
-    "custom_plan": [],
+    "custom_plan": null,
+    "onboarding_date": "2026-03-13T15:00:40.732Z",
     "trainer_personality": "drill_sergeant_coach",
     "onboarding_completed": true,
     "has_existing_plan": false,
-    "workout_plan_status": "pending",
-    "workout_plan_source": "agent"
+    "workout_plan_status": "failed",
+    "workout_plan_error": "400 status code (no body)",
+    "workout_plan_source": "agent",
+    "menu_choice": "manual",
+    "manual_menu": [
+      {
+        "name": "Breakfast",
+        "foods": "fs",
+        "_id": "69b4269809830e20ffc5020f"
+      },
+      {
+        "name": "Morning Snack",
+        "foods": "sf",
+        "_id": "69b4269809830e20ffc50210"
+      },
+      {
+        "name": "Lunch",
+        "foods": "sf",
+        "_id": "69b4269809830e20ffc50211"
+      }
+    ],
+    "has_existing_menu": false,
+    "menu_plan_status": "failed",
+    "menu_plan_error": "400 status code (no body)",
+    "menu_plan_generated_at": "2026-03-13T15:00:41.635Z",
+    "menu_plan_source": "agent"
   },
   "liked_foods": [
     {
@@ -131,15 +157,17 @@
         "בננה",
         "ג חנון",
         "קוסקוס",
-        "ביסלי"
+        "ביסלי",
+        "שוקולד",
+        "לימונים",
+        "טופו",
+        "בצל מקורמל ים"
       ],
       "notes": "User expressed positive preferences with ambiguous food names."
     },
     "soft_dislikes": {
       "foods": [
-        "שוקולד",
-        "אבוקדו",
-        "טופו"
+        "אבוקדו"
       ]
     },
     "budget_preferences": {
@@ -151,7 +179,7 @@
           "day_of_week": "sunday",
           "rule_type": "custom",
           "note": "אני רוצה לאכול טופו ביום ראשון",
-          "_id": "69adf5ea398182674db8b8a9"
+          "_id": "69b5804fc926281c212a2e3f"
         }
       ],
       "time_context_notes": [
@@ -159,13 +187,19 @@
           "day_of_week": "friday",
           "meal_period": "lunch",
           "note": "אני אוהב לאכול קוסקוס בשישי בצהריים",
-          "_id": "69adf5ea398182674db8b8aa"
+          "_id": "69b5804fc926281c212a2e40"
         },
         {
           "day_of_week": "sunday",
           "meal_period": "any",
           "note": "אני רוצה לאכול טופו ביום ראשון",
-          "_id": "69adf5ea398182674db8b8ab"
+          "_id": "69b5804fc926281c212a2e41"
+        },
+        {
+          "day_of_week": "any",
+          "meal_period": "dinner",
+          "note": "אני אוהב לאכול בצל מקורמל בערבים",
+          "_id": "69b5804fc926281c212a2e42"
         }
       ],
       "time_notes": {
@@ -182,14 +216,14 @@
           "breakfast": "",
           "lunch": "אני אוהב לאכול קוסקוס בשישי בצהריים",
           "afternoon_snack": "",
-          "dinner": "",
+          "dinner": "אני אוהב לאכול בצל מקורמל בערבים",
           "evening_snack": ""
         }
       },
-      "notes": "User mentioned timing/day-specific rules."
+      "notes": "User mentioned meal-time specific needs."
     }
   },
   "createdAt": "2026-03-01T16:52:41.330Z",
-  "updatedAt": "2026-03-08T22:19:22.294Z",
-  "__v": 18
+  "updatedAt": "2026-03-14T15:35:43.876Z",
+  "__v": 21
 }

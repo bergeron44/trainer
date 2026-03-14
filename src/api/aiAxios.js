@@ -1,8 +1,8 @@
 import axios from 'axios';
 
-// Always point to the deployed AI service.
-// Override with VITE_AI_URL in .env.local for local dev if needed.
-const AI_BASE = import.meta.env.VITE_AI_URL || 'https://nexus-ai-service-ks3v.onrender.com/ai';
+const AI_BASE = import.meta.env.DEV
+    ? '/ai'
+    : (import.meta.env.VITE_AI_URL || 'https://nexus-ai-service-ks3v.onrender.com/ai');
 
 const aiApi = axios.create({
     baseURL: AI_BASE,

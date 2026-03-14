@@ -41,6 +41,7 @@ test('createDefaultToolRegistry registers MVP + additional tools', () => {
         'nutrition_get_user_data',
         'nutrition_log_intake',
         'nutrition_set_daily_targets',
+        'nutrition_web_search',
         'user_edit_profile',
         'user_get_profile',
         'workouts_create_workout',
@@ -415,4 +416,49 @@ test('meals_delete_meal archives meal by default', async () => {
     assert.equal(result.ok, true);
     assert.equal(result.data.archived, true);
     assert.equal(meal.archived, true);
+});
+
+test('nutrition_web_search returns normalized search results', async () => {
+    const registry = createDefaultToolRegistry({
+        models: {
+            Workout: {},
+            WorkoutLog: {},
+            Exercise: {},
+            User: {},
+            NutritionLog: {},
+        },
+        services: {
+            httpClient: {
+                async get(url) {
+                    if (String(url).includes('serpapi.com')) {
+                        throw new Error('serp unavailable');
+                    }
+
+                    return {
+                        data: `
+                          <a class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.com%2Frecipe-1">High Protein Bowl Recipe</a>
+                          <a class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.com%2Frecipe-2">Easy Vegan Lunch</a>
+                        `,
+                    };
+                },
+            },
+        },
+    });
+
+    const executor = new ToolExecutor({ registry });
+    const result = await executor.executeToolCall({
+        toolCall: {
+            name: 'nutrition_web_search',
+            arguments: {
+                query: 'high protein vegan lunch',
+                maxResults: 2,
+            },
+        },
+        context: { userId: 'u1', requestId: 'search-1' },
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.data.source, 'duckduckgo_html');
+    assert.equal(result.data.results.length, 2);
+    assert.equal(result.data.results[0].url, 'https://example.com/recipe-1');
 });

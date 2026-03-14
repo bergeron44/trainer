@@ -60,6 +60,7 @@ class CoachAgent extends BaseAgent {
             agentDirectives: [
                 'Primary focus: training quality, progression, and recovery.',
                 'Use workout and profile tools when changes depend on user-specific data.',
+                'If available, use web search only when the local user/workout context is insufficient or you need minimal validation; do not search by default.',
             ],
         });
     }

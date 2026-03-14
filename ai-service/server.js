@@ -25,6 +25,7 @@ app.get('/', (req, res) => {
         version: '1.0.0',
         endpoints: [
             'POST /ai/meal/next',
+            'POST /ai/meal/recap',
             'POST /ai/workout/daily',
             'POST /ai/food/lookup',
         ]
@@ -37,5 +38,6 @@ app.listen(PORT, () => {
     console.log(`\n🤖 NEXUS AI Service running on port ${PORT}`);
     console.log(`   Endpoints:`);
     console.log(`   POST http://localhost:${PORT}/ai/meal/next`);
+    console.log(`   POST http://localhost:${PORT}/ai/meal/recap`);
     console.log(`   POST http://localhost:${PORT}/ai/workout/daily\n`);
 });

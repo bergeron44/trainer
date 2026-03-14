@@ -8,6 +8,9 @@ const {
     deleteWorkout,
     startSession,
     getActiveSession,
+    completeSession,
+    getWorkoutCalendar,
+    getWorkoutSessionsByDate,
     generateWorkoutPlan,
     retryOnboardingWorkoutPlan,
 } = require('../controllers/workoutController');
@@ -33,6 +36,9 @@ router.delete('/reset', protect, asyncHandler(async (req, res) => {
 
 router.route('/session').post(protect, startSession);
 router.route('/session/active').get(protect, getActiveSession);
+router.post('/session/complete', protect, completeSession);
+router.get('/calendar', protect, getWorkoutCalendar);
+router.get('/calendar/date/:date', protect, getWorkoutSessionsByDate);
 router.route('/:id').get(protect, getWorkout).put(protect, updateWorkout).delete(protect, deleteWorkout);
 
 module.exports = router;

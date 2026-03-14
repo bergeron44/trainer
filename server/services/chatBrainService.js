@@ -404,15 +404,47 @@ class ChatBrainService {
         let workingMessages = providerPayload.messages;
         const toolTrace = [];
         let totalToolCalls = 0;
+        let toolProviderFallbackUsed = false;
+        let activeToolDefinitions = toolDefinitions;
 
         for (let round = 1; round <= this.config.maxToolIterations; round += 1) {
-            providerResult = await this.generateWithRetry({
-                ...providerPayload,
-                messages: workingMessages,
-                tools: toolDefinitions,
-            });
+            try {
+                providerResult = await this.generateWithRetry({
+                    ...providerPayload,
+                    messages: workingMessages,
+                    tools: activeToolDefinitions,
+                });
+            } catch (error) {
+                const canRetryWithoutTools = (
+                    Number(error?.status) === 400
+                    && Array.isArray(activeToolDefinitions)
+                    && activeToolDefinitions.length > 0
+                );
 
-            if (!toolsEnabled || !toolDefinitions.length) {
+                if (!canRetryWithoutTools) {
+                    throw error;
+                }
+
+                toolProviderFallbackUsed = true;
+                activeToolDefinitions = [];
+                toolTrace.push({
+                    ok: false,
+                    toolName: 'tool_provider_fallback',
+                    error: {
+                        code: 'PROVIDER_REJECTED_TOOLS',
+                        message: 'Provider rejected tool-enabled request. Retried without tools.',
+                        status: Number(error?.status) || 400,
+                    },
+                });
+
+                providerResult = await this.generateWithRetry({
+                    ...providerPayload,
+                    messages: workingMessages,
+                    tools: undefined,
+                });
+            }
+
+            if (!toolsEnabled || !activeToolDefinitions.length) {
                 break;
             }
 
@@ -473,6 +505,7 @@ class ChatBrainService {
         return {
             providerResult,
             toolTrace,
+            toolProviderFallbackUsed,
         };
     }
 
@@ -526,7 +559,7 @@ class ChatBrainService {
             await this.hooks.beforeGenerate(providerPayload);
         }
 
-        const { providerResult, toolTrace } = await this.runToolLoop({
+        const { providerResult, toolTrace, toolProviderFallbackUsed } = await this.runToolLoop({
             providerPayload,
             input,
         });
@@ -565,6 +598,7 @@ class ChatBrainService {
                 memoryUsed: memories.length,
                 messageCount: normalizedMessages.length,
                 toolCallsExecuted: toolTrace.length,
+                toolProviderFallbackUsed,
             },
         };
     }

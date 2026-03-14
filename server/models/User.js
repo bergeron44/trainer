@@ -10,7 +10,7 @@ const MEAL_PREFERENCE_TYPES = ['light', 'moderate', 'heavy', 'high_protein', 'lo
 
 const userSchema = mongoose.Schema({
     name: { type: String, required: true },
-    email: { type: String, required: true, unique: true },
+    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     password: { type: String, required: true },
     profile: {
         age: Number,
