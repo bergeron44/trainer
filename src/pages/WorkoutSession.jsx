@@ -3,10 +3,10 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import api from '@/api/axios';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import {
   Check, X, ChevronDown,
-  SkipForward, Sparkles, Timer, Dumbbell, AlertCircle, Play, Pause, RotateCcw
+  Sparkles, Timer, Dumbbell, AlertCircle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from 'react-i18next';
@@ -389,15 +389,17 @@ export default function WorkoutSession() {
         duration_minutes: sessionDuration
       });
 
-      await api.post('/workouts/session', {
+      await api.post('/workouts/session/complete', {
         workout_id: workoutId,
         start_time: new Date(sessionStartTime).toISOString(),
         end_time: new Date().toISOString(),
         completed_exercises: workout.exercises.map(ex => ({
           exercise_id: ex.id,
+          exercise_name: ex.name,
           sets_completed: completedSets[ex.id] || 0,
           time_spent: 0
         })),
+        total_volume: workout.total_volume || 0,
         xp_earned: xpEarned,
         status: 'completed'
       });

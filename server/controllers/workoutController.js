@@ -7,6 +7,28 @@ const OnboardingWorkoutPlannerService = require('../services/onboardingWorkoutPl
 
 const onboardingWorkoutPlannerService = new OnboardingWorkoutPlannerService();
 
+function toFiniteNumber(value) {
+    const num = Number(value);
+    return Number.isFinite(num) ? num : 0;
+}
+
+function buildMonthRange(monthValue = '') {
+    const raw = String(monthValue || '').trim();
+    const match = raw.match(/^(\d{4})-(\d{2})$/);
+    if (!match) return null;
+
+    const year = Number(match[1]);
+    const monthIndex = Number(match[2]) - 1;
+    if (!Number.isInteger(year) || !Number.isInteger(monthIndex) || monthIndex < 0 || monthIndex > 11) {
+        return null;
+    }
+
+    return {
+        start: new Date(year, monthIndex, 1, 0, 0, 0, 0),
+        end: new Date(year, monthIndex + 1, 0, 23, 59, 59, 999),
+    };
+}
+
 // @desc    Get workouts
 // @route   GET /api/workouts
 // @access  Private
@@ -140,6 +162,165 @@ const getActiveSession = asyncHandler(async (req, res) => {
     });
 
     res.status(200).json(session || null);
+});
+
+// @desc    Complete and save a workout session
+// @route   POST /api/workouts/session/complete
+// @access  Private
+const completeSession = asyncHandler(async (req, res) => {
+    const {
+        workout_id,
+        start_time,
+        end_time,
+        completed_exercises = [],
+        total_volume = 0,
+        xp_earned = 0,
+        status = 'completed',
+    } = req.body || {};
+
+    const workout = await Workout.findById(workout_id);
+    if (!workout) {
+        res.status(404);
+        throw new Error('Workout not found');
+    }
+
+    if (workout.user.toString() !== req.user.id) {
+        res.status(401);
+        throw new Error('User not authorized');
+    }
+
+    const normalizedExercises = Array.isArray(completed_exercises)
+        ? completed_exercises.map((entry) => ({
+            exercise_id: String(entry?.exercise_id || '').trim(),
+            exercise_name: String(entry?.exercise_name || '').trim(),
+            sets_completed: Math.max(0, Math.round(toFiniteNumber(entry?.sets_completed))),
+            time_spent: Math.max(0, Math.round(toFiniteNumber(entry?.time_spent))),
+        }))
+        : [];
+
+    const completedAt = end_time ? new Date(end_time) : new Date();
+    const sessionStart = start_time ? new Date(start_time) : completedAt;
+    const durationMinutes = Math.max(
+        0,
+        Math.round(
+            toFiniteNumber((completedAt.getTime() - sessionStart.getTime()) / 60000)
+        )
+    );
+    const totalSetsCompleted = normalizedExercises.reduce((sum, entry) => sum + toFiniteNumber(entry.sets_completed), 0);
+    const exercisesCompleted = normalizedExercises.filter((entry) => toFiniteNumber(entry.sets_completed) > 0).length;
+
+    const session = await WorkoutSession.findOneAndUpdate(
+        {
+            user: req.user.id,
+            workout_id,
+            status: 'completed',
+        },
+        {
+            $set: {
+                user: req.user.id,
+                workout_id,
+                muscle_group: workout.muscle_group || '',
+                workout_date: workout.date,
+                start_time: sessionStart,
+                end_time: completedAt,
+                completed_at: completedAt,
+                completed_exercises: normalizedExercises,
+                duration_minutes: durationMinutes,
+                total_sets_completed: totalSetsCompleted,
+                exercises_completed: exercisesCompleted,
+                total_volume: toFiniteNumber(total_volume),
+                xp_earned: toFiniteNumber(xp_earned),
+                status: String(status || 'completed').trim() || 'completed',
+            },
+        },
+        {
+            upsert: true,
+            new: true,
+            setDefaultsOnInsert: true,
+        }
+    );
+
+    workout.status = 'completed';
+    workout.duration_minutes = durationMinutes;
+    workout.total_volume = toFiniteNumber(total_volume);
+    await workout.save();
+
+    res.status(200).json(session);
+});
+
+// @desc    Get completed workout calendar summaries for one month
+// @route   GET /api/workouts/calendar
+// @access  Private
+const getWorkoutCalendar = asyncHandler(async (req, res) => {
+    const monthValue = String(req.query.month || '').trim();
+    const range = buildMonthRange(monthValue);
+
+    if (!range) {
+        res.status(400);
+        throw new Error('month query must be in YYYY-MM format');
+    }
+
+    const sessions = await WorkoutSession.find({
+        user: req.user.id,
+        status: 'completed',
+        completed_at: {
+            $gte: range.start,
+            $lte: range.end,
+        },
+    }).sort({ completed_at: 1, createdAt: 1 });
+
+    const dayMap = new Map();
+    sessions.forEach((session) => {
+        const completedAt = new Date(session.completed_at || session.end_time || session.start_time || session.createdAt);
+        const key = completedAt.toISOString().slice(0, 10);
+        const existing = dayMap.get(key) || {
+            date: key,
+            session_count: 0,
+            total_duration_minutes: 0,
+            total_sets_completed: 0,
+            total_xp_earned: 0,
+            sessions: [],
+        };
+
+        existing.session_count += 1;
+        existing.total_duration_minutes += toFiniteNumber(session.duration_minutes);
+        existing.total_sets_completed += toFiniteNumber(session.total_sets_completed);
+        existing.total_xp_earned += toFiniteNumber(session.xp_earned);
+        existing.sessions.push({
+            id: String(session._id),
+            muscle_group: session.muscle_group || 'Workout',
+            duration_minutes: toFiniteNumber(session.duration_minutes),
+            total_sets_completed: toFiniteNumber(session.total_sets_completed),
+        });
+        dayMap.set(key, existing);
+    });
+
+    res.status(200).json({
+        month: monthValue,
+        days: Array.from(dayMap.values()),
+    });
+});
+
+// @desc    Get completed workout sessions for a specific date
+// @route   GET /api/workouts/calendar/date/:date
+// @access  Private
+const getWorkoutSessionsByDate = asyncHandler(async (req, res) => {
+    const start = new Date(req.params.date);
+    start.setHours(0, 0, 0, 0);
+
+    const end = new Date(req.params.date);
+    end.setHours(23, 59, 59, 999);
+
+    const sessions = await WorkoutSession.find({
+        user: req.user.id,
+        status: 'completed',
+        completed_at: {
+            $gte: start,
+            $lte: end,
+        },
+    }).sort({ completed_at: 1, createdAt: 1 });
+
+    res.status(200).json(sessions);
 });
 
 // @desc    Get workout by ID
@@ -377,6 +558,9 @@ module.exports = {
     deleteWorkout,
     startSession,
     getActiveSession,
+    completeSession,
+    getWorkoutCalendar,
+    getWorkoutSessionsByDate,
     generateWorkoutPlan,
     retryOnboardingWorkoutPlan,
 };

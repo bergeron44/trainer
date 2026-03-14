@@ -64,6 +64,7 @@ class OnboardingWorkoutPlannerService extends BaseLLMRequest {
             'workouts_get_workout_by_type',
             'workouts_create_workout',
             'workouts_edit_workout',
+            'nutrition_web_search',
         ];
     }
 
@@ -74,6 +75,8 @@ class OnboardingWorkoutPlannerService extends BaseLLMRequest {
             'Create a personalized starter plan for the next 14 days based on the user profile below.',
             'Respect injuries, environment, experience level, session duration, and weekly frequency.',
             'Do not exceed workout_days_per_week from profile.',
+            'You may optionally use nutrition_web_search only if the current user snapshot is not enough to produce a strong workout idea or you need minimal exercise-format inspiration / practical validation.',
+            'Do not use nutrition_web_search by default. Prefer the user snapshot first and keep search usage minimal.',
             '',
             'USER PROFILE:',
             JSON.stringify(profile, null, 2),

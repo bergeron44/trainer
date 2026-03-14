@@ -6,7 +6,7 @@ import { Calendar, Dumbbell, Check, Clock, ChevronRight, List, CalendarDays, Spa
 import { useTranslation } from 'react-i18next';
 import api from '@/api/axios';
 import aiApi from '@/api/aiAxios';
-import TrainingCalendar from '@/components/calendar/TrainingCalendar';
+import WorkoutHistoryCalendar from '@/components/calendar/WorkoutHistoryCalendar';
 import WorkoutReelsPreview from '@/components/workouts/WorkoutReelsPreview';
 
 export default function Workouts() {
@@ -143,7 +143,7 @@ export default function Workouts() {
           {/* Calendar View */}
           {viewMode === 'calendar' ? (
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
-              <TrainingCalendar workouts={workouts} />
+              <WorkoutHistoryCalendar />
             </motion.div>
           ) : (
             <>

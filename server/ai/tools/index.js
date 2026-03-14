@@ -5,6 +5,7 @@ const { createUserTools } = require('./handlers/userTools');
 const { createNutritionTools } = require('./handlers/nutritionTools');
 const { createMealsTools } = require('./handlers/mealsTools');
 const { createMenuPlanTools } = require('./handlers/menuPlanTools');
+const { createResearchTools } = require('./handlers/researchTools');
 const ToolExecutionAudit = require('../../models/ToolExecutionAudit');
 const ToolIdempotencyRecord = require('../../models/ToolIdempotencyRecord');
 const Workout = require('../../models/Workout');
@@ -14,7 +15,7 @@ const User = require('../../models/User');
 const NutritionLog = require('../../models/NutritionLog');
 const MealPlan = require('../../models/MealPlan');
 
-function createDefaultToolRegistry({ models = {} } = {}) {
+function createDefaultToolRegistry({ models = {}, services = {} } = {}) {
     const registry = new ToolRegistry();
     const resolvedModels = {
         Workout: models.Workout || Workout,
@@ -31,6 +32,7 @@ function createDefaultToolRegistry({ models = {} } = {}) {
         ...createNutritionTools({ models: resolvedModels }),
         ...createMealsTools({ models: resolvedModels }),
         ...createMenuPlanTools({ models: resolvedModels }),
+        ...createResearchTools({ services }),
     ];
 
     for (const tool of tools) {
@@ -43,12 +45,13 @@ function createDefaultToolRegistry({ models = {} } = {}) {
 function createToolExecutor({
     registry,
     models = {},
+    services = {},
     toolExecutionAuditModel,
     toolIdempotencyRecordModel,
     config = {},
 } = {}) {
     return new ToolExecutor({
-        registry: registry || createDefaultToolRegistry({ models }),
+        registry: registry || createDefaultToolRegistry({ models, services }),
         toolExecutionAuditModel: toolExecutionAuditModel || ToolExecutionAudit,
         toolIdempotencyRecordModel: toolIdempotencyRecordModel || ToolIdempotencyRecord,
         defaultTimeoutMs: Number.parseInt(config.defaultTimeoutMs || process.env.CHAT_TOOL_TIMEOUT_MS || '', 10)

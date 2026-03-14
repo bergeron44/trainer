@@ -170,6 +170,7 @@ export default function Onboarding() {
   const [menuAIPreferences, setMenuAIPreferences] = useState(null); // { likes, dislikes }
   const [manualMenu, setManualMenu] = useState(null); // [{ name, foods }]
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState(null);
 
   // Load saved progress
   useEffect(() => {
@@ -279,6 +280,7 @@ export default function Onboarding() {
 
   const handleFinalSubmit = async () => {
     setIsSubmitting(true);
+    setSubmitError(null);
 
     const tdee = calculateTDEE(answers);
     const macros = calculateMacros(tdee, answers.goal, answers.weight);
@@ -320,6 +322,10 @@ export default function Onboarding() {
     } catch (error) {
       console.error('Failed to save profile', error);
       setIsSubmitting(false);
+      setSubmitError(error?.response?.data?.message || error?.message || t('common.error'));
+      if (!user) {
+        setPhase('account_setup');
+      }
       return;
     }
 
@@ -525,6 +531,12 @@ export default function Onboarding() {
           <h2 className="text-2xl font-bold mb-2 text-center">{t('onboarding.createYourAccount')}</h2>
           <p className="text-gray-500 text-sm text-center mb-6">{t('onboarding.almostThere', 'Almost there! Create your account to save your plan.')}</p>
 
+          {submitError && (
+            <div className="mb-6 rounded-xl border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-300">
+              {submitError}
+            </div>
+          )}
+
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-400 mb-1">{t('onboarding.name')}</label>
@@ -533,7 +545,10 @@ export default function Onboarding() {
                 className="w-full bg-[#0A0A0A] border border-[#2A2A2A] rounded-xl p-3 text-white focus:border-[#00F2FF] outline-none"
                 placeholder={t('onboarding.yourName')}
                 value={answers.name || ''}
-                onChange={(e) => setAnswers(prev => ({ ...prev, name: e.target.value }))}
+                onChange={(e) => {
+                  setSubmitError(null);
+                  setAnswers(prev => ({ ...prev, name: e.target.value }));
+                }}
               />
             </div>
 
@@ -544,7 +559,10 @@ export default function Onboarding() {
                 className="w-full bg-[#0A0A0A] border border-[#2A2A2A] rounded-xl p-3 text-white focus:border-[#00F2FF] outline-none"
                 placeholder="you@example.com"
                 value={answers.email || ''}
-                onChange={(e) => setAnswers(prev => ({ ...prev, email: e.target.value }))}
+                onChange={(e) => {
+                  setSubmitError(null);
+                  setAnswers(prev => ({ ...prev, email: e.target.value }));
+                }}
               />
             </div>
 
@@ -555,7 +573,10 @@ export default function Onboarding() {
                 className="w-full bg-[#0A0A0A] border border-[#2A2A2A] rounded-xl p-3 text-white focus:border-[#00F2FF] outline-none"
                 placeholder="••••••••"
                 value={answers.password || ''}
-                onChange={(e) => setAnswers(prev => ({ ...prev, password: e.target.value }))}
+                onChange={(e) => {
+                  setSubmitError(null);
+                  setAnswers(prev => ({ ...prev, password: e.target.value }));
+                }}
               />
               <p className="text-xs text-gray-600 mt-1">Minimum 6 characters</p>
             </div>
