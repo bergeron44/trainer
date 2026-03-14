@@ -3,12 +3,18 @@ const router = express.Router();
 const Exercise = require('../models/Exercise');
 const { protect } = require('../middleware/authMiddleware');
 
-// GET /api/exercises — all exercises (optionally filter by muscle_group)
-router.get('/', protect, async (req, res) => {
+// GET /api/exercises — all exercises (optionally filter by muscle_group and/or name search)
+// No auth required — exercise data is not sensitive and is needed during onboarding
+router.get('/', async (req, res) => {
     try {
         const filter = {};
         if (req.query.muscle_group) filter.muscle_group = req.query.muscle_group;
-        const exercises = await Exercise.find(filter).sort({ name: 1 });
+        if (req.query.name) {
+            const escaped = req.query.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            filter.name = { $regex: escaped, $options: 'i' };
+        }
+        const limit = Math.min(parseInt(req.query.limit, 10) || 100, 100);
+        const exercises = await Exercise.find(filter).sort({ name: 1 }).limit(limit);
         res.json(exercises);
     } catch (err) {
         res.status(500).json({ message: err.message });

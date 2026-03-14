@@ -58,12 +58,14 @@ const userSchema = mongoose.Schema({
             default: 'ai'
         },
         custom_plan: [{
-            day: String,
+            type: { type: String, enum: ['workout', 'rest'], required: true },
             name: String,
             exercises: [{
+                id: String,
                 name: String,
                 sets: Number,
-                reps: String
+                reps: String,
+                rest_seconds: Number,
             }]
         }],
         onboarding_date: Date,
