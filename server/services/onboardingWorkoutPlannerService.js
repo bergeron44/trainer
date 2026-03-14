@@ -1,6 +1,9 @@
 const BaseLLMRequest = require('./requests/baseLLMRequest');
 const User = require('../models/User');
 const Workout = require('../models/Workout');
+const Exercise = require('../models/Exercise');
+const ExerciseMatcherService = require('./exerciseMatcherService');
+const { buildWorkoutInsertDocs } = require('../utils/workoutScheduler');
 
 const DEFAULT_MAX_TOOL_CALLS = 30;
 const DEFAULT_MAX_TOOL_ITERATIONS = 8;
@@ -59,29 +62,28 @@ class OnboardingWorkoutPlannerService extends BaseLLMRequest {
 
     getToolAllowlist() {
         return [
-            'workouts_get_user_workouts',
-            'workouts_get_workout_types',
-            'workouts_get_workout_by_type',
-            'workouts_create_workout',
-            'workouts_edit_workout',
+            'workouts_propose_sequence',
         ];
     }
 
-    buildSystemPrompt({ requestId, profile = {} }) {
+    buildSystemPrompt({ profile = {} }) {
         return [
             'You are the onboarding workout planning agent.',
             'You may only use tools made available to you.',
-            'Create a personalized starter plan for the next 14 days based on the user profile below.',
-            'Respect injuries, environment, experience level, session duration, and weekly frequency.',
-            'Do not exceed workout_days_per_week from profile.',
+            '',
+            'YOUR TASK: Design a personalized repeating workout cycle for this user.',
+            '',
+            'Call workouts_propose_sequence with a cycle of workout and rest steps.',
+            'The sequence is a repeating cycle (1–14 days). It will auto-generate 12 weeks of workouts.',
+            '  - Workout steps: { type: "workout", name: string, exercises: [...] }',
+            '  - Rest steps:    { type: "rest" }',
+            'Design the cycle so workout days per week matches workout_days_per_week from the profile.',
+            'For example, for 3 days/week use a 7-day cycle: [workout, rest, workout, rest, workout, rest, rest].',
+            'Respect injuries, equipment, environment, experience level, and session duration.',
+            'Use your best knowledge of exercise names — they will be matched to the database automatically.',
             '',
             'USER PROFILE:',
             JSON.stringify(profile, null, 2),
-            '',
-            'Every workouts_create_workout call must include idempotencyKey in this format:',
-            `"onboarding-${requestId || 'request'}-workout-<index>"`,
-            'Avoid duplicate workouts for the same date/type in this planning run.',
-            'After tool calls complete, provide a short summary of what was created.',
         ].join('\n');
     }
 
@@ -90,13 +92,12 @@ class OnboardingWorkoutPlannerService extends BaseLLMRequest {
     }
 
     validateResult(result) {
-        const count = Array.isArray(result.toolTrace)
-            ? result.toolTrace.filter(
-                (item) => item?.ok && item?.toolName === 'workouts_create_workout'
-            ).length
-            : 0;
-        if (count < 1) {
-            throw new Error('Planner did not create workouts.');
+        const proposed = Array.isArray(result.toolTrace)
+            && result.toolTrace.some(
+                (item) => item?.ok && item?.toolName === 'workouts_propose_sequence'
+            );
+        if (!proposed) {
+            throw new Error('Planner did not propose a workout sequence.');
         }
     }
 
@@ -108,11 +109,41 @@ class OnboardingWorkoutPlannerService extends BaseLLMRequest {
     }
 
     async generatePlan({ userId, requestId, trigger, profile }) {
-        const result = await this.execute({ userId, requestId, trigger, profile });
-        const createdCount = result.toolTrace.filter(
-            (item) => item?.ok && item?.toolName === 'workouts_create_workout'
-        ).length;
-        return { ...result, createdCount };
+        // Phase 1: planner AI designs the sequence with its own exercise knowledge
+        const planResult = await this.execute({ userId, requestId, trigger, profile });
+        const proposed = planResult.toolTrace.find(
+            (item) => item?.ok && item?.toolName === 'workouts_propose_sequence'
+        );
+        const draftSequence = proposed.result.data.sequence;
+        const draftWeeks = proposed.result.data.weeks;
+
+        // Phase 2: matcher LLM resolves exercise names against the real DB
+        const exercises = await Exercise.find({})
+            .select('name muscle_group')
+            .sort({ muscle_group: 1, name: 1 })
+            .lean();
+
+        const matcher = new ExerciseMatcherService({ logger: this.logger });
+        const matched = await matcher.matchExercises({
+            userId,
+            requestId,
+            draftSequence,
+            exercises,
+        });
+
+        // Phase 3: archive existing workouts and insert the corrected plan
+        await this.WorkoutModel.updateMany(
+            { user: userId, archived: { $ne: true } },
+            { $set: { archived: true } }
+        );
+        const docs = buildWorkoutInsertDocs({
+            userId,
+            sequence: matched.sequence,
+            weeks: matched.weeks || draftWeeks,
+        });
+        const inserted = await this.WorkoutModel.insertMany(docs);
+
+        return { ...planResult, createdCount: inserted.length };
     }
 
     async ensurePlanForUser({

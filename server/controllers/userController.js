@@ -14,6 +14,8 @@ const TIME_NOTE_DAY_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursda
 const TIME_NOTE_MEAL_KEYS = ['breakfast', 'lunch', 'afternoon_snack', 'dinner', 'evening_snack'];
 const OnboardingMenuPlannerService = require('../services/onboardingMenuPlannerService');
 const MealPlan = require('../models/MealPlan');
+const Workout = require('../models/Workout');
+const { buildWorkoutInsertDocs } = require('../utils/workoutScheduler');
 const onboardingMenuPlannerService = new OnboardingMenuPlannerService();
 
 const generateToken = (id) => {
@@ -26,8 +28,8 @@ function normalizeIncomingProfile(profile = {}) {
     const normalized = { ...(profile || {}) };
 
     const planChoice = String(normalized.plan_choice || '').trim().toLowerCase();
-    if (planChoice === 'existing') {
-        normalized.workout_plan_status = 'skipped';
+    if (planChoice === 'existing' && normalized.onboarding_completed === true) {
+        normalized.workout_plan_status = normalized.workout_plan_status || 'pending';
         normalized.workout_plan_error = undefined;
     }
     if (planChoice === 'ai' && normalized.onboarding_completed === true) {
@@ -133,6 +135,51 @@ async function saveManualMenuSafely({ userId, profile }) {
     }
 }
 
+async function saveManualWorkoutPlanSafely({ userId, profile }) {
+    if (!userId || !profile) return;
+    const planChoice = String(profile.plan_choice || '').trim().toLowerCase();
+    if (planChoice !== 'existing') return;
+
+    const sequence = profile.custom_plan;
+    if (!Array.isArray(sequence) || sequence.length === 0) return;
+
+    const hasWorkoutStep = sequence.some((step) => step.type === 'workout');
+    if (!hasWorkoutStep) return;
+
+    try {
+        // Archive any existing non-archived workouts before inserting the new plan
+        await Workout.updateMany(
+            { user: userId, archived: false },
+            { $set: { archived: true } }
+        );
+
+        const docs = buildWorkoutInsertDocs({ userId, sequence });
+        if (!docs.length) {
+            await require('../models/User').findByIdAndUpdate(userId, {
+                $set: { 'profile.workout_plan_status': 'failed' },
+            });
+            return;
+        }
+
+        await Workout.insertMany(docs);
+
+        await require('../models/User').findByIdAndUpdate(userId, {
+            $set: {
+                'profile.has_existing_plan': true,
+                'profile.workout_plan_status': 'ready',
+                'profile.workout_plan_source': 'manual',
+                'profile.workout_plan_error': undefined,
+                'profile.workout_plan_generated_at': new Date(),
+            },
+        });
+    } catch (error) {
+        console.error('userController.saveManualWorkoutPlan error:', {
+            userId,
+            message: error?.message,
+        });
+    }
+}
+
 async function tryWriteLiveUserSnapshot(userDoc) {
     try {
         await writeTrackedUserSnapshot(userDoc);
@@ -207,6 +254,7 @@ const registerUser = asyncHandler(async (req, res) => {
             trigger: 'register',
         });
         await saveManualMenuSafely({ userId: user.id, profile: user.profile });
+        await saveManualWorkoutPlanSafely({ userId: user.id, profile: user.profile });
 
         const latestUser = await User.findById(user.id);
         await tryWriteLiveUserSnapshot(latestUser);
@@ -290,6 +338,7 @@ const updateProfile = asyncHandler(async (req, res) => {
         trigger: 'update_profile',
     });
     await saveManualMenuSafely({ userId: user.id, profile: user.profile });
+    await saveManualWorkoutPlanSafely({ userId: user.id, profile: user.profile });
 
     const updatedUser = await User.findById(user.id);
     await tryWriteLiveUserSnapshot(updatedUser);
